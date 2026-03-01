@@ -1,0 +1,20 @@
+# =============================================================================
+# PortolanCAST — Open Source Bluebeam Replacement
+# Python Dependencies
+# =============================================================================
+
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# File upload handling
+python-multipart==0.0.9
+
+# Template engine
+jinja2==3.1.4
+
+# PDF manipulation (rendering, annotations, combining)
+PyMuPDF==1.24.9
+
+# Async file serving
+aiofiles==24.1.0

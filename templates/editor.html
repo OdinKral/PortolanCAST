@@ -1,0 +1,756 @@
+{% extends "base.html" %}
+
+{% block title %}PortolanCAST — PDF Editor{% endblock %}
+
+{% block body %}
+<!-- ====================================================================== -->
+<!-- TOP TOOLBAR                                                             -->
+<!-- ====================================================================== -->
+<div id="toolbar">
+    <div class="toolbar-group toolbar-brand">
+        <span class="brand-name">PortolanCAST</span>
+    </div>
+
+    <div class="toolbar-group toolbar-file">
+        <button id="btn-new" class="toolbar-btn" title="New blank document">
+            <span class="icon">&#128196;</span> New
+        </button>
+        <button id="btn-open" class="toolbar-btn" title="Open PDF">
+            <span class="icon">&#128194;</span> Open
+        </button>
+        <span id="filename-display" class="filename-display">No file open</span>
+    </div>
+
+    <!-- Mode tabs: Navigate | Markup | Measure
+         Tab buttons sit inline in the toolbar bar — no second row.
+         Clicking a tab shows its tool panel and hides the others. -->
+    <div class="toolbar-group toolbar-tabs">
+        <button class="toolbar-tab active" data-tab="navigate">Navigate</button>
+        <button class="toolbar-tab" data-tab="markup">Markup</button>
+        <button class="toolbar-tab" data-tab="measure">Measure</button>
+    </div>
+
+    <!-- Navigate tab: pan and select tools -->
+    <div class="tab-panel" data-tab="navigate">
+        <div class="toolbar-group">
+            <!-- Hand tool: pan mode — events pass through canvas so viewport scrolls -->
+            <button class="toolbar-btn tool-btn" data-tool="hand" title="Hand / Pan (G)">
+                <span class="icon">&#9995;</span> Hand
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="select" title="Select (V)">
+                <span class="icon">&#8630;</span> Select
+            </button>
+        </div>
+    </div>
+
+    <!-- Markup tab: annotation drawing tools -->
+    <div class="tab-panel" data-tab="markup" style="display:none">
+        <div class="toolbar-group">
+            <button class="toolbar-btn tool-btn" data-tool="pen" title="Pen (P)">
+                <span class="icon">&#9999;&#65039;</span> Pen
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="rect" title="Rectangle (R)">
+                <span class="icon">&#9645;</span> Rect
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="ellipse" title="Ellipse (E)">
+                <span class="icon">&#9711;</span> Ellipse
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="line" title="Line (L)">
+                <span class="icon">&#9585;</span> Line
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="highlighter" title="Highlighter (H)">
+                <span class="icon">&#9998;</span> Highlight
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="text" title="Text (T)">
+                <span class="icon">T</span> Text
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="cloud" title="Cloud (C)">
+                <span class="icon">&#9729;</span> Cloud
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="callout" title="Callout (O)">
+                <span class="icon">&#128172;</span> Callout
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="polyline" title="Polyline (W)">
+                <span class="icon">&#9135;</span> Polyline
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="arrow" title="Arrow (Shift+A)">
+                <span class="icon">&#8594;</span> Arrow
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="sticky-note" title="Sticky Note (S)">
+                <span class="icon">&#128203;</span> Sticky Note
+            </button>
+        </div>
+    </div>
+
+    <!-- Measure tab: takeoff and calibration tools -->
+    <div class="tab-panel" data-tab="measure" style="display:none">
+        <div class="toolbar-group">
+            <button class="toolbar-btn tool-btn" data-tool="distance" title="Distance Ruler (U)">
+                <span class="icon">&#128207;</span> Distance
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="area" title="Area Polygon (A)">
+                <span class="icon">&#9649;</span> Area
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="count" title="Count Markers (N)">
+                <span class="icon">&#35;</span> Count
+            </button>
+            <button class="toolbar-btn tool-btn" data-tool="calibrate" title="Calibrate Scale (K)">
+                <span class="icon">&#9878;</span> Calibrate
+            </button>
+            <!-- Node Edit: enter vertex/endpoint edit mode for selected measurement -->
+            <button class="toolbar-btn tool-btn" data-tool="node-edit" title="Node Edit — vertex/endpoint handles for selected measurement">
+                <span class="icon">&#11835;</span> Node Edit
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings gear — always visible, not inside any tab panel -->
+    <button id="btn-toolbar-settings" class="toolbar-btn toolbar-settings-btn" title="Toolbar settings — show/hide tools">&#9881;</button>
+
+    <!-- Intent mode indicator — shows active markup type -->
+    <div class="toolbar-group toolbar-intent">
+        <span id="intent-indicator" class="intent-indicator" title="Active markup type (1-5 to change)">
+            <span id="intent-dot" class="intent-dot"></span>
+            <span id="intent-label">Note</span>
+        </span>
+    </div>
+
+    <div class="toolbar-group toolbar-export">
+        <button id="btn-export" class="toolbar-btn"
+                title="Export annotated PDF — markups become permanent (not editable after export)">
+            <span class="icon">&#128190;</span> Export PDF
+        </button>
+        <button id="btn-save-bundle" class="toolbar-btn"
+                title="Save editable bundle (.portolan) — preserves markups and layers for re-editing on any PortolanCAST installation">
+            <span class="icon">&#128230;</span> Save Bundle
+        </button>
+    </div>
+
+    <div class="toolbar-group toolbar-zoom">
+        <button id="btn-zoom-out" class="toolbar-btn" title="Zoom Out (-)">−</button>
+        <span id="zoom-display" class="zoom-display">100%</span>
+        <button id="btn-zoom-in" class="toolbar-btn" title="Zoom In (+)">+</button>
+        <button id="btn-zoom-fit" class="toolbar-btn" title="Fit to Width">Fit</button>
+        <button id="btn-rotate" class="toolbar-btn"
+                title="Rotate page 90° clockwise (L1) — set before placing markups">&#8635;</button>
+    </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MAIN CONTENT AREA                                                       -->
+<!-- ====================================================================== -->
+<div id="main-content">
+
+    <!-- LEFT PANEL: Pages + Markups (tabbed) -->
+    <div id="panel-left" class="side-panel">
+        <div class="panel-tabs">
+            <button class="panel-tab active" data-panel="pages">Pages</button>
+            <button class="panel-tab" data-panel="markups">Markups</button>
+            <button class="panel-tab" data-panel="measures">Measures</button>
+            <button class="panel-tab" data-panel="layers">Layers</button>
+            <button class="panel-tab" data-panel="search">Search</button>
+            <button class="panel-tab" data-panel="brief">Brief</button>
+            <button class="panel-tab" data-panel="rfi">RFI</button>
+            <button class="panel-tab" data-panel="text">Text</button>
+        </div>
+
+        <!-- Pages tab content -->
+        <div id="tab-pages" class="tab-content active">
+            <div id="thumbnail-list" class="thumbnail-list">
+                <!-- Thumbnails inserted dynamically -->
+            </div>
+            <!-- Add blank page — only shown when a document is open -->
+            <div id="pages-panel-footer" class="pages-panel-footer" style="display: none;">
+                <button id="btn-add-page" class="btn-add-page" title="Append a blank page to this document">
+                    + Add Page
+                </button>
+            </div>
+        </div>
+
+        <!-- Markups tab content -->
+        <div id="tab-markups" class="tab-content">
+            <!-- Summary bar: count + filter -->
+            <div id="markup-list-header">
+                <span id="markup-count">0 markups</span>
+                <select id="markup-filter" title="Filter by type">
+                    <option value="all">All Types</option>
+                    <optgroup label="Markups">
+                        <option value="note">Note</option>
+                        <option value="issue">Issue</option>
+                        <option value="question">Question</option>
+                        <option value="approval">Approval</option>
+                        <option value="change">Change</option>
+                    </optgroup>
+                    <optgroup label="Measurements">
+                        <option value="distance">Distance</option>
+                        <option value="area">Area</option>
+                        <option value="count">Count</option>
+                    </optgroup>
+                </select>
+                <select id="markup-status-filter" title="Filter by status">
+                    <option value="all">All Status</option>
+                    <option value="open">Open</option>
+                    <option value="resolved">Resolved</option>
+                </select>
+            </div>
+            <!-- Tag cloud — chip strip; shown when markups contain #tags; click to filter -->
+            <div id="markup-tag-cloud" class="markup-tag-cloud" style="display:none"></div>
+            <!-- Scrollable markup rows -->
+            <div id="markup-list" class="markup-list">
+                <p class="muted-text" id="markup-list-empty">No markups yet</p>
+                <!-- Rows inserted dynamically by markup-list.js -->
+            </div>
+        </div>
+
+        <!-- Layers tab content — Phase 5 layer management -->
+        <div id="tab-layers" class="tab-content">
+            <div id="layers-header">
+                <span id="layers-count">0 layers</span>
+                <button id="btn-new-layer" class="toolbar-btn layers-new-btn"
+                        title="Add a new layer">+ Layer</button>
+            </div>
+            <div id="layers-list" class="layers-list">
+                <p class="muted-text" id="layers-empty">No layers</p>
+            </div>
+        </div>
+
+        <!-- Measures tab content — Phase 4A measurement summary panel -->
+        <div id="tab-measures" class="tab-content">
+            <!-- Stat cards: one per measurement type -->
+            <div id="measure-stats" class="measure-stats">
+                <div class="measure-stat-card">
+                    <div class="stat-count" id="stat-distance-count">0</div>
+                    <div class="stat-label">Distances</div>
+                    <div class="stat-total" id="stat-distance-total">—</div>
+                </div>
+                <div class="measure-stat-card">
+                    <div class="stat-count" id="stat-area-count">0</div>
+                    <div class="stat-label">Areas</div>
+                    <div class="stat-total" id="stat-area-total">—</div>
+                </div>
+                <div class="measure-stat-card">
+                    <div class="stat-count" id="stat-count-count">0</div>
+                    <div class="stat-label">Count Items</div>
+                    <div class="stat-total" id="stat-count-total">—</div>
+                </div>
+            </div>
+            <!-- Filter row + export button -->
+            <div id="measure-list-header">
+                <select id="measure-type-filter">
+                    <option value="all">All Types</option>
+                    <option value="distance">Distance</option>
+                    <option value="area">Area</option>
+                    <option value="count">Count</option>
+                </select>
+                <button id="btn-export-csv" class="toolbar-btn measure-export-btn"
+                        title="Export measurements to CSV">Export CSV</button>
+            </div>
+            <!-- Scrollable measurement rows — inserted dynamically by measure-summary.js -->
+            <div id="measure-list" class="markup-list">
+                <p class="muted-text" id="measure-list-empty">No measurements yet</p>
+            </div>
+        </div>
+        <!-- Search tab content — global search across all documents and markups -->
+        <div id="tab-search" class="tab-content">
+            <div id="search-panel-header">
+                <input type="text" id="search-input" class="search-input"
+                       placeholder="Search documents and markups…"
+                       autocomplete="off" maxlength="200" spellcheck="false">
+                <span id="search-count" class="search-count"></span>
+            </div>
+            <!-- Scrollable results list — rows inserted dynamically by search.js -->
+            <div id="search-results" class="markup-list">
+                <p class="muted-text">Type to search across documents and markups</p>
+            </div>
+        </div>
+
+        <!-- Review Brief tab content — structured output grouped by markup type -->
+        <div id="tab-brief" class="tab-content">
+            <div id="brief-panel-header">
+                <span id="brief-timestamp" class="brief-timestamp"></span>
+                <span id="brief-open-count" class="brief-open-count" style="display:none"></span>
+                <div class="brief-actions">
+                    <button id="btn-brief-refresh" class="toolbar-btn brief-btn"
+                            title="Regenerate the review brief from current markup state">Refresh</button>
+                    <button id="btn-brief-copy" class="toolbar-btn brief-btn"
+                            title="Copy raw Markdown to clipboard">Copy MD</button>
+                </div>
+            </div>
+            <!-- Scrollable brief content — rendered dynamically by review-brief.js -->
+            <div id="brief-content" class="brief-content">
+                <p class="muted-text">Click Refresh to generate the review brief.</p>
+            </div>
+        </div>
+
+        <!-- RFI Generator tab content — formal numbered RFI document builder -->
+        <div id="tab-rfi" class="tab-content">
+            <!-- Header fields: editable RFI metadata for the formal document block -->
+            <div class="rfi-header-section">
+                <div class="rfi-field-row">
+                    <label class="rfi-field-label" for="rfi-no">RFI No.</label>
+                    <input type="text" id="rfi-no" class="rfi-field-input"
+                           placeholder="RFI-001" maxlength="30" autocomplete="off">
+                </div>
+                <div class="rfi-field-row">
+                    <label class="rfi-field-label" for="rfi-project">Project</label>
+                    <input type="text" id="rfi-project" class="rfi-field-input"
+                           placeholder="Project name" maxlength="100" autocomplete="off">
+                </div>
+                <div class="rfi-field-row">
+                    <label class="rfi-field-label" for="rfi-drawing">Drawing</label>
+                    <input type="text" id="rfi-drawing" class="rfi-field-input"
+                           placeholder="Sheet / Rev" maxlength="60" autocomplete="off">
+                </div>
+                <div class="rfi-field-row">
+                    <label class="rfi-field-label" for="rfi-to">To</label>
+                    <input type="text" id="rfi-to" class="rfi-field-input"
+                           placeholder="Architect / Engineer" maxlength="80" autocomplete="off">
+                </div>
+                <div class="rfi-field-row">
+                    <label class="rfi-field-label" for="rfi-from">From</label>
+                    <input type="text" id="rfi-from" class="rfi-field-input"
+                           placeholder="Your name / firm" maxlength="80" autocomplete="off">
+                </div>
+            </div>
+
+            <!-- Filter controls: narrow which markups appear in the RFI -->
+            <div class="rfi-filter-section">
+                <select id="rfi-filter-type" class="rfi-filter-select" title="Filter by markup type">
+                    <option value="all">All Types</option>
+                    <option value="issue">Issues</option>
+                    <option value="question">Questions</option>
+                    <option value="change">Changes</option>
+                    <option value="note">Notes</option>
+                    <option value="approval">Approvals</option>
+                </select>
+                <select id="rfi-filter-status" class="rfi-filter-select" title="Filter by status">
+                    <option value="all">All Status</option>
+                    <option value="open">Open only</option>
+                    <option value="resolved">Resolved only</option>
+                </select>
+                <input type="text" id="rfi-filter-tag" class="rfi-filter-tag"
+                       placeholder="#tag filter" maxlength="100" autocomplete="off"
+                       title="Filter by tag (e.g. #structural or structural, urgent)">
+            </div>
+
+            <!-- Action buttons -->
+            <div class="rfi-action-row">
+                <button id="btn-rfi-generate" class="toolbar-btn brief-btn"
+                        title="Generate RFI document from current markups and filters">Generate</button>
+                <button id="btn-rfi-copy" class="toolbar-btn brief-btn"
+                        title="Copy raw Markdown to clipboard">Copy MD</button>
+            </div>
+
+            <!-- Scrollable RFI content — rendered dynamically by rfi-generator.js -->
+            <div id="rfi-content" class="brief-content">
+                <p class="muted-text">Fill in the header and click Generate.</p>
+            </div>
+        </div>
+
+        <!-- Text / OCR tab — shows extracted text for the current page -->
+        <div id="tab-text" class="tab-content">
+            <!-- Header: method badge + stats + copy button -->
+            <div class="text-panel-header">
+                <span id="text-method-badge" class="text-method-badge" data-method=""></span>
+                <span id="text-stats" class="text-stats muted-text"></span>
+                <button id="text-copy-btn" class="toolbar-btn brief-btn"
+                        title="Copy text to clipboard" disabled>Copy</button>
+            </div>
+
+            <!-- Main scrollable text area -->
+            <pre id="text-body" class="text-body">Open a document to extract its text.</pre>
+
+            <!-- OCR call-to-action — shown only when no native text is found -->
+            <div id="text-ocr-wrap" class="text-ocr-wrap" style="display:none;">
+                <button id="text-ocr-btn" class="toolbar-btn"
+                        title="Extract text with Tesseract OCR (scanned pages only)">
+                    Extract with OCR
+                </button>
+                <!-- Install hint — shown when Tesseract is absent -->
+                <pre id="text-ocr-hint" class="text-ocr-hint" style="display:none;"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- CENTER: PDF Canvas viewport -->
+    <div id="viewport">
+        <!-- Welcome screen (shown when no document is open) -->
+        <div id="welcome-screen">
+            <div class="welcome-content">
+                <h1>PortolanCAST</h1>
+                <p>Open-source PDF markup &amp; measurement</p>
+                <button id="btn-welcome-open" class="welcome-btn">Open a PDF</button>
+
+                {% if recent_documents %}
+                <div class="recent-files">
+                    <h3>Recent Files</h3>
+                    <ul>
+                        {% for doc in recent_documents %}
+                        <li>
+                            <a href="/edit/{{ doc.id }}" class="recent-link">
+                                {{ doc.filename }}
+                                <span class="recent-pages">{{ doc.page_count }} pages</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Canvas container (hidden until a PDF is loaded) -->
+        <div id="canvas-container" style="display: none;">
+            <!-- PDF rendered image -->
+            <img id="pdf-image" alt="PDF page" draggable="false">
+            <!-- Fabric.js markup overlay — positioned absolutely over pdf-image via CSS -->
+            <canvas id="fabric-canvas"></canvas>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: Properties / Plugin space -->
+    <div id="panel-properties" class="side-panel">
+        <!-- Tab bar — Properties always present; plugin tabs injected by PluginLoader.register() -->
+        <div class="panel-tabs" id="right-panel-tabs">
+            <button class="panel-tab active" data-panel="properties">Properties</button>
+        </div>
+
+        <!-- Properties tab — wraps existing content unchanged -->
+        <div id="tab-properties" class="tab-content active">
+        <div id="properties-content" class="panel-body">
+
+            <!-- Measurement properties — shown when a measurement object is selected -->
+            <!-- Hidden by default; shown instead of #markup-semantic-props for measurements -->
+            <div id="measurement-props" style="display: none;">
+                <div class="prop-section-header">Measurement</div>
+                <div class="prop-row">
+                    <label id="measure-label">Value:</label>
+                    <span id="measure-value" class="measure-value-large">—</span>
+                </div>
+                <!-- Secondary row: total count (count tool) or pixel value (all tools) -->
+                <div class="prop-row" id="measure-secondary-row" style="display: none;">
+                    <label id="measure-secondary-label">Total:</label>
+                    <span id="measure-secondary-value">—</span>
+                </div>
+                <div class="prop-row">
+                    <label>Scale:</label>
+                    <span id="measure-scale-label" class="prop-value-muted">—</span>
+                </div>
+            </div>
+
+            <!-- Markup properties — shown when a markup object is selected -->
+            <div id="markup-props" style="display: none;">
+                <!-- Semantic fields — hidden for measurement objects -->
+                <div id="markup-semantic-props">
+                    <div class="prop-section-header">Markup</div>
+                    <div class="prop-row">
+                        <label>Object:</label>
+                        <span id="prop-obj-type">—</span>
+                    </div>
+                    <div class="prop-field">
+                        <label for="prop-markup-type">Type</label>
+                        <select id="prop-markup-type">
+                            <option value="note">Note</option>
+                            <option value="issue">Issue</option>
+                            <option value="question">Question</option>
+                            <option value="approval">Approval</option>
+                            <option value="change">Change</option>
+                        </select>
+                    </div>
+                    <div class="prop-field">
+                        <label for="prop-markup-status">Status</label>
+                        <select id="prop-markup-status">
+                            <option value="open">Open</option>
+                            <option value="resolved">Resolved</option>
+                        </select>
+                    </div>
+                    <div class="prop-field">
+                        <label for="prop-markup-note">Note</label>
+                        <textarea id="prop-markup-note" rows="3"
+                                  placeholder="Add a note… use #tag for topics"></textarea>
+                        <!-- Tag chips — rendered live by properties.js as user types #tags -->
+                        <div id="prop-markup-tags" class="prop-tag-display"></div>
+                    </div>
+                    <!-- Read-only provenance — who made it, when -->
+                    <div class="prop-row">
+                        <label>Author:</label>
+                        <span id="prop-markup-author" class="prop-value-muted">—</span>
+                    </div>
+                    <div class="prop-row">
+                        <label>Created:</label>
+                        <span id="prop-markup-timestamp" class="prop-value-muted">—</span>
+                    </div>
+
+                    <!-- Photo attachments — hidden until a markup is selected -->
+                    <div id="markup-photos-section" style="display: none;">
+                        <div class="prop-section-header">Photos</div>
+                        <!-- Thumbnail grid — rows inserted by properties.js -->
+                        <div id="markup-photos-grid" class="markup-photos-grid"></div>
+                        <button id="btn-attach-photo" class="toolbar-btn photo-attach-btn"
+                                title="Attach a photo to this markup">
+                            + Attach Photo
+                        </button>
+                    </div>
+                </div>
+                <div class="prop-section-header">Appearance</div>
+                <div class="prop-field">
+                    <label for="prop-stroke-color">Color</label>
+                    <input type="color" id="prop-stroke-color" value="#ff0000">
+                </div>
+                <div class="prop-field">
+                    <label for="prop-stroke-width">Width</label>
+                    <input type="range" id="prop-stroke-width"
+                           min="1" max="10" value="2" step="1">
+                    <span id="prop-stroke-width-val" class="range-val">2</span>
+                </div>
+            </div>
+
+            <!-- Document info — shown when no markup is selected -->
+            <div id="doc-info" style="display: none;">
+                <div class="prop-section-header">Document</div>
+                <div class="prop-row">
+                    <label>File:</label>
+                    <span id="prop-filename">—</span>
+                </div>
+                <div class="prop-row">
+                    <label>Pages:</label>
+                    <span id="prop-pages">—</span>
+                </div>
+                <div class="prop-row">
+                    <label>Size:</label>
+                    <span id="prop-size">—</span>
+                </div>
+                <div class="prop-row">
+                    <label>Page Dims:</label>
+                    <span id="prop-dims">—</span>
+                </div>
+            </div>
+            <p id="no-doc-msg" class="muted-text">Open a PDF to see properties</p>
+
+            <!-- Hidden file input for photo attachment upload.
+                 Placed outside #markup-semantic-props so it is never inside
+                 a hidden parent div — calling .click() on a hidden-parent
+                 input can suppress the file picker in some browsers. -->
+            <input type="file" id="photo-file-input"
+                   accept=".jpg,.jpeg,.png,.gif,.webp"
+                   style="display: none;">
+        </div>
+        </div>
+        <!-- Plugin tab content divs injected here by PluginLoader._injectTab() -->
+    </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- BOTTOM STATUS BAR                                                       -->
+<!-- ====================================================================== -->
+<div id="status-bar">
+    <!-- L3: Persistent mode bar — always-visible tool pill + quick Hand/Select buttons.
+         Hidden until a document is loaded (same pattern as #status-scale/#status-counts). -->
+    <span id="sb-mode" class="sb-mode" style="display:none;">
+        <button id="sb-btn-hand"   class="sb-tool-btn" title="Hand / Pan (G)">&#9995;</button>
+        <button id="sb-btn-select" class="sb-tool-btn" title="Select (V)">&#8630;</button>
+        <span id="sb-active-tool" class="sb-active-tool" title="Active tool">
+            <span id="sb-tool-icon"  class="sb-tool-icon">—</span>
+            <span id="sb-tool-name"  class="sb-tool-name">No tool</span>
+        </span>
+    </span>
+    <span id="status-page">Page: — / —</span>
+    <span id="status-zoom">Zoom: 100%</span>
+    <!-- Drawing scale selector — set to match the title block scale on the drawing -->
+    <span id="status-scale" class="status-scale" style="display: none;" title="Drawing scale — set to match the title block">
+        <label for="scale-select" class="scale-prefix">Scale:</label>
+        <!-- scale-label: shown as text when a preset is active (read by _updateStatusBar) -->
+        <span id="scale-label" class="scale-label-text" style="display:none;"></span>
+        <select id="scale-select" class="scale-select-input">
+            <option value="unscaled">Unscaled</option>
+            <!-- Hidden option for programmatic selection when calibration sets custom scale -->
+            <option value="custom" style="display:none;">Custom</option>
+            <optgroup label="Architectural">
+                <option value="arch_3_32">3/32" = 1'</option>
+                <option value="arch_1_8">1/8" = 1'</option>
+                <option value="arch_3_16">3/16" = 1'</option>
+                <option value="arch_1_4">1/4" = 1'</option>
+                <option value="arch_3_8">3/8" = 1'</option>
+                <option value="arch_1_2">1/2" = 1'</option>
+                <option value="arch_3_4">3/4" = 1'</option>
+                <option value="arch_1_1">1" = 1'</option>
+                <option value="arch_1_half">1-1/2" = 1'</option>
+                <option value="arch_3_1">3" = 1'</option>
+            </optgroup>
+            <optgroup label="Engineering">
+                <option value="eng_1_10">1" = 10'</option>
+                <option value="eng_1_20">1" = 20'</option>
+                <option value="eng_1_30">1" = 30'</option>
+                <option value="eng_1_40">1" = 40'</option>
+                <option value="eng_1_50">1" = 50'</option>
+                <option value="eng_1_60">1" = 60'</option>
+                <option value="eng_1_100">1" = 100'</option>
+            </optgroup>
+        </select>
+    </span>
+    <span id="status-counts" class="status-counts" style="display: none;">
+        <span class="status-count-item count-issue" title="Issues">0</span>
+        <span class="status-count-item count-question" title="Questions">0</span>
+        <span class="status-count-item count-approval" title="Approvals">0</span>
+        <span class="status-count-item count-change" title="Changes">0</span>
+        <span class="status-count-sep">|</span>
+        <span class="status-count-item count-open" title="Open markups">0 open</span>
+    </span>
+    <span id="status-message"></span>
+</div>
+
+<!-- Hidden file input for PDF upload -->
+<input type="file" id="file-input" accept=".pdf,.portolan" style="display: none;">
+
+<!-- ====================================================================== -->
+<!-- NEW DOCUMENT MODAL                                                      -->
+<!-- ====================================================================== -->
+<div id="modal-new-doc" class="modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modal-new-doc-title">
+    <div class="modal-overlay" id="modal-new-doc-overlay"></div>
+    <div class="modal-box">
+        <h2 id="modal-new-doc-title">New Document</h2>
+        <div class="modal-field">
+            <label for="new-doc-name">Name</label>
+            <input type="text" id="new-doc-name" value="Untitled" maxlength="120"
+                   placeholder="Document name" autocomplete="off">
+        </div>
+        <div class="modal-field">
+            <label for="new-doc-pages">Pages</label>
+            <input type="number" id="new-doc-pages" value="1" min="1" max="50">
+        </div>
+        <div class="modal-field">
+            <label for="new-doc-size">Page Size</label>
+            <select id="new-doc-size">
+                <option value="letter">Letter (8.5" × 11")</option>
+                <option value="tabloid">Tabloid (11" × 17")</option>
+                <option value="arch_c">Arch C (18" × 24")</option>
+                <option value="arch_d">Arch D (24" × 36")</option>
+                <option value="arch_e">Arch E (36" × 48")</option>
+                <option value="a4">A4 (8.3" × 11.7")</option>
+                <option value="legal">Legal (8.5" × 14")</option>
+            </select>
+        </div>
+        <div class="modal-buttons">
+            <button id="new-doc-cancel" class="toolbar-btn">Cancel</button>
+            <button id="new-doc-create" class="toolbar-btn modal-btn-primary">Create</button>
+        </div>
+    </div>
+</div>
+<!-- ====================================================================== -->
+<!-- CALIBRATION MODAL                                                       -->
+<!-- Shown after the user draws a reference line with the Calibrate tool.   -->
+<!-- ====================================================================== -->
+<div id="modal-calibrate" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-calibrate-title">
+    <div class="modal-overlay" id="modal-calibrate-overlay"></div>
+    <div class="modal-box">
+        <h2 id="modal-calibrate-title">Calibrate Scale</h2>
+        <p class="modal-hint">Draw a line over a known dimension, then enter its real length below.</p>
+        <div class="modal-field">
+            <label for="calib-pixels">Measured Length (pixels)</label>
+            <input type="text" id="calib-pixels" readonly
+                   placeholder="—" style="opacity: 0.7; cursor: default;">
+        </div>
+        <div class="modal-field">
+            <label for="calib-value">Real-World Length</label>
+            <div class="calib-input-row">
+                <input type="number" id="calib-value" min="0.01" step="any"
+                       placeholder="e.g. 20" style="flex: 1;">
+                <select id="calib-unit" style="flex: 0 0 auto; width: 100px;">
+                    <option value="ft">feet</option>
+                    <option value="in">inches</option>
+                    <option value="m">meters</option>
+                    <option value="cm">centimeters</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-buttons">
+            <button id="calib-cancel" class="toolbar-btn">Cancel</button>
+            <button id="calib-apply" class="toolbar-btn modal-btn-primary">Apply Scale</button>
+        </div>
+    </div>
+</div>
+<!-- ====================================================================== -->
+<!-- SAVE BUNDLE MODAL                                                   -->
+<!-- Shown when user clicks "Save Bundle" — lets them name the download  -->
+<!-- before the blob is fetched so cancels cost no bandwidth.            -->
+<!-- ====================================================================== -->
+<div id="modal-save-bundle" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-save-bundle-title">
+    <div class="modal-overlay" id="modal-save-bundle-overlay"></div>
+    <div class="modal-box">
+        <h2 id="modal-save-bundle-title">Save Bundle</h2>
+        <p class="modal-hint">The .portolan file contains your PDF, markups, layers, and scale — ready to re-open on any PortolanCAST installation.</p>
+        <div class="modal-field">
+            <label for="bundle-name-input">File name</label>
+            <div class="bundle-name-row">
+                <input type="text" id="bundle-name-input" maxlength="200"
+                       placeholder="my-drawing" autocomplete="off">
+                <span class="bundle-name-ext">.portolan</span>
+            </div>
+        </div>
+        <div class="modal-buttons">
+            <button id="bundle-name-cancel" class="toolbar-btn">Cancel</button>
+            <button id="bundle-name-save" class="toolbar-btn modal-btn-primary">Save</button>
+        </div>
+    </div>
+</div>
+<!-- ====================================================================== -->
+<!-- TOOLBAR SETTINGS MODAL                                              -->
+<!-- Allows per-tool show/hide with checkboxes, persisted in localStorage-->
+<!-- ====================================================================== -->
+<div id="modal-toolbar-settings" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-settings-title">
+    <div class="modal-overlay" id="modal-settings-overlay"></div>
+    <div class="modal-box modal-settings-box">
+        <h2 id="modal-settings-title">Toolbar Settings</h2>
+        <p class="modal-hint">Choose which tools appear in each tab.</p>
+
+        <!-- Display options: compact mode toggle -->
+        <div class="settings-display-row">
+            <label class="settings-tool-item">
+                <input type="checkbox" id="settings-cb-compact">
+                <label for="settings-cb-compact">Compact mode (icons only)</label>
+            </label>
+        </div>
+
+        <div class="settings-tab-sections">
+            <!-- Navigate tools -->
+            <div class="settings-section">
+                <div class="settings-section-header">Navigate</div>
+                <div id="settings-navigate-tools" class="settings-tool-list">
+                    <!-- Populated dynamically by toolbar.js -->
+                </div>
+            </div>
+            <!-- Markup tools -->
+            <div class="settings-section">
+                <div class="settings-section-header">Markup</div>
+                <div id="settings-markup-tools" class="settings-tool-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+            <!-- Measure tools -->
+            <div class="settings-section">
+                <div class="settings-section-header">Measure</div>
+                <div id="settings-measure-tools" class="settings-tool-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-buttons">
+            <button id="settings-reset" class="toolbar-btn">Reset to Default</button>
+            <button id="settings-close" class="toolbar-btn modal-btn-primary">Done</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Fabric.js 6.9.1 — UMD bundle, sets globalThis.fabric -->
+<script src="/static/lib/fabric.min.js"></script>
+<!-- Page text / OCR panel — plain script (no module deps on Fabric) -->
+<script src="/static/js/page-text.js"></script>
+<!-- Main application (ES module) — loads after Fabric.js is available -->
+<script src="/static/js/app.js" type="module"></script>
+{% endblock %}

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Data / runtime
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads / generated files
+uploads/
+photos/
+bundles/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

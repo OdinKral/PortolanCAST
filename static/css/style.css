@@ -1,0 +1,2356 @@
+/* =============================================================================
+ * PortolanCAST — Main Stylesheet
+ *
+ * Dark professional theme inspired by engineering software (Bluebeam, AutoCAD).
+ * Layout: flex-based with toolbar, side panels, central viewport, status bar.
+ *
+ * Color palette:
+ *   Background:  #1e1e2e (dark blue-gray)
+ *   Surface:     #2a2a3d (panels, cards)
+ *   Border:      #3a3a50 (subtle dividers)
+ *   Text:        #e0e0e8 (primary), #8888a0 (muted)
+ *   Accent:      #4a9eff (links, active states)
+ *   Highlight:   #3a7fcc (selected items)
+ * ============================================================================= */
+
+/* =========================================================================
+ * RESET & BASE
+ * ========================================================================= */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden; /* Prevent body scroll — viewport scrolls internally */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    color: #e0e0e8;
+    background: #1e1e2e;
+}
+
+/* =========================================================================
+ * LAYOUT STRUCTURE
+ *
+ * Vertical stack: toolbar → main-content → status-bar
+ * main-content is a horizontal flex: panel-pages | viewport | panel-properties
+ * ========================================================================= */
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    height: 42px;
+    background: #252538;
+    border-bottom: 1px solid #3a3a50;
+    padding: 0 8px;
+    gap: 4px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+#main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: calc(100vh - 42px - 24px); /* toolbar + status bar */
+}
+
+#status-bar {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    background: #252538;
+    border-top: 1px solid #3a3a50;
+    padding: 0 12px;
+    gap: 20px;
+    font-size: 11px;
+    color: #8888a0;
+    flex-shrink: 0;
+}
+
+/* =========================================================================
+ * L3: PERSISTENT MODE BAR (inside #status-bar, left-anchored)
+ *
+ * Shows the active tool name/icon at all times regardless of which toolbar
+ * tab is visible. The pill is color-coded by tool category (navigate/markup/
+ * measure). Hand and Select are always reachable with one click.
+ * ========================================================================= */
+
+/* Wrapper — flex row, subtle right separator to separate from page/zoom info */
+.sb-mode {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 12px;
+    border-right: 1px solid #3a3a50;
+    flex-shrink: 0;
+}
+
+/* Tiny quick-switch buttons — icon only, same height as status bar */
+.sb-tool-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #7070a0;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+
+.sb-tool-btn:hover {
+    background: #3a3a50;
+    color: #c0c0d0;
+}
+
+.sb-tool-btn.active {
+    background: #2a2a42;
+    color: #4a9eff;
+    border-color: #4a4a70;
+}
+
+/* Active tool pill — icon + name, left border colored by tab category */
+.sb-active-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-left: 2px solid #3a3a50;
+    padding-left: 6px;
+    font-size: 11px;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+/* Navigate tab → blue */
+.sb-active-tool[data-tab="navigate"] {
+    border-left-color: #4a9eff;
+    color: #7ab0e8;
+}
+
+/* Markup tab → amber */
+.sb-active-tool[data-tab="markup"] {
+    border-left-color: #e8a020;
+    color: #c8982a;
+}
+
+/* Measure tab → green */
+.sb-active-tool[data-tab="measure"] {
+    border-left-color: #27ae60;
+    color: #40b870;
+}
+
+.sb-tool-icon {
+    font-size: 12px;
+}
+
+.sb-tool-name {
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* =========================================================================
+ * TOOLBAR
+ * ========================================================================= */
+
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+}
+
+/* Subtle divider between toolbar groups */
+.toolbar-group + .toolbar-group {
+    border-left: 1px solid #3a3a50;
+}
+
+.toolbar-brand {
+    padding-right: 12px;
+}
+
+.brand-name {
+    font-weight: 700;
+    font-size: 15px;
+    color: #4a9eff;
+    letter-spacing: 0.5px;
+}
+
+.toolbar-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #c0c0d0;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.toolbar-btn:hover {
+    background: #3a3a50;
+    border-color: #4a4a60;
+}
+
+.toolbar-btn:active {
+    background: #4a4a60;
+}
+
+.toolbar-btn .icon {
+    font-size: 14px;
+}
+
+/* Active tool button highlight */
+.tool-btn.active {
+    background: #3a7fcc;
+    border-color: #4a9eff;
+    color: #ffffff;
+}
+
+.tool-btn.active:hover {
+    background: #4a8fdd;
+}
+
+.filename-display {
+    color: #8888a0;
+    font-size: 12px;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 8px;
+}
+
+/* Kept for future toolbar placeholders */
+.toolbar-placeholder {
+    color: #555570;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.zoom-display {
+    color: #c0c0d0;
+    font-size: 12px;
+    min-width: 48px;
+    text-align: center;
+}
+
+/* Intent mode indicator — shows active markup type */
+.intent-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: #2a2a3d;
+    font-size: 11px;
+    color: #c0c0d0;
+    cursor: default;
+    user-select: none;
+}
+
+.intent-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #aaaaaa;
+}
+
+/* Push zoom controls to the right */
+.toolbar-zoom {
+    margin-left: auto;
+}
+
+/* =========================================================================
+ * SIDE PANELS (Pages, Properties)
+ * ========================================================================= */
+
+.side-panel {
+    width: 200px;
+    min-width: 160px;
+    background: #252538;
+    border-right: 1px solid #3a3a50;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Properties panel has left border instead of right */
+#panel-properties {
+    border-right: none;
+    border-left: 1px solid #3a3a50;
+}
+
+.panel-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8888a0;
+    border-bottom: 1px solid #3a3a50;
+    flex-shrink: 0;
+}
+
+.panel-body {
+    padding: 10px 12px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Ambient markup counts in status bar — visible progress without tab switching */
+.status-counts {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 4px;
+}
+
+.status-count-item {
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.status-count-sep {
+    color: #3a3a50;
+    font-size: 11px;
+}
+
+/* Semantic colors for count items */
+.count-issue    { color: #ff4444; }
+.count-question { color: #ffaa00; }
+.count-approval { color: #44cc66; }
+.count-change   { color: #4a9eff; }
+.count-open     { color: #8888a0; }
+
+/* =========================================================================
+ * LEFT PANEL TABS (Pages / Markups)
+ * ========================================================================= */
+
+.panel-tabs {
+    display: flex;
+    flex-shrink: 0;
+    border-bottom: 1px solid #3a3a50;
+}
+
+.panel-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #8888a0;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+/* Left panel has 4 tabs (Pages/Markups/Measures/Layers).
+ * At 200px wide, equal flex shares leave only 50px per tab — not enough
+ * for "MEASURES". Wrap to 2 rows of 2 so each tab gets 100px. */
+#panel-left .panel-tabs {
+    flex-wrap: wrap;
+}
+#panel-left .panel-tab {
+    flex: 0 0 50%;
+    padding: 6px 4px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+.panel-tab:hover {
+    color: #c0c0d0;
+}
+
+.panel-tab.active {
+    color: #4a9eff;
+    border-bottom-color: #4a9eff;
+}
+
+.tab-content {
+    display: none;
+    flex: 1;
+    overflow: hidden;
+    flex-direction: column;
+}
+
+.tab-content.active {
+    display: flex;
+}
+
+/* =========================================================================
+ * THUMBNAIL LIST (Pages panel)
+ * ========================================================================= */
+
+.thumbnail-list {
+    overflow-y: auto;
+    padding: 8px;
+    flex: 1;
+}
+
+.thumbnail-item {
+    position: relative;
+    cursor: pointer;
+    margin-bottom: 8px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+
+.thumbnail-item:hover {
+    border-color: #4a4a60;
+}
+
+.thumbnail-item.active {
+    border-color: #4a9eff;
+}
+
+.thumbnail-item img {
+    width: 100%;
+    display: block;
+    background: #1a1a2a;
+}
+
+.thumbnail-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 2px 6px;
+    font-size: 10px;
+    text-align: center;
+    color: #c0c0d0;
+}
+
+/* =========================================================================
+ * VIEWPORT (Central PDF display area)
+ * ========================================================================= */
+
+#viewport {
+    flex: 1;
+    overflow: auto;
+    background: #181828;
+    position: relative;
+    display: flex;
+    /* flex-start prevents the "can't scroll to top" bug that occurs with
+       align-items: center when zoomed content exceeds viewport height.
+       With center, overflow is symmetric (half above, half below) but the
+       browser only scrolls from 0 — so the top half is unreachable.
+       With flex-start + margin: auto on the child, the page centers when
+       it fits and overflows only downward/rightward when zoomed. */
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 20px;
+}
+
+/* =========================================================================
+ * WELCOME SCREEN
+ * ========================================================================= */
+
+#welcome-screen {
+    text-align: center;
+    padding: 40px;
+}
+
+.welcome-content h1 {
+    font-size: 36px;
+    font-weight: 300;
+    color: #4a9eff;
+    margin-bottom: 8px;
+}
+
+.welcome-content p {
+    color: #8888a0;
+    font-size: 16px;
+    margin-bottom: 32px;
+}
+
+.welcome-btn {
+    background: #4a9eff;
+    color: #fff;
+    border: none;
+    padding: 12px 32px;
+    border-radius: 6px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.welcome-btn:hover {
+    background: #3a8aee;
+}
+
+.recent-files {
+    margin-top: 40px;
+    text-align: left;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.recent-files h3 {
+    color: #8888a0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+}
+
+.recent-files ul {
+    list-style: none;
+}
+
+.recent-files li {
+    margin-bottom: 4px;
+}
+
+.recent-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    color: #c0c0d0;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.recent-link:hover {
+    background: #2a2a3d;
+    color: #e0e0e8;
+}
+
+.recent-pages {
+    font-size: 11px;
+    color: #666680;
+}
+
+/* =========================================================================
+ * CANVAS CONTAINER (PDF image + future Fabric overlay)
+ * ========================================================================= */
+
+#canvas-container {
+    position: relative;
+    /* margin: auto centers the page when the viewport has spare space
+       (small doc or low zoom), and collapses to 0 when content overflows
+       (high zoom) — so scrolling always starts from the real top-left. */
+    margin: auto;
+    transform-origin: 0 0;
+    /* No default grab cursor — cursor depends on which tool is active.
+       Grab only shows in hand-mode (see below) so it doesn't mislead users
+       into thinking they can pan while a draw tool is active. */
+    cursor: default;
+}
+
+/* Grab cursor only when Hand tool (or no tool) is active.
+   toolbar.js adds .hand-mode to #canvas-container in 'hand' and default cases.
+   This prevents the grab cursor from misleading users during draw-tool sessions. */
+#canvas-container.hand-mode {
+    cursor: grab;
+}
+
+#canvas-container.panning {
+    cursor: grabbing;
+}
+
+#pdf-image {
+    display: block;
+    /* Image size is set dynamically based on zoom level */
+    user-select: none;
+    -webkit-user-drag: none;
+    /* Crisp rendering for engineering drawings */
+    image-rendering: auto;
+}
+
+/* =========================================================================
+ * FABRIC.JS CANVAS OVERLAY
+ *
+ * Fabric.js wraps our <canvas id="fabric-canvas"> in a div with class
+ * .canvas-container. We position it absolutely over the PDF image so
+ * markup objects render on top. pointer-events are disabled by default
+ * so mouse events pass through to the viewport for pan/scroll. When a
+ * drawing tool is active, .drawing-active enables pointer-events.
+ * ========================================================================= */
+
+#canvas-container > .canvas-container {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    /* Width/height set dynamically by canvas.js _applyZoom() to match PDF image */
+    /* Pass mouse events through to viewport for panning by default */
+    pointer-events: none;
+    /* Prevent canvas content from expanding the wrapper beyond the image bounds */
+    overflow: hidden;
+}
+
+/* When a drawing tool is active, capture mouse events on the canvas */
+#canvas-container > .canvas-container.drawing-active {
+    pointer-events: auto;
+}
+
+/* Fabric creates upper-canvas and lower-canvas — ensure both fill the wrapper */
+#canvas-container > .canvas-container canvas {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+}
+
+/* =========================================================================
+ * PROPERTIES PANEL
+ * ========================================================================= */
+
+.prop-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid #2a2a3d;
+    font-size: 12px;
+}
+
+.prop-row label {
+    color: #8888a0;
+    font-weight: 500;
+}
+
+.prop-row span {
+    color: #c0c0d0;
+    text-align: right;
+}
+
+/* Muted provenance text — author/timestamp are informational, not editable */
+.prop-value-muted {
+    color: #666680 !important;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.muted-text {
+    color: #555570;
+    font-size: 12px;
+    font-style: italic;
+    padding: 20px 0;
+    text-align: center;
+}
+
+/* Section dividers within property groups */
+.prop-section-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #6868a0;
+    padding: 10px 0 4px 0;
+    border-bottom: 1px solid #3a3a50;
+    margin-bottom: 6px;
+}
+
+.prop-section-header:first-child {
+    padding-top: 0;
+}
+
+/* Form fields — label above control */
+.prop-field {
+    margin-bottom: 8px;
+}
+
+.prop-field label {
+    display: block;
+    font-size: 11px;
+    color: #8888a0;
+    font-weight: 500;
+    margin-bottom: 3px;
+}
+
+/* Dark-themed select dropdown */
+.prop-field select {
+    width: 100%;
+    background: #1e1e2e;
+    color: #e0e0e8;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238888a0'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+.prop-field select:hover {
+    border-color: #4a4a60;
+}
+
+.prop-field select:focus {
+    border-color: #4a9eff;
+}
+
+/* Dark-themed textarea */
+.prop-field textarea {
+    width: 100%;
+    background: #1e1e2e;
+    color: #e0e0e8;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    resize: vertical;
+    outline: none;
+    min-height: 48px;
+}
+
+.prop-field textarea:hover {
+    border-color: #4a4a60;
+}
+
+.prop-field textarea:focus {
+    border-color: #4a9eff;
+}
+
+.prop-field textarea::placeholder {
+    color: #555570;
+}
+
+/* Color input — dark themed */
+.prop-field input[type="color"] {
+    width: 100%;
+    height: 28px;
+    background: #1e1e2e;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.prop-field input[type="color"]:hover {
+    border-color: #4a4a60;
+}
+
+/* Range slider */
+.prop-field input[type="range"] {
+    width: calc(100% - 28px);
+    vertical-align: middle;
+    accent-color: #4a9eff;
+}
+
+.range-val {
+    display: inline-block;
+    width: 20px;
+    text-align: right;
+    font-size: 11px;
+    color: #8888a0;
+    vertical-align: middle;
+}
+
+/* =========================================================================
+ * MARKUP LIST (Markups panel)
+ * ========================================================================= */
+
+#markup-list-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #3a3a50;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+#markup-count {
+    font-size: 11px;
+    color: #8888a0;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Compact filter dropdowns in markup list header */
+#markup-list-header select {
+    background: #1e1e2e;
+    color: #c0c0d0;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    padding: 2px 20px 2px 6px;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%238888a0'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 5px center;
+}
+
+#markup-list-header select:hover {
+    border-color: #4a4a60;
+}
+
+#markup-list-header select:focus {
+    border-color: #4a9eff;
+}
+
+.markup-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0;
+}
+
+/* Individual markup row */
+.markup-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #2a2a3d;
+    cursor: pointer;
+    transition: background 0.12s;
+    font-size: 11px;
+}
+
+.markup-row:hover {
+    background: #2a2a3d;
+}
+
+.markup-row.active {
+    background: #2a3a55;
+    border-left: 2px solid #4a9eff;
+    padding-left: 6px;
+}
+
+/* Type icon badge — colored circle/label */
+.markup-type-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* Type badge color coding */
+.markup-type-badge.type-note      { background: #3a3a50; color: #c0c0d0; }
+.markup-type-badge.type-issue     { background: #5a2020; color: #ff6666; }
+.markup-type-badge.type-question  { background: #4a3a10; color: #ffcc44; }
+.markup-type-badge.type-approval  { background: #1a4a2a; color: #66dd88; }
+.markup-type-badge.type-change    { background: #2a2a5a; color: #8888ff; }
+
+/* Status indicator dot */
+.markup-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.markup-status-dot.status-open     { background: #4a9eff; }
+.markup-status-dot.status-resolved { background: #44cc66; }
+
+/* Markup row text content */
+.markup-row-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.markup-row-shape {
+    font-size: 10px;
+    color: #6868a0;
+}
+
+.markup-row-note {
+    color: #a0a0b8;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.markup-row-page {
+    font-size: 9px;
+    color: #6868a0;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+/* =========================================================================
+ * LOADING SPINNER
+ * ========================================================================= */
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(24, 24, 40, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #3a3a50;
+    border-top-color: #4a9eff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* =========================================================================
+ * SCROLLBAR STYLING (WebKit)
+ * ========================================================================= */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e2e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #3a3a50;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4a4a60;
+}
+
+/* =========================================================================
+ * KEYBOARD SHORTCUT HINTS
+ * ========================================================================= */
+
+.key-hint {
+    display: inline-block;
+    background: #2a2a3d;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 10px;
+    color: #8888a0;
+    margin-left: 4px;
+}
+
+/* =========================================================================
+ * STATUS BAR — SCALE SELECTOR
+ * ========================================================================= */
+
+/* Wrapper spans in the status bar */
+.status-scale {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.scale-prefix {
+    color: #8888a0;
+    font-size: 11px;
+    cursor: default;
+}
+
+/* Compact inline select — fits the 24px status bar */
+.scale-select-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid #3a3a50;
+    color: #c0c0d0;
+    font-size: 11px;
+    padding: 0 2px;
+    cursor: pointer;
+    /* Remove default arrow on some browsers to save space */
+    -webkit-appearance: auto;
+}
+
+.scale-select-input:hover,
+.scale-select-input:focus {
+    outline: none;
+    border-bottom-color: #5a5a80;
+    color: #e0e0f0;
+}
+
+/* =========================================================================
+ * PAGES PANEL — ADD PAGE FOOTER
+ * ========================================================================= */
+
+/* Wrapper that pins the button to the bottom of the pages panel */
+.pages-panel-footer {
+    padding: 6px 8px;
+    border-top: 1px solid #2a2a3d;
+    flex-shrink: 0; /* don't shrink — stays visible even with many thumbnails */
+}
+
+/* Compact button that looks at home in the dark panel */
+.btn-add-page {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed #3a3a50;
+    border-radius: 4px;
+    color: #8888a0;
+    font-size: 11px;
+    padding: 5px 0;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn-add-page:hover {
+    background: #1e1e2e;
+    border-color: #5a5a80;
+    color: #ccccdd;
+}
+
+/* =========================================================================
+ * NEW DOCUMENT MODAL
+ * ========================================================================= */
+
+/* Full-screen backdrop — blocks interaction with the editor behind */
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Semi-transparent dark overlay */
+.modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+/* The dialog box itself */
+.modal-box {
+    position: relative;
+    background: #1a1a2e;
+    border: 1px solid #3a3a50;
+    border-radius: 8px;
+    padding: 24px 28px;
+    width: 360px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 1;
+}
+
+.modal-box h2 {
+    margin: 0 0 18px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #e0e0f0;
+}
+
+/* Label + input stacked vertically */
+.modal-field {
+    margin-bottom: 14px;
+}
+
+.modal-field label {
+    display: block;
+    font-size: 11px;
+    color: #8888a0;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.modal-field input[type="text"],
+.modal-field input[type="number"],
+.modal-field select {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0f0f1a;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    color: #e0e0f0;
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.modal-field input[type="text"]:focus,
+.modal-field input[type="number"]:focus,
+.modal-field select:focus {
+    outline: none;
+    border-color: #5a5aaa;
+}
+
+/* =============================================================================
+ * PHASE 2: MEASUREMENT TOOLS
+ * ============================================================================= */
+
+/* =========================================================================
+ * MEASUREMENT PROPERTIES PANEL
+ * ========================================================================= */
+
+/* Large measurement value display — "10.5 ft" deserves to be prominent */
+.measure-value-large {
+    font-size: 18px;
+    font-weight: 700;
+    color: #00ccff;        /* Matches DISTANCE_COLOR in measure.js */
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+/* Secondary measurement info (total count, pixel raw value) */
+#measure-secondary-value {
+    font-size: 12px;
+    color: #8888a0;
+}
+
+/* Scale label in measurement panel — shows current scale used for the value */
+#measure-scale-label {
+    font-size: 11px;
+    font-style: italic;
+}
+
+/* =========================================================================
+ * MARKUP LIST — MEASUREMENT TYPE BADGES
+ * ========================================================================= */
+
+/* Distance badge — cyan to match the distance tool color */
+.markup-type-badge.type-distance {
+    background: rgba(0, 204, 255, 0.15);
+    color: #00ccff;
+    border: 1px solid rgba(0, 204, 255, 0.4);
+}
+
+/* Area badge — teal to match the area tool color */
+.markup-type-badge.type-area {
+    background: rgba(0, 221, 170, 0.15);
+    color: #00ddaa;
+    border: 1px solid rgba(0, 221, 170, 0.4);
+}
+
+/* Count badge — purple to match the count marker color */
+.markup-type-badge.type-count {
+    background: rgba(170, 85, 255, 0.15);
+    color: #aa55ff;
+    border: 1px solid rgba(170, 85, 255, 0.4);
+}
+
+/* Measurement status dot — neutral gray (no open/resolved concept for measurements) */
+.markup-status-dot.status-measurement {
+    background: #5a5a70;
+    box-shadow: none;
+}
+
+/* =========================================================================
+ * CALIBRATION MODAL — input row with value + unit side by side
+ * ========================================================================= */
+
+/* Flex row: number input left, unit select right */
+.calib-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.calib-input-row input[type="number"] {
+    flex: 1;
+    background: #0f0f1a;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    color: #e0e0f0;
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.calib-input-row input[type="number"]:focus {
+    outline: none;
+    border-color: #00ccff;    /* Cyan focus ring matches measurement theme */
+}
+
+.calib-input-row select {
+    width: 110px;
+    background: #0f0f1a;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    color: #e0e0f0;
+    padding: 7px 6px;
+    font-size: 13px;
+}
+
+/* Modal hint text — smaller, muted, below the title */
+.modal-hint {
+    font-size: 12px;
+    color: #8888a0;
+    margin-bottom: 16px;
+    line-height: 1.4;
+}
+
+/* =========================================================================
+ * MEASUREMENT TOOLBAR GROUP
+ * ========================================================================= */
+
+/* Measurement toolbar buttons have a subtle teal accent when active */
+.toolbar-measure .tool-btn.active {
+    background: rgba(0, 204, 255, 0.18);
+    border-color: #00ccff;
+    color: #00ccff;
+}
+
+/* Right-aligned action buttons */
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+/* Primary action button — distinct from ghost Cancel */
+.modal-btn-primary {
+    background: #3a3aaa;
+    border-color: #5a5acc;
+    color: #ffffff;
+}
+
+.modal-btn-primary:hover {
+    background: #4a4abb;
+    border-color: #6a6add;
+}
+
+/* =============================================================================
+ * PHASE 3B: MODE-TAB TOOLBAR
+ * ============================================================================= */
+
+/* =========================================================================
+ * TOOLBAR TAB BUTTONS — Navigate | Markup | Measure
+ *
+ * Tabs sit inline in the toolbar bar (no second row — 42px total height).
+ * Active tab gets an accent underline, matching the Bluebeam visual language.
+ * ========================================================================= */
+
+.toolbar-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    padding: 0 4px;
+    height: 42px;           /* Fill the full toolbar height for larger click target */
+}
+
+.toolbar-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #8888a0;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.toolbar-tab:hover {
+    color: #c0c0d0;
+}
+
+.toolbar-tab.active {
+    color: #4a9eff;
+    border-bottom-color: #4a9eff;
+}
+
+/* =========================================================================
+ * TAB PANELS — contain the tool buttons for each tab
+ *
+ * Tab panels are inline flex containers in the toolbar flow.
+ * Inactive panels are hidden with display:none. The active panel's
+ * tool group buttons appear inline, maintaining the 42px toolbar height.
+ * ========================================================================= */
+
+.tab-panel {
+    display: flex;          /* flex so inner .toolbar-group aligns properly */
+    align-items: center;
+}
+
+/* Override the toolbar-group separator border inside tab panels —
+   the tab itself provides visual separation from the tab buttons */
+.tab-panel .toolbar-group {
+    border-left: none;
+}
+
+/* =========================================================================
+ * SETTINGS GEAR BUTTON
+ * ========================================================================= */
+
+.toolbar-settings-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+    margin-left: 2px;
+    border-left: 1px solid #3a3a50;
+    border-radius: 0;
+    color: #666680;
+    transition: color 0.15s, background 0.15s;
+}
+
+.toolbar-settings-btn:hover {
+    color: #c0c0d0;
+    background: #3a3a50;
+}
+
+/* =========================================================================
+ * TOOLBAR SETTINGS MODAL
+ *
+ * Per-tool visibility checkboxes, organized by tab section.
+ * ========================================================================= */
+
+/* Wider modal box for 3-column settings layout */
+.modal-settings-box {
+    width: 460px;
+    max-width: calc(100vw - 40px);
+}
+
+/* Three-section layout: Navigate | Markup | Measure */
+.settings-tab-sections {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.settings-section {
+    flex: 1;
+    min-width: 0;
+}
+
+.settings-section-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8888a0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #3a3a50;
+    margin-bottom: 8px;
+}
+
+.settings-tool-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Each tool checkbox row */
+.settings-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.settings-tool-item:hover {
+    color: #e0e0f0;
+}
+
+.settings-tool-item input[type="checkbox"] {
+    width: 13px;
+    height: 13px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: #4a9eff;
+    flex-shrink: 0;
+}
+
+.settings-tool-item label {
+    font-size: 12px;
+    color: #c0c0d0;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Keyboard shortcut hint chip in settings rows */
+.settings-shortcut-hint {
+    font-size: 10px;
+    color: #6a6a8a;
+    background: #1e1e2e;
+    border: 1px solid #2a2a3d;
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+    font-family: monospace;
+    letter-spacing: 0;
+}
+
+/* Compact mode row — visually separates display options from tool lists */
+.settings-display-row {
+    padding: 0 0 10px 0;
+    border-bottom: 1px solid #2a2a3d;
+    margin-bottom: 4px;
+}
+
+/* =========================================================================
+ * L2: COMPACT TOOLBAR MODE
+ *
+ * When #toolbar has class .toolbar-compact, tool buttons show only their
+ * icon character — text labels are hidden via font-size:0 on the parent.
+ * The .icon span has an explicit font-size rule so it is unaffected by
+ * the parent's font-size:0 (CSS font-size on a child is not inherited
+ * when the child has its own explicit rule).
+ * Only .tool-btn elements (drawing/measure tools) are compacted.
+ * Navigation tabs, zoom, export, and file buttons are unchanged.
+ * ========================================================================= */
+
+#toolbar.toolbar-compact .tool-btn {
+    /* font-size:0 hides text nodes that are direct children of the button */
+    font-size: 0;
+    padding: 4px 6px;
+    min-width: 26px;
+    justify-content: center;
+}
+
+/* Keep the icon readable — explicit font-size is NOT overridden by parent's 0 */
+#toolbar.toolbar-compact .tool-btn .icon {
+    font-size: 15px;
+    display: inline-block;
+}
+
+/* =========================================================================
+ * PHASE 4A — MEASURES PANEL (Measurement Summary)
+ *
+ * Stat cards show aggregated distance / area / count totals.
+ * The row list reuses .markup-row / .markup-type-badge styles from the
+ * Markups tab so measurements look visually consistent.
+ * ========================================================================= */
+
+/* Three stat cards in a horizontal flex row across the panel */
+.measure-stats {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    padding: 8px 6px 6px 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #2a2a3d;
+}
+
+/* Individual stat card — centered column layout */
+.measure-stat-card {
+    flex: 1;
+    background: #1e1e2e;
+    border: 1px solid #2a2a3d;
+    border-radius: 5px;
+    padding: 6px 4px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;  /* allow flex shrink past content size */
+}
+
+/* Large count number — primary visual element */
+.stat-count {
+    font-size: 18px;
+    font-weight: 700;
+    color: #4a9eff;
+    line-height: 1;
+}
+
+/* Uppercase type label under the count */
+.stat-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #666680;
+    line-height: 1;
+}
+
+/* Total value — monospace so numeric values align cleanly */
+.stat-total {
+    font-size: 10px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    color: #a0a0c0;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Filter row: type dropdown + Export CSV button side by side */
+#measure-list-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #2a2a3d;
+}
+
+#measure-list-header select {
+    flex: 1;
+    background: #1e1e2e;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 11px;
+    padding: 3px 4px;
+    cursor: pointer;
+}
+
+#measure-list-header select:focus {
+    outline: none;
+    border-color: #4a9eff;
+}
+
+/* Compact export button — smaller than full toolbar buttons */
+.measure-export-btn {
+    font-size: 10px !important;
+    padding: 3px 6px !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* =============================================================================
+ * PLUGIN PANEL — Right panel tab content areas (Phase 4B)
+ * ============================================================================= */
+
+/* Plugin tab content areas — consistent padding with .panel-body */
+.plugin-tab-content {
+    padding: 10px 12px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Right panel tab content — fill remaining height so plugin content can scroll */
+#panel-properties .tab-content {
+    overflow-y: auto;
+}
+
+/* =============================================================================
+ * EC BRIEF PLUGIN PANEL
+ * ExtendedCognition plugin: document status briefing with AI narrative + stats
+ * ============================================================================= */
+
+/* Narrative text area — shows briefing, placeholder, spinner, or error */
+.ec-narrative {
+    padding: 10px 0 12px;
+    line-height: 1.5;
+    color: #e0e0e8;
+    font-size: 12px;
+}
+
+/* Muted italic — shown before any document is loaded */
+.ec-narrative.ec-empty  { color: #8888a0; font-style: italic; }
+
+/* Muted italic — shown while fetching the summary */
+.ec-narrative.ec-loading { color: #8888a0; font-style: italic; }
+
+/* Error state — red text for fetch or server errors */
+.ec-narrative.ec-error  { color: #ff6666; }
+
+/* Per-type stat rows container */
+.ec-stats {
+    padding: 6px 0 10px;
+    border-top: 1px solid #3a3a50;
+}
+
+/* Individual stat row: [icon] [label ──────────────] [count] */
+.ec-stat-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 12px;
+}
+
+.ec-stat-icon  { width: 14px; text-align: center; }
+.ec-stat-label { flex: 1; color: #c0c0cc; }
+.ec-stat-count { font-weight: 600; color: #e0e0e8; }
+
+/* "No markups yet" row */
+.ec-stat-row.ec-muted { color: #8888a0; font-style: italic; }
+
+/* Per-type color accents — matches MARKUP_COLORS in canvas.js */
+.ec-type-issue    { color: #ff4444; }
+.ec-type-question { color: #ffaa00; }
+.ec-type-approval { color: #44cc66; }
+.ec-type-change   { color: #4a9eff; }
+.ec-type-note     { color: #aaaaaa; }
+
+/* Footer: Refresh button + mode badge */
+.ec-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #3a3a50;
+}
+
+/* Smaller Refresh button — fits alongside the mode badge */
+.ec-refresh-btn { font-size: 11px !important; padding: 2px 8px !important; }
+
+/* Mode badge — shows ≈ Computed or ⚡ mistral:7b */
+.ec-mode-badge { font-size: 10px; color: #8888a0; }
+
+/* AI mode gets a green accent to signal live LLM response */
+.ec-mode-badge.ec-mode-ai { color: #44cc66; }
+
+/* =========================================================================
+ * LAYERS PANEL (Phase 5)
+ * ========================================================================= */
+
+#layers-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; border-bottom: 1px solid #3a3a50; flex-shrink: 0;
+}
+
+#layers-count { font-size: 11px; color: #8888a0; font-weight: 600; flex: 1; }
+
+.layers-new-btn { font-size: 11px !important; padding: 2px 8px !important; }
+
+.layers-list { overflow-y: auto; flex: 1; }
+
+.layer-row {
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 8px; border-bottom: 1px solid #2a2a3d;
+    cursor: pointer; font-size: 12px; color: #c0c0cc;
+    transition: background 0.12s;
+}
+
+.layer-row:hover   { background: #2a2a3d; }
+.layer-row.active  { background: #2a3a55; border-left: 3px solid #4a9eff; padding-left: 5px; }
+
+.layer-vis-btn, .layer-lock-btn, .layer-delete-btn {
+    background: none; border: none; cursor: pointer;
+    color: #8888a0; font-size: 12px; padding: 1px 3px; flex-shrink: 0;
+}
+
+.layer-vis-btn:hover, .layer-lock-btn:hover { color: #c0c0cc; }
+
+.layer-delete-btn { margin-left: auto; opacity: 0; transition: opacity 0.1s; }
+.layer-row:hover .layer-delete-btn { opacity: 1; }
+.layer-delete-btn:hover { color: #ff4444; }
+
+.layer-name {
+    flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.layer-name-input {
+    flex: 1; background: #1e1e2e; border: 1px solid #4a9eff;
+    color: #e0e0e8; font-size: 12px; padding: 1px 4px; border-radius: 2px;
+}
+
+/* Hidden layer: dim row + strikethrough name */
+.layer-row.layer-hidden  { opacity: 0.45; }
+.layer-row.layer-hidden .layer-name { text-decoration: line-through; }
+
+/* Locked layer: amber lock icon */
+.layer-row.layer-locked .layer-lock-btn { color: #ffaa00; }
+
+/* =============================================================================
+ * GLOBAL SEARCH PANEL
+ * ============================================================================= */
+
+#search-panel-header {
+    padding: 8px;
+    border-bottom: 1px solid #3a3a50;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.search-input {
+    width: 100%;
+    background: #1e1e2e;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #e0e0e8;
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+}
+
+.search-input:focus {
+    border-color: #4a9eff;
+}
+
+.search-count {
+    font-size: 11px;
+    color: #8888a0;
+    min-height: 14px;
+}
+
+.search-result-row {
+    padding: 6px 8px;
+    border-bottom: 1px solid #2a2a3d;
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.search-result-row:hover {
+    background: #2a2a3d;
+}
+
+.search-result-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.search-badge-document {
+    background: #2a3a55;
+    color: #4a9eff;
+}
+
+.search-badge-markup {
+    background: #3a2a2a;
+    color: #ff8866;
+}
+
+.search-result-docname {
+    font-size: 12px;
+    color: #c0c0cc;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-page {
+    font-size: 11px;
+    color: #8888a0;
+    flex-shrink: 0;
+}
+
+.search-result-context {
+    font-size: 11px;
+    color: #8888a0;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 2px;
+}
+
+/* =============================================================================
+ * MARKUP PHOTO ATTACHMENTS
+ * ============================================================================= */
+
+.markup-photos-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 0;
+}
+
+.photo-thumb {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid #3a3a50;
+    background: #1e1e2e;
+    flex-shrink: 0;
+}
+
+.photo-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    cursor: pointer;
+    display: block;
+}
+
+.photo-thumb img:hover {
+    opacity: 0.85;
+}
+
+.photo-caption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.65);
+    color: #e0e0e8;
+    font-size: 9px;
+    padding: 2px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.photo-delete-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.65);
+    border: none;
+    border-radius: 50%;
+    color: #ff4444;
+    font-size: 13px;
+    line-height: 1;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.photo-thumb:hover .photo-delete-btn {
+    display: flex;
+}
+
+.photo-delete-btn:hover {
+    background: #ff4444;
+    color: #fff;
+}
+
+.photo-attach-btn {
+    width: 100%;
+    margin-top: 4px;
+    font-size: 11px;
+    padding: 4px 8px;
+    background: #2a2a3d;
+    border: 1px dashed #3a3a50;
+    color: #8888a0;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.photo-attach-btn:hover {
+    border-color: #4a9eff;
+    color: #4a9eff;
+}
+
+/* =============================================================================
+   MARKUP TAGS — chips in properties panel and markup list tag cloud
+   ============================================================================= */
+
+/* Container for tag chips in the properties panel — below the note textarea */
+.prop-tag-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0 2px 0;
+    min-height: 0;
+}
+
+/* Individual tag chip in the properties panel (read-only, display only) */
+.prop-tag {
+    display: inline-block;
+    background: #1c1c34;
+    color: #6a9fd8;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid #2a3060;
+    font-family: monospace;
+}
+
+/* Tag cloud strip in the markup list header — above the scrollable rows */
+.markup-tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 5px 8px 6px;
+    border-bottom: 1px solid #1e1e2e;
+    background: #14141f;
+}
+
+/* Individual tag chip in the markup list cloud — clickable filter control */
+.markup-tag {
+    display: inline-block;
+    background: #1a1a2e;
+    color: #7090c0;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid #252548;
+    cursor: pointer;
+    user-select: none;
+    font-family: monospace;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.markup-tag:hover {
+    background: #222244;
+    border-color: #4a6eff;
+    color: #99b8ff;
+}
+
+/* Active tag filter chip — distinct accent to show the filter is live */
+.markup-tag-active {
+    background: #1e2850;
+    border-color: #4a9eff;
+    color: #80c8ff;
+}
+
+/* "All" chip when no tag filter is active — muted so it doesn't compete */
+.markup-tag-all-active {
+    color: #6060a0;
+    border-color: #2a2a50;
+}
+
+/* =============================================================================
+   REVIEW BRIEF PANEL
+   ============================================================================= */
+
+#brief-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #2a2a3d;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.brief-timestamp {
+    font-size: 10px;
+    color: #555568;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.brief-open-count {
+    font-size: 10px;
+    background: #3a2a1a;
+    color: #ff8844;
+    border-radius: 3px;
+    padding: 1px 6px;
+    white-space: nowrap;
+}
+
+.brief-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.brief-btn {
+    font-size: 10px;
+    padding: 3px 8px;
+}
+
+/* Scrollable content area — fills remaining height below header */
+.brief-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+/* Markdown heading styles — each level clearly differentiated */
+.brief-h1 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e0e0f0;
+    margin: 0 0 4px 0;
+    border-bottom: 1px solid #2a2a3d;
+    padding-bottom: 4px;
+}
+
+.brief-h2 {
+    font-size: 11px;
+    font-weight: 700;
+    color: #c0c0d8;
+    margin: 10px 0 2px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.brief-h3 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #7070a0;
+    margin: 6px 0 2px 0;
+}
+
+.brief-p {
+    margin: 3px 0;
+    color: #9090a8;
+}
+
+/* Markup entry list — disc-bulleted, indented, high contrast */
+.brief-list {
+    margin: 0 0 4px 0;
+    padding-left: 16px;
+}
+
+.brief-li {
+    margin: 2px 0;
+    color: #c0c0d8;
+    list-style-type: disc;
+}
+
+/* Horizontal divider between the summary line and type groups */
+.brief-content hr {
+    border: none;
+    border-top: 1px solid #2a2a3d;
+    margin: 8px 0;
+}
+
+/* =============================================================================
+   RFI GENERATOR PANEL
+   ============================================================================= */
+
+/* Editable header fields — one row per field (label + input) */
+.rfi-header-section {
+    padding: 8px 10px 4px 10px;
+    border-bottom: 1px solid #2a2a3d;
+}
+
+.rfi-field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+}
+
+.rfi-field-label {
+    font-size: 11px;
+    color: #7070a0;
+    width: 46px;         /* fixed width keeps inputs aligned */
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.rfi-field-input {
+    flex: 1;
+    background: #1a1a2d;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #c0c0d8;
+    font-size: 12px;
+    padding: 3px 6px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.rfi-field-input:focus {
+    border-color: #6060c0;
+}
+
+.rfi-field-input::placeholder {
+    color: #404065;
+}
+
+/* Filter controls row */
+.rfi-filter-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #2a2a3d;
+    flex-wrap: wrap;
+}
+
+.rfi-filter-select {
+    background: #1a1a2d;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #c0c0d8;
+    font-size: 11px;
+    padding: 3px 4px;
+    flex: 1;
+    min-width: 0;
+    outline: none;
+}
+
+.rfi-filter-tag {
+    flex: 1;
+    min-width: 60px;
+    background: #1a1a2d;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #c0c0d8;
+    font-size: 11px;
+    padding: 3px 6px;
+    outline: none;
+}
+
+.rfi-filter-tag::placeholder {
+    color: #404065;
+}
+
+/* Generate + Copy MD button row */
+.rfi-action-row {
+    display: flex;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #2a2a3d;
+}
+
+/* ==========================================================================
+   LAYER ASSIGNMENT CONTEXT MENU
+   ========================================================================== */
+
+#layer-context-menu {
+    position: fixed;
+    z-index: 9000;   /* Above all panels, canvas, and modals */
+    min-width: 200px;
+    background: #2a2a3d;
+    border: 1px solid #3a3a50;
+    border-radius: 6px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.55);
+    padding: 4px 0;
+    font-size: 13px;
+    color: #c0c0cc;
+    user-select: none;
+    /* Animate in from slightly above */
+    animation: ctx-menu-appear 0.08s ease-out;
+}
+
+@keyframes ctx-menu-appear {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Section header: "Assign N objects to layer" */
+.ctx-menu-header {
+    padding: 6px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #8888a0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.ctx-menu-sep {
+    height: 1px;
+    background: #3a3a50;
+    margin: 4px 0;
+}
+
+.ctx-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: none;
+    border: none;
+    color: #c0c0cc;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.08s;
+    white-space: nowrap;
+}
+
+.ctx-menu-item:hover {
+    background: #2a3a55;
+    color: #ffffff;
+}
+
+/* Currently assigned layer: blue text */
+.ctx-menu-item.current {
+    color: #4a9eff;
+}
+
+/* Filled/hollow dot indicating current/other layer */
+.ctx-menu-dot {
+    font-size: 9px;
+    flex-shrink: 0;
+    width: 12px;
+    text-align: center;
+}
+
+/* ==========================================================================
+   SAVE BUNDLE MODAL — name input row
+   ========================================================================== */
+
+/* Flex row: [text input that grows] [".portolan" suffix label] */
+.bundle-name-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+/* The text input inside the bundle name row takes all available space */
+.bundle-name-row input[type="text"] {
+    flex: 1;
+}
+
+/* Static ".portolan" suffix — styled to look attached to the input */
+.bundle-name-ext {
+    font-size: 13px;
+    color: #8888a0;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   TEXT / OCR PANEL  (page-text.js + #tab-text)
+   ========================================================================== */
+
+/* Panel header: badge + stats + copy button in one row */
+.text-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px 4px;
+    border-bottom: 1px solid #2a2a42;
+    flex-shrink: 0;
+}
+
+/* Method badge — colour-coded by data-method attribute */
+.text-method-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    /* Default (empty / none) */
+    background: #2a2a42;
+    color: #7070a0;
+}
+.text-method-badge[data-method="native"] { background: #1a3a1a; color: #40c870; }
+.text-method-badge[data-method="ocr"]    { background: #3a2a00; color: #c8a030; }
+.text-method-badge[data-method="none"]   { background: #2a2a42; color: #7070a0; }
+
+/* Stats counter — word/char counts */
+.text-stats {
+    font-size: 11px;
+    flex: 1;
+}
+
+/* Scrollable text body — monospace so columns / tables align */
+.text-body {
+    flex: 1;
+    overflow-y: auto;
+    margin: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: 'Consolas', 'Menlo', monospace;
+    line-height: 1.5;
+    color: #c8c8e0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* OCR section — shown below text body when no native text */
+.text-ocr-wrap {
+    flex-shrink: 0;
+    padding: 6px 8px 8px;
+    border-top: 1px solid #2a2a42;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Tesseract install-instructions block */
+.text-ocr-hint {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-family: 'Consolas', 'Menlo', monospace;
+    line-height: 1.6;
+    color: #a0a0c0;
+    background: #1a1a2e;
+    border: 1px solid #2a2a42;
+    border-radius: 3px;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* =============================================================================
+ * nodeCAST PLUGIN — Tag-Connected Markup Graph (Phase 1)
+ * ============================================================================= */
+
+/* Header: status text + refresh button on one line */
+.nc-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0 4px;
+}
+
+/* Status text: "N markups, M tags" — muted secondary info */
+.nc-status {
+    flex: 1;
+    font-size: 10px;
+    color: #8888a0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Compact refresh button — same size as EC Brief's */
+.nc-refresh-btn { font-size: 11px !important; padding: 2px 8px !important; }
+
+/* SVG graph area — contains the <svg> and empty-state div */
+.nc-graph-area {
+    position: relative;
+    border: 1px solid #2a2a3d;
+    border-radius: 3px;
+    background: #13131f;
+    overflow: hidden;
+}
+
+/* Empty state — shown when no markups exist on current page */
+.nc-empty {
+    padding: 20px;
+    text-align: center;
+    font-size: 11px;
+    color: #8888a0;
+    font-style: italic;
+}
+
+/* Legend: small colored-dot + label pairs at bottom of panel */
+.nc-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 6px 0 2px;
+}
+
+.nc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    color: #8888a0;
+}
