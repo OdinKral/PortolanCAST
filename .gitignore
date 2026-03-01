@@ -27,3 +27,10 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Local dev / machine-specific
+# relay*.ps1 contain hardcoded WSL IPs — not portable
+relay*.ps1
+
+# Generated test output
+test_results.txt

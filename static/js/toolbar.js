@@ -96,6 +96,35 @@ export class Toolbar {
             calibrate: 'measure', 'node-edit': 'measure',
         };
 
+        /**
+         * Preset color/width override — set by ToolPresetsPanel._apply() and
+         * consumed (then cleared) at the start of _initShapeDrawing().
+         * Null means use the default MARKUP_COLORS[activeMarkupType].
+         * @type {{strokeColor:string, strokeWidth:number}|null}
+         */
+        this._pendingPresetOverride = null;
+
+        /**
+         * Color used for the most recently drawn shape — read by ToolPresetsPanel
+         * when saving a preset so the preset captures the actual last-used color.
+         * @type {string}
+         */
+        this._lastStrokeColor = '';
+
+        /**
+         * Stroke width used for the most recently drawn shape.
+         * @type {number}
+         */
+        this._lastStrokeWidth = 2;
+
+        /**
+         * Reference to MARKUP_COLORS for use by ToolPresetsPanel without
+         * requiring a direct import from canvas.js in tools-panel.js.
+         * Set by app.js after constructing Toolbar.
+         * @type {Object|null}
+         */
+        this._MARKUP_COLORS_REF = null;
+
         this._bindButtons();
         this._bindKeyboard();
         // Apply the persisted tab on startup (after DOM is ready via _bindButtons)
@@ -1016,10 +1045,21 @@ export class Toolbar {
         let startY = 0;
         let activeShape = null;
 
-        // Color-as-meaning: stroke color matches the active intent mode
-        const STROKE_COLOR = MARKUP_COLORS[this.activeMarkupType] || MARKUP_COLORS.note;
-        const STROKE_WIDTH = 2;
+        // Color-as-meaning: use preset override if set (from ToolPresetsPanel._apply),
+        // otherwise fall back to the active markup type's canonical color.
+        // The override is consumed here and cleared so it only affects one shape.
+        const override = this._pendingPresetOverride;
+        this._pendingPresetOverride = null;
+
+        const STROKE_COLOR = override?.strokeColor
+            || MARKUP_COLORS[this.activeMarkupType]
+            || MARKUP_COLORS.note;
+        const STROKE_WIDTH = override?.strokeWidth ?? 2;
         const FILL_COLOR = 'transparent';
+
+        // Track last-used values so ToolPresetsPanel can capture them when saving
+        this._lastStrokeColor = STROKE_COLOR;
+        this._lastStrokeWidth = STROKE_WIDTH;
 
         // --- mousedown: create the shape at the click point ---
         const onMouseDown = (opt) => {
@@ -1646,6 +1686,17 @@ export class Toolbar {
         const fc = this.canvas.fabricCanvas;
         const STROKE_COLOR = MARKUP_COLORS[this.activeMarkupType] || MARKUP_COLORS.note;
 
+        // Read persisted typography prefs — saved by properties.js when the user
+        // changes font settings on a selected text object.
+        let textPrefs = {};
+        try {
+            textPrefs = JSON.parse(localStorage.getItem('portolancast-text-prefs') || '{}');
+        } catch { /* ignore corrupt data */ }
+        const fontFamily = textPrefs.fontFamily || 'Arial, sans-serif';
+        const fontSize   = Math.max(8, Math.min(200, Number(textPrefs.fontSize) || 16));
+        const fontWeight = textPrefs.bold   ? 'bold'   : 'normal';
+        const fontStyle  = textPrefs.italic ? 'italic' : 'normal';
+
         const onMouseDown = (opt) => {
             // Ignore if clicking on an existing object
             if (opt.target) return;
@@ -1653,16 +1704,18 @@ export class Toolbar {
             const pointer = fc.getPointer(opt.e);
 
             const textObj = new fabric.IText('Text', {
-                left: pointer.x,
-                top: pointer.y,
-                fontFamily: 'Arial, sans-serif',
-                fontSize: 16,
-                fill: STROKE_COLOR,
+                left:        pointer.x,
+                top:         pointer.y,
+                fontFamily,
+                fontSize,
+                fontWeight,
+                fontStyle,
+                fill:        STROKE_COLOR,
                 // No stroke on text — use fill for the character color
-                stroke: null,
+                stroke:      null,
                 strokeWidth: 0,
-                selectable: true,
-                editable: true,
+                selectable:  true,
+                editable:    true,
             });
 
             fc.add(textObj);

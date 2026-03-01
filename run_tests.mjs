@@ -84,6 +84,10 @@ const TEST_FILES = [
     'test_nodecast.mjs',
     // nodeCAST Phase 2 + Obsidian Export: All Pages toggle + Obsidian .zip exporter
     'test_obsidian_export.mjs',
+    // Tool Chest: Stamps, Presets, Sequences, Formatted Typewriter (typography panel)
+    'test_toolchest.mjs',
+    // Health Monitor: GET /api/health + Health panel UI + streaming dev test runner
+    'test_health_monitor.mjs',
 ];
 
 // =============================================================================

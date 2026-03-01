@@ -23,10 +23,12 @@ import { PluginLoader } from './plugins.js';
 import { MeasureSummary } from './measure-summary.js';
 import { ExtendedCognitionPlugin } from './plugins/extended-cognition.js';
 import { NodeCastPlugin } from './plugins/nodecast.js';
+import { HealthMonitorPlugin } from './plugins/health-monitor.js';
 import { LayerManager } from './layers.js';
 import { SearchPanel } from './search.js';
 import { ReviewBrief } from './review-brief.js';
 import { RFIGenerator } from './rfi-generator.js';
+import { StampManager, ToolPresetsPanel, SequenceManager } from './tools-panel.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -50,6 +52,11 @@ class App {
         this.search = new SearchPanel();
         this.reviewBrief = new ReviewBrief();
         this.rfiGenerator = new RFIGenerator();
+        // Tool Chest — stamp placement, saved tool presets, sequence counters.
+        // These init() lazily on first document load (canvas must exist first).
+        this.stampManager    = new StampManager();
+        this.toolPresets     = new ToolPresetsPanel();
+        this.sequenceManager = new SequenceManager();
         // PageTextPanel is a plain script (page-text.js); class is on globalThis
         this.pageText = new PageTextPanel();
 
@@ -61,6 +68,10 @@ class App {
         // These are set here (after construction) to avoid circular constructor dependencies.
         this.toolbar.measureTools = this.measureTools;
         this.toolbar.scale = this.scale;
+
+        // Give ToolPresetsPanel access to MARKUP_COLORS so saved presets can fall back
+        // to the semantic color of the current markup type when _lastStrokeColor is unset.
+        this.toolbar._MARKUP_COLORS_REF = MARKUP_COLORS;
 
         // Wire nodeEditor to measureTools so endLineEdit can rebuild Groups
         this.nodeEditor.measureTools = this.measureTools;
@@ -325,6 +336,18 @@ class App {
         // _bindTabSwitching()'s listener on the Text tab button was added
         // first; our listener fires second and sees .active already set.
         this.pageText.initForDocument(info.id);
+
+        // Initialize Tool Chest panels — runs once per app lifetime.
+        // State is localStorage-backed so no per-document re-init is needed.
+        // Canvas reference (this.canvas) is the stable CanvasOverlay; the
+        // tool managers access fabricCanvas dynamically at placement time, so
+        // they automatically use the current canvas after each document load.
+        if (!this._toolsInited) {
+            this._toolsInited = true;
+            this.stampManager.init(this.toolbar, this.canvas);
+            this.toolPresets.init(this.toolbar);
+            this.sequenceManager.init(this.toolbar, this.canvas);
+        }
 
         // Wire canvas content changes to auto-save, list refresh, and status counts
         this.canvas.onContentChange = () => {
@@ -817,6 +840,11 @@ class App {
         // #tags as a force-directed SVG graph in the "Graph" right-panel tab.
         // This is the origin of the nodeCAST knowledge-graph vision.
         this.plugins.register(NodeCastPlugin);
+
+        // Register HealthMonitor — status-bar dot + right-panel Health tab.
+        // Provides fast (<500 ms) self-diagnostic checks (DB, PDF engine, disk, AI)
+        // and a streaming dev test runner button for the full Playwright suite.
+        this.plugins.register(HealthMonitorPlugin);
 
         // Check if we're on an edit page (URL: /edit/{id})
         const match = window.location.pathname.match(/^\/edit\/(\d+)$/);

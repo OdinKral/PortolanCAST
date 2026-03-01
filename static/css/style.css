@@ -41,21 +41,56 @@ html, body {
 
 #toolbar {
     display: flex;
-    align-items: center;
-    height: 42px;
+    flex-direction: column;   /* Stack primary row + tools row vertically */
+    height: auto;             /* Expands to fit both rows (was fixed 42px) */
     background: #252538;
     border-bottom: 1px solid #3a3a50;
-    padding: 0 8px;
-    gap: 4px;
     flex-shrink: 0;
     user-select: none;
+}
+
+/* =========================================================================
+ * TOOLBAR ROWS (2-row layout)
+ *
+ * Primary row (42px): brand, file ops, mode-tab selectors, settings, intent,
+ *   export buttons, zoom controls.  Always fits in the viewport.
+ * Tools row (36px): drawing / navigation / measure tool buttons for the
+ *   active mode tab.  Scrolls horizontally if the tool set exceeds the width
+ *   (hidden scrollbar — no visual clutter, still wheel-scrollable).
+ * ========================================================================= */
+
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 4px;
+}
+
+.toolbar-row-primary {
+    height: 42px;
+    flex-shrink: 0;
+}
+
+.toolbar-row-tools {
+    height: 36px;
+    background: #1e1e2e;          /* Slightly darker to read as secondary */
+    border-top: 1px solid #2a2a40;
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;        /* Firefox: hide the scrollbar track */
+}
+
+.toolbar-row-tools::-webkit-scrollbar {
+    display: none;                /* Chrome/Safari: hide the scrollbar track */
 }
 
 #main-content {
     display: flex;
     flex: 1;
     overflow: hidden;
-    height: calc(100vh - 42px - 24px); /* toolbar + status bar */
+    /* 42px primary row + 36px tools row + 24px status bar */
+    height: calc(100vh - 78px - 24px);
 }
 
 #status-bar {
@@ -361,6 +396,21 @@ html, body {
     flex-wrap: wrap;
 }
 #panel-left .panel-tab {
+    flex: 0 0 50%;
+    padding: 6px 4px;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+/* Right panel tabs — "Info" is always present; plugin tabs (EC Brief, Graph,
+ * etc.) are injected at runtime by PluginLoader.register().  Same wrap
+ * treatment as the left panel: 2 per row so plugin tabs never overflow
+ * the 200px panel width. */
+#panel-properties .panel-tabs {
+    flex-wrap: wrap;
+}
+#panel-properties .panel-tab {
     flex: 0 0 50%;
     padding: 6px 4px;
     font-size: 10px;
@@ -2360,4 +2410,520 @@ html, body {
     gap: 3px;
     font-size: 9px;
     color: #8888a0;
+}
+
+/* =============================================================================
+ * TOOL CHEST PANEL — Tools tab (Stamps, Saved Presets, Sequences)
+ *
+ * Three functional sections rendered inside #tab-tools (left panel Tools tab):
+ *   My Tools  — saved tool presets as clickable cards
+ *   Stamps    — text stamps (APPROVED, REJECTED, …) for single-click placement
+ *   Sequences — named auto-incrementing circle+number badge counters
+ *
+ * Design: compact rows/cards that fit the 200px panel width. Color accents and
+ * hover states match the overall dark engineering theme.
+ * ============================================================================= */
+
+/* =========================================================================
+ * SECTION HEADER + ADD BUTTON — shared by all three sub-sections
+ * ========================================================================= */
+
+/* Sub-section header row: [label] [+ add button] */
+.tools-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 4px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #6868a0;
+    border-bottom: 1px solid #2a2a3d;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+
+/* Small "+" button in section header — opens the create modal */
+.tools-add-btn {
+    background: transparent;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #8888a0;
+    font-size: 13px;
+    line-height: 1;
+    padding: 1px 6px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    flex-shrink: 0;
+}
+
+.tools-add-btn:hover {
+    background: #2a2a3d;
+    color: #c0c0d0;
+    border-color: #4a4a60;
+}
+
+/* =========================================================================
+ * STAMPS
+ * ========================================================================= */
+
+/* Each stamp row: [activation button] [optional delete] */
+.stamp-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+}
+
+/* Wide activation button — spans all available width (minus delete btn) */
+.stamp-btn {
+    flex: 1;
+    background: #1a1a2d;
+    border: 1px solid #2a2a3d;
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s, border-color 0.12s;
+}
+
+.stamp-btn:hover {
+    background: #252540;
+    border-color: #3a3a55;
+}
+
+/* Stamp label text — color set inline per stamp (semantic color-coding) */
+.stamp-preview {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    font-family: 'Arial Black', Arial, sans-serif;
+}
+
+/* Delete button for custom stamps — appears on row hover only */
+.stamp-delete-btn {
+    background: none;
+    border: none;
+    color: #8888a0;
+    font-size: 14px;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.1s, color 0.1s;
+}
+
+.stamp-row:hover .stamp-delete-btn {
+    opacity: 1;
+}
+
+.stamp-delete-btn:hover {
+    color: #ff4444;
+}
+
+/* =========================================================================
+ * TOOL PRESETS (My Tools section)
+ * ========================================================================= */
+
+/* Preset card: [color swatch] [name] [delete] — all on one line */
+.preset-card {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #1e1e2a;
+    transition: background 0.1s;
+}
+
+.preset-card:hover {
+    background: #2a2a3d;
+}
+
+/* Colored dot — background set inline to the saved stroke color */
+.preset-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Preset name — takes remaining space, ellipsis for long names */
+.preset-name {
+    flex: 1;
+    font-size: 12px;
+    color: #c0c0d0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Delete button — only visible on hover to reduce visual clutter */
+.preset-delete {
+    background: none;
+    border: none;
+    color: #8888a0;
+    font-size: 14px;
+    line-height: 1;
+    padding: 1px 3px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s, color 0.1s;
+    flex-shrink: 0;
+}
+
+.preset-card:hover .preset-delete {
+    opacity: 1;
+}
+
+.preset-delete:hover {
+    color: #ff4444;
+}
+
+/* =========================================================================
+ * SEQUENCES
+ * ========================================================================= */
+
+/* Sequence row: [badge showing next N] [name] [action buttons] */
+.seq-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    border-bottom: 1px solid #1e1e2a;
+}
+
+/* Filled circle badge — background color set inline per sequence.
+ * Min-width + padding handle long format strings like "FS-12". */
+.seq-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    border-radius: 11px;     /* pill when text is longer than it is wide */
+    font-size: 10px;
+    font-weight: 700;
+    color: #ffffff;
+    flex-shrink: 0;
+    padding: 0 4px;
+}
+
+/* Sequence name — takes remaining space */
+.seq-name {
+    flex: 1;
+    font-size: 12px;
+    color: #c0c0d0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Container for Place / Reset / Delete action buttons */
+.seq-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+/* Place, Reset, Delete buttons — small compact style inside sequence rows */
+.seq-place-btn,
+.seq-reset-btn,
+.seq-delete-btn {
+    background: none;
+    border: 1px solid #2a2a3d;
+    border-radius: 3px;
+    color: #8888a0;
+    font-size: 11px;
+    padding: 2px 5px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    white-space: nowrap;
+}
+
+/* Place → accent blue (tool activation) */
+.seq-place-btn:hover {
+    background: #2a3a55;
+    border-color: #4a9eff;
+    color: #4a9eff;
+}
+
+/* Reset → neutral (non-destructive action) */
+.seq-reset-btn:hover {
+    background: #2a2a3d;
+    color: #c0c0d0;
+}
+
+/* Delete → red (destructive action) */
+.seq-delete-btn:hover {
+    background: #3a1a1a;
+    border-color: #cc3333;
+    color: #ff4444;
+}
+
+/* =========================================================================
+ * PRESET SAVE — CONTEXT MENU (right-click on any toolbar button)
+ *
+ * Shares the ctx-menu-appear animation and position:fixed/z-index pattern
+ * from the layer assignment context menu (#layer-context-menu).
+ * ========================================================================= */
+
+/* Floating menu card — same visual language as the layer context menu */
+.context-menu {
+    position: fixed;
+    z-index: 9000;
+    min-width: 180px;
+    background: #2a2a3d;
+    border: 1px solid #3a3a50;
+    border-radius: 6px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+    padding: 8px;
+    font-size: 13px;
+    color: #c0c0cc;
+    user-select: none;
+    animation: ctx-menu-appear 0.08s ease-out;
+}
+
+/* Small uppercase header label inside the menu */
+.context-menu-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8888a0;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Inline text input for naming the preset */
+.context-menu-input {
+    width: 100%;
+    background: #1a1a2d;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #e0e0f0;
+    font-size: 12px;
+    padding: 4px 7px;
+    outline: none;
+    margin-bottom: 6px;
+    box-sizing: border-box;
+}
+
+.context-menu-input:focus {
+    border-color: #5a5aaa;
+}
+
+/* Save Preset primary action button inside the context menu */
+.context-menu-action {
+    width: 100%;
+    background: #3a3aaa;
+    border-color: #5a5acc;
+    color: #ffffff;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.context-menu-action:hover {
+    background: #4a4abb;
+}
+
+/* =========================================================================
+ * TYPOGRAPHY CONTROLS (Properties panel — IText / Textbox objects only)
+ *
+ * Hidden by default; shown by properties.js when a text object is selected.
+ * ========================================================================= */
+
+/* Row of Bold / Italic toggle buttons side by side */
+.prop-toggle-row {
+    display: flex;
+    gap: 4px;
+}
+
+/* Individual toggle button (B / I) — fills half the row width each */
+.prop-toggle-btn {
+    flex: 1;
+    background: #1e1e2e;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #8888a0;
+    font-size: 13px;
+    padding: 4px 0;
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.prop-toggle-btn:hover {
+    background: #2a2a3d;
+    color: #c0c0d0;
+    border-color: #4a4a60;
+}
+
+/* Active state — matches other active-tool accent colors in the app */
+.prop-toggle-btn.active {
+    background: #2a3a5c;
+    border-color: #4a7fc1;
+    color: #90b8f0;
+}
+
+/* Font size number input — overrides default number input styles */
+#prop-font-size {
+    width: 100%;
+    background: #1e1e2e;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    color: #e0e0e8;
+    padding: 5px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    box-sizing: border-box;
+}
+
+#prop-font-size:focus {
+    border-color: #4a9eff;
+}
+
+/* =========================================================================
+ * HEALTH MONITOR PLUGIN
+ *
+ * Status-bar dot, health check result cards, and streaming test output box.
+ * All colors follow the app's dark-UI palette (sidebar bg #1a1a2e, text #e0e0e8).
+ * ========================================================================= */
+
+/* --- Status bar dot ---------------------------------------------------- */
+
+/* Hidden until first check completes; revealed by health-monitor.js */
+.sb-health-dot {
+    display: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--health-dot-color, #888);
+    cursor: pointer;
+    transition: background 0.3s;
+    margin: 0 4px;
+    flex-shrink: 0;
+    align-self: center;
+}
+
+/* --- Health panel header ----------------------------------------------- */
+
+.health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0 4px;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.health-status-text {
+    font-weight: 600;
+    font-size: 12px;
+}
+
+/* Status-specific text colors mirror the dot colors */
+.health-status-healthy   { color: #4caf50; }
+.health-status-degraded  { color: #ff9800; }
+.health-status-unhealthy { color: #f44336; }
+
+.health-uptime {
+    font-size: 11px;
+    color: #888;
+}
+
+/* --- Run Checks button ------------------------------------------------- */
+
+.health-run-btn {
+    width: 100%;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+/* --- Check result cards ------------------------------------------------- */
+
+.health-check-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.health-check-ok     { background: #1b3a1e; color: #81c784; }
+.health-check-warn   { background: #3a2e0f; color: #ffb74d; }
+.health-check-fail   { background: #3a0f0f; color: #e57373; }
+.health-check-unavail { background: #2a2a2a; color: #9e9e9e; }
+
+.health-check-icon {
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.health-check-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.health-check-detail {
+    font-size: 11px;
+    opacity: 0.8;
+}
+
+/* --- Developer section separator --------------------------------------- */
+
+.health-divider {
+    border: none;
+    border-top: 1px solid #2a2a3d;
+    margin: 10px 0 8px;
+}
+
+.health-dev-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.health-dev-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #666;
+}
+
+/* --- Run Full Test Suite button ---------------------------------------- */
+
+.health-suite-btn {
+    width: 100%;
+    font-size: 12px;
+}
+
+/* --- Streaming test output pre box ------------------------------------- */
+
+/* Dark terminal box; receives streamed stdout from `node run_tests.mjs` */
+#health-test-output {
+    max-height: 300px;
+    overflow-y: auto;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin-top: 4px;
+    /* Hidden until the user clicks Run Full Test Suite */
+    min-height: 0;
 }

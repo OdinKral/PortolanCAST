@@ -32,10 +32,14 @@ From WSL:
 
 ```bash
 cd /mnt/c/Users/User1/ClaudeProjects/PortolanCAST
-venv/bin/python -c "import uvicorn, os; os.chdir('/mnt/c/Users/User1/ClaudeProjects/PortolanCAST'); uvicorn.run('main:app', host='127.0.0.1', port=8000)"
+venv/bin/python -c "import uvicorn, os; os.chdir('/mnt/c/Users/User1/ClaudeProjects/PortolanCAST'); uvicorn.run('main:app', host='0.0.0.0', port=8000)"
 ```
 
-Then open **http://127.0.0.1:8000** in your browser.
+Then open **http://172.22.35.128:8000** in your browser (Windows Firefox).
+
+> **WSL2 networking note:** Bind to `0.0.0.0` (not `127.0.0.1`) so Windows can reach it.
+> Use the WSL IP `172.22.35.128` if `localhost:8000` doesn't connect.
+> If the old process is still running: `kill $(ss -tlnp 'sport = :8000' | awk 'NR>1{gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}')`
 
 All data is stored locally in `data/portolancast.db`. Nothing leaves your machine.
 

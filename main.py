@@ -26,10 +26,12 @@ Usage:
     uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 """
 
+import asyncio
 import io
 import json as _json_top
 import os
 import shutil
+import time
 import uuid
 import zipfile
 from datetime import datetime
@@ -38,7 +40,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 
 from db import Database
 from pdf_engine import PDFEngine
@@ -108,6 +110,9 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 db = Database()
 pdf_engine = PDFEngine()
 
+# Tracks server start time; exposed by GET /api/health for uptime reporting
+_app_start_time: float = time.time()
+
 
 # =============================================================================
 # STARTUP / SHUTDOWN
@@ -119,6 +124,113 @@ async def startup():
     PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     db.init()
+
+
+# =============================================================================
+# HEALTH + DEV ENDPOINTS
+# =============================================================================
+
+@app.get('/api/health')
+async def health_check():
+    """
+    Fast self-diagnostic: DB, PDF engine, disk space, filesystem write, AI endpoint.
+
+    Used by the HealthMonitor plugin (right-panel "Health" tab) and the status-bar
+    dot indicator. Intentionally avoids touching private internals — uses only the
+    public Database API so the check mirrors real usage.
+
+    Returns:
+        JSON: { status, timestamp, uptime_seconds, checks }
+        where status is 'healthy' | 'degraded' | 'unhealthy'.
+    """
+    checks = {}
+    overall = 'healthy'
+
+    # 1. Database — use public API to exercise the same path as real requests
+    t0 = time.time()
+    try:
+        db.get_all_documents()
+        ms = round((time.time() - t0) * 1000, 1)
+        checks['database'] = {'status': 'ok', 'response_time_ms': ms}
+    except Exception as e:
+        checks['database'] = {'status': 'fail', 'detail': str(e)}
+        overall = 'unhealthy'
+
+    # 2. PDF engine — confirm PyMuPDF is importable and report version
+    try:
+        import fitz
+        checks['pdf_engine'] = {'status': 'ok', 'detail': f'PyMuPDF {fitz.version[0]}'}
+    except Exception as e:
+        checks['pdf_engine'] = {'status': 'fail', 'detail': str(e)}
+        overall = 'unhealthy'
+
+    # 3. Disk space — warn at <1 GB free (large PDFs need headroom)
+    try:
+        usage = shutil.disk_usage(PROJECTS_DIR)
+        free_gb = round(usage.free / (1024 ** 3), 1)
+        status = 'warn' if free_gb < 1.0 else 'ok'
+        checks['disk_space'] = {'status': status, 'free_gb': free_gb}
+        if status == 'warn' and overall == 'healthy':
+            overall = 'degraded'
+    except Exception as e:
+        checks['disk_space'] = {'status': 'fail', 'detail': str(e)}
+
+    # 4. Filesystem write test — confirm data directory is writable
+    try:
+        test_path = TEMP_DIR / f'health_{uuid.uuid4().hex[:8]}.tmp'
+        test_path.write_text('ok')
+        test_path.unlink()
+        checks['filesystem'] = {'status': 'ok'}
+    except Exception as e:
+        checks['filesystem'] = {'status': 'fail', 'detail': str(e)}
+        overall = 'unhealthy'
+
+    # 5. AI endpoint — ClaudeProxy is optional; offline = degraded, not unhealthy
+    try:
+        import requests as req
+        r = req.get('http://127.0.0.1:11435/health', timeout=2)
+        checks['ai_endpoint'] = {'status': 'ok', 'detail': f'HTTP {r.status_code}'}
+    except Exception:
+        checks['ai_endpoint'] = {'status': 'unavailable', 'detail': 'ClaudeProxy offline'}
+        if overall == 'healthy':
+            overall = 'degraded'
+
+    return {
+        'status': overall,
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'uptime_seconds': round(time.time() - _app_start_time),
+        'checks': checks,
+    }
+
+
+@app.post('/api/dev/run-tests')
+async def run_dev_tests():
+    """
+    DEV ONLY: Spawn the Playwright test suite and stream stdout line-by-line.
+
+    Runs `node run_tests.mjs` in the project root as an async subprocess.
+    Each line of output is yielded immediately via StreamingResponse so the
+    browser panel updates in real time — no need to wait for all 33 suites.
+
+    Security note:
+        - No user input accepted; command is hardcoded.
+        - Subprocess inherits the server's PATH (node must be on PATH).
+        - Intended for local dev use only (same trust level as the rest of the app).
+    """
+    project_root = Path(__file__).parent
+
+    async def _stream():
+        proc = await asyncio.create_subprocess_exec(
+            'node', 'run_tests.mjs',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(project_root),
+        )
+        async for line in proc.stdout:
+            yield line.decode('utf-8', errors='replace')
+        await proc.wait()
+
+    return StreamingResponse(_stream(), media_type='text/plain; charset=utf-8')
 
 
 # =============================================================================
@@ -2175,9 +2287,15 @@ async def export_obsidian(doc_id: int, request: Request):
                         return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
                     return s if s else '""'
 
+                # Build YAML tag list.  Each tag is scoped under the document
+                # stem so Obsidian's tag pane shows a hierarchy:
+                #   #example_mechanical2/valve
+                #   #example_mechanical2/pressure
+                # The trailing \n is required on the empty-list branch so that
+                # the next YAML key ("document:") starts on its own line.
                 tag_list = (
-                    "\n" + "".join(f"  - {t}\n" for t in tags)
-                    if tags else " []"
+                    "\n" + "".join(f"  - {doc_stem}/{t}\n" for t in tags)
+                    if tags else " []\n"
                 )
 
                 frontmatter = (

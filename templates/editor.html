@@ -7,138 +7,157 @@
 <!-- TOP TOOLBAR                                                             -->
 <!-- ====================================================================== -->
 <div id="toolbar">
-    <div class="toolbar-group toolbar-brand">
-        <span class="brand-name">PortolanCAST</span>
-    </div>
 
-    <div class="toolbar-group toolbar-file">
-        <button id="btn-new" class="toolbar-btn" title="New blank document">
-            <span class="icon">&#128196;</span> New
-        </button>
-        <button id="btn-open" class="toolbar-btn" title="Open PDF">
-            <span class="icon">&#128194;</span> Open
-        </button>
-        <span id="filename-display" class="filename-display">No file open</span>
-    </div>
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         PRIMARY ROW — always visible regardless of active mode tab.
+         Contains: brand, file ops, mode-tab selectors, settings, intent
+         indicator, export buttons, and zoom controls.
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="toolbar-row toolbar-row-primary">
 
-    <!-- Mode tabs: Navigate | Markup | Measure
-         Tab buttons sit inline in the toolbar bar — no second row.
-         Clicking a tab shows its tool panel and hides the others. -->
-    <div class="toolbar-group toolbar-tabs">
-        <button class="toolbar-tab active" data-tab="navigate">Navigate</button>
-        <button class="toolbar-tab" data-tab="markup">Markup</button>
-        <button class="toolbar-tab" data-tab="measure">Measure</button>
-    </div>
+        <div class="toolbar-group toolbar-brand">
+            <span class="brand-name">PortolanCAST</span>
+        </div>
 
-    <!-- Navigate tab: pan and select tools -->
-    <div class="tab-panel" data-tab="navigate">
-        <div class="toolbar-group">
-            <!-- Hand tool: pan mode — events pass through canvas so viewport scrolls -->
-            <button class="toolbar-btn tool-btn" data-tool="hand" title="Hand / Pan (G)">
-                <span class="icon">&#9995;</span> Hand
+        <div class="toolbar-group toolbar-file">
+            <button id="btn-new" class="toolbar-btn" title="New blank document">
+                <span class="icon">&#128196;</span> New
             </button>
-            <button class="toolbar-btn tool-btn" data-tool="select" title="Select (V)">
-                <span class="icon">&#8630;</span> Select
+            <button id="btn-open" class="toolbar-btn" title="Open PDF">
+                <span class="icon">&#128194;</span> Open
+            </button>
+            <span id="filename-display" class="filename-display">No file open</span>
+        </div>
+
+        <!-- Mode tabs — clicking switches the tool palette in the tools row below -->
+        <div class="toolbar-group toolbar-tabs">
+            <button class="toolbar-tab active" data-tab="navigate">Navigate</button>
+            <button class="toolbar-tab" data-tab="markup">Markup</button>
+            <button class="toolbar-tab" data-tab="measure">Measure</button>
+        </div>
+
+        <!-- Settings gear — always visible -->
+        <button id="btn-toolbar-settings" class="toolbar-btn toolbar-settings-btn" title="Toolbar settings — show/hide tools">&#9881;</button>
+
+        <!-- Intent mode indicator — shows active markup type (1–5 to change) -->
+        <div class="toolbar-group toolbar-intent">
+            <span id="intent-indicator" class="intent-indicator" title="Active markup type (1-5 to change)">
+                <span id="intent-dot" class="intent-dot"></span>
+                <span id="intent-label">Note</span>
+            </span>
+        </div>
+
+        <div class="toolbar-group toolbar-export">
+            <button id="btn-export" class="toolbar-btn"
+                    title="Export annotated PDF — markups become permanent (not editable after export)">
+                <span class="icon">&#128190;</span> Export PDF
+            </button>
+            <button id="btn-save-bundle" class="toolbar-btn"
+                    title="Save editable bundle (.portolan) — preserves markups and layers for re-editing on any PortolanCAST installation">
+                <span class="icon">&#128230;</span> Save Bundle
+            </button>
+            <button id="btn-export-obsidian" class="toolbar-btn"
+                    title="Export markup notes as Obsidian Markdown files (.zip) — one .md file per markup with YAML frontmatter and wikilinks">
+                <span class="icon">&#128196;</span> Obsidian
             </button>
         </div>
-    </div>
 
-    <!-- Markup tab: annotation drawing tools -->
-    <div class="tab-panel" data-tab="markup" style="display:none">
-        <div class="toolbar-group">
-            <button class="toolbar-btn tool-btn" data-tool="pen" title="Pen (P)">
-                <span class="icon">&#9999;&#65039;</span> Pen
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="rect" title="Rectangle (R)">
-                <span class="icon">&#9645;</span> Rect
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="ellipse" title="Ellipse (E)">
-                <span class="icon">&#9711;</span> Ellipse
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="line" title="Line (L)">
-                <span class="icon">&#9585;</span> Line
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="highlighter" title="Highlighter (H)">
-                <span class="icon">&#9998;</span> Highlight
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="text" title="Text (T)">
-                <span class="icon">T</span> Text
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="cloud" title="Cloud (C)">
-                <span class="icon">&#9729;</span> Cloud
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="callout" title="Callout (O)">
-                <span class="icon">&#128172;</span> Callout
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="polyline" title="Polyline (W)">
-                <span class="icon">&#9135;</span> Polyline
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="arrow" title="Arrow (Shift+A)">
-                <span class="icon">&#8594;</span> Arrow
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="sticky-note" title="Sticky Note (S)">
-                <span class="icon">&#128203;</span> Sticky Note
-            </button>
+        <!-- margin-left: auto on .toolbar-zoom pushes it flush to the right edge -->
+        <div class="toolbar-group toolbar-zoom">
+            <button id="btn-zoom-out" class="toolbar-btn" title="Zoom Out (-)">−</button>
+            <span id="zoom-display" class="zoom-display">100%</span>
+            <button id="btn-zoom-in" class="toolbar-btn" title="Zoom In (+)">+</button>
+            <button id="btn-zoom-fit" class="toolbar-btn" title="Fit to Width">Fit</button>
+            <button id="btn-rotate" class="toolbar-btn"
+                    title="Rotate page 90° clockwise (L1) — set before placing markups">&#8635;</button>
         </div>
-    </div>
 
-    <!-- Measure tab: takeoff and calibration tools -->
-    <div class="tab-panel" data-tab="measure" style="display:none">
-        <div class="toolbar-group">
-            <button class="toolbar-btn tool-btn" data-tool="distance" title="Distance Ruler (U)">
-                <span class="icon">&#128207;</span> Distance
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="area" title="Area Polygon (A)">
-                <span class="icon">&#9649;</span> Area
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="count" title="Count Markers (N)">
-                <span class="icon">&#35;</span> Count
-            </button>
-            <button class="toolbar-btn tool-btn" data-tool="calibrate" title="Calibrate Scale (K)">
-                <span class="icon">&#9878;</span> Calibrate
-            </button>
-            <!-- Node Edit: enter vertex/endpoint edit mode for selected measurement -->
-            <button class="toolbar-btn tool-btn" data-tool="node-edit" title="Node Edit — vertex/endpoint handles for selected measurement">
-                <span class="icon">&#11835;</span> Node Edit
-            </button>
+    </div><!-- /.toolbar-row-primary -->
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         TOOLS ROW — context-sensitive tool palette for the active mode tab.
+         Only one tab-panel is visible at a time (others display:none).
+         Scrolls horizontally if the tool set exceeds the viewport width.
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="toolbar-row toolbar-row-tools">
+
+        <!-- Navigate tab: pan and select tools -->
+        <div class="tab-panel" data-tab="navigate">
+            <div class="toolbar-group">
+                <!-- Hand tool: pan mode — events pass through canvas so viewport scrolls -->
+                <button class="toolbar-btn tool-btn" data-tool="hand" title="Hand / Pan (G)">
+                    <span class="icon">&#9995;</span> Hand
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="select" title="Select (V)">
+                    <span class="icon">&#8630;</span> Select
+                </button>
+            </div>
         </div>
-    </div>
 
-    <!-- Settings gear — always visible, not inside any tab panel -->
-    <button id="btn-toolbar-settings" class="toolbar-btn toolbar-settings-btn" title="Toolbar settings — show/hide tools">&#9881;</button>
+        <!-- Markup tab: annotation drawing tools -->
+        <div class="tab-panel" data-tab="markup" style="display:none">
+            <div class="toolbar-group">
+                <button class="toolbar-btn tool-btn" data-tool="pen" title="Pen (P)">
+                    <span class="icon">&#9999;&#65039;</span> Pen
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="rect" title="Rectangle (R)">
+                    <span class="icon">&#9645;</span> Rect
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="ellipse" title="Ellipse (E)">
+                    <span class="icon">&#9711;</span> Ellipse
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="line" title="Line (L)">
+                    <span class="icon">&#9585;</span> Line
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="highlighter" title="Highlighter (H)">
+                    <span class="icon">&#9998;</span> Highlight
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="text" title="Text (T)">
+                    <span class="icon">T</span> Text
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="cloud" title="Cloud (C)">
+                    <span class="icon">&#9729;</span> Cloud
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="callout" title="Callout (O)">
+                    <span class="icon">&#128172;</span> Callout
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="polyline" title="Polyline (W)">
+                    <span class="icon">&#9135;</span> Polyline
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="arrow" title="Arrow (Shift+A)">
+                    <span class="icon">&#8594;</span> Arrow
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="sticky-note" title="Sticky Note (S)">
+                    <span class="icon">&#128203;</span> Sticky Note
+                </button>
+            </div>
+        </div>
 
-    <!-- Intent mode indicator — shows active markup type -->
-    <div class="toolbar-group toolbar-intent">
-        <span id="intent-indicator" class="intent-indicator" title="Active markup type (1-5 to change)">
-            <span id="intent-dot" class="intent-dot"></span>
-            <span id="intent-label">Note</span>
-        </span>
-    </div>
+        <!-- Measure tab: takeoff and calibration tools -->
+        <div class="tab-panel" data-tab="measure" style="display:none">
+            <div class="toolbar-group">
+                <button class="toolbar-btn tool-btn" data-tool="distance" title="Distance Ruler (U)">
+                    <span class="icon">&#128207;</span> Distance
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="area" title="Area Polygon (A)">
+                    <span class="icon">&#9649;</span> Area
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="count" title="Count Markers (N)">
+                    <span class="icon">&#35;</span> Count
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="calibrate" title="Calibrate Scale (K)">
+                    <span class="icon">&#9878;</span> Calibrate
+                </button>
+                <!-- Node Edit: enter vertex/endpoint edit mode for selected measurement -->
+                <button class="toolbar-btn tool-btn" data-tool="node-edit" title="Node Edit — vertex/endpoint handles for selected measurement">
+                    <span class="icon">&#11835;</span> Node Edit
+                </button>
+            </div>
+        </div>
 
-    <div class="toolbar-group toolbar-export">
-        <button id="btn-export" class="toolbar-btn"
-                title="Export annotated PDF — markups become permanent (not editable after export)">
-            <span class="icon">&#128190;</span> Export PDF
-        </button>
-        <button id="btn-save-bundle" class="toolbar-btn"
-                title="Save editable bundle (.portolan) — preserves markups and layers for re-editing on any PortolanCAST installation">
-            <span class="icon">&#128230;</span> Save Bundle
-        </button>
-        <button id="btn-export-obsidian" class="toolbar-btn"
-                title="Export markup notes as Obsidian Markdown files (.zip) — one .md file per markup with YAML frontmatter and wikilinks">
-            <span class="icon">&#128196;</span> Obsidian
-        </button>
-    </div>
+    </div><!-- /.toolbar-row-tools -->
 
-    <div class="toolbar-group toolbar-zoom">
-        <button id="btn-zoom-out" class="toolbar-btn" title="Zoom Out (-)">−</button>
-        <span id="zoom-display" class="zoom-display">100%</span>
-        <button id="btn-zoom-in" class="toolbar-btn" title="Zoom In (+)">+</button>
-        <button id="btn-zoom-fit" class="toolbar-btn" title="Fit to Width">Fit</button>
-        <button id="btn-rotate" class="toolbar-btn"
-                title="Rotate page 90° clockwise (L1) — set before placing markups">&#8635;</button>
-    </div>
-</div>
+</div><!-- /#toolbar -->
 
 <!-- ====================================================================== -->
 <!-- MAIN CONTENT AREA                                                       -->
@@ -156,6 +175,7 @@
             <button class="panel-tab" data-panel="brief">Brief</button>
             <button class="panel-tab" data-panel="rfi">RFI</button>
             <button class="panel-tab" data-panel="text">Text</button>
+            <button class="panel-tab" data-panel="tools">Tools</button>
         </div>
 
         <!-- Pages tab content -->
@@ -374,6 +394,39 @@
                 <pre id="text-ocr-hint" class="text-ocr-hint" style="display:none;"></pre>
             </div>
         </div>
+
+        <!-- Tools tab: My Tools (presets) + Stamps + Sequences -->
+        <div id="tab-tools" class="tab-content">
+
+            <!-- MY TOOLS: saved tool configurations -->
+            <div class="prop-section-header tools-section-header">
+                My Tools
+            </div>
+            <div id="presets-list" class="presets-list">
+                <!-- Populated by ToolPresetsPanel._render() -->
+                <p class="muted-text" id="presets-empty">Right-click any tool button to save a preset</p>
+            </div>
+
+            <!-- STAMPS: single-click text stamps (predefined + custom) -->
+            <div class="prop-section-header tools-section-header">
+                Stamps
+                <button id="btn-new-stamp" class="tools-add-btn" title="Add a custom stamp text">+</button>
+            </div>
+            <div id="stamps-list" class="stamps-list">
+                <!-- Populated by StampManager._render() -->
+            </div>
+
+            <!-- SEQUENCES: auto-incrementing numbered placement badges -->
+            <div class="prop-section-header tools-section-header">
+                Sequences
+                <button id="btn-new-sequence" class="tools-add-btn" title="Create a new auto-incrementing number sequence">+</button>
+            </div>
+            <div id="sequences-list" class="sequences-list">
+                <!-- Populated by SequenceManager._render() -->
+                <p class="muted-text" id="sequences-empty">No sequences yet</p>
+            </div>
+
+        </div><!-- /#tab-tools -->
     </div>
 
     <!-- CENTER: PDF Canvas viewport -->
@@ -416,7 +469,7 @@
     <div id="panel-properties" class="side-panel">
         <!-- Tab bar — Properties always present; plugin tabs injected by PluginLoader.register() -->
         <div class="panel-tabs" id="right-panel-tabs">
-            <button class="panel-tab active" data-panel="properties">Properties</button>
+            <button class="panel-tab active" data-panel="properties">Info</button>
         </div>
 
         <!-- Properties tab — wraps existing content unchanged -->
@@ -495,6 +548,36 @@
                             + Attach Photo
                         </button>
                     </div>
+
+                    <!-- Typography — shown only for IText/Textbox objects (text tool, sticky note).
+                         Hidden by default; _showMarkupProps() shows it for text objects only. -->
+                    <div id="markup-typography" style="display: none;">
+                        <div class="prop-section-header">Typography</div>
+                        <div class="prop-field">
+                            <label for="prop-font-family">Font</label>
+                            <select id="prop-font-family">
+                                <option value="Arial, sans-serif">Arial</option>
+                                <option value="'Times New Roman', serif">Times New Roman</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="Verdana, sans-serif">Verdana</option>
+                                <option value="Impact, sans-serif">Impact</option>
+                            </select>
+                        </div>
+                        <div class="prop-field">
+                            <label for="prop-font-size">Size (px)</label>
+                            <input type="number" id="prop-font-size"
+                                   min="8" max="200" value="16" step="1">
+                        </div>
+                        <div class="prop-field">
+                            <label>Style</label>
+                            <div class="prop-toggle-row">
+                                <button id="prop-font-bold" class="prop-toggle-btn" title="Bold"><strong>B</strong></button>
+                                <button id="prop-font-italic" class="prop-toggle-btn" title="Italic"><em>I</em></button>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
                 <div class="prop-section-header">Appearance</div>
                 <div class="prop-field">
@@ -600,6 +683,7 @@
         <span class="status-count-sep">|</span>
         <span class="status-count-item count-open" title="Open markups">0 open</span>
     </span>
+    <span id="sb-health" class="sb-health-dot" title="System Health — click to open Health panel"></span>
     <span id="status-message"></span>
 </div>
 
@@ -748,6 +832,64 @@
         </div>
     </div>
 </div>
+<!-- ====================================================================== -->
+<!-- NEW SEQUENCE MODAL                                                      -->
+<!-- ====================================================================== -->
+<div id="modal-new-sequence" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-seq-title">
+    <div class="modal-overlay" id="modal-seq-overlay"></div>
+    <div class="modal-box">
+        <h2 id="modal-seq-title">New Sequence</h2>
+        <p class="modal-hint">Sequences place auto-incrementing number badges on the drawing. Each click advances the counter.</p>
+        <div class="modal-field">
+            <label for="seq-name">Name</label>
+            <input type="text" id="seq-name" placeholder="e.g. Fire Sprinklers" maxlength="50">
+        </div>
+        <div class="modal-field">
+            <label for="seq-start">Start number</label>
+            <input type="number" id="seq-start" value="1" min="1" max="9999">
+        </div>
+        <div class="modal-field">
+            <label for="seq-format">Format
+                <span class="modal-hint-inline"> — use {n} for the number</span>
+            </label>
+            <input type="text" id="seq-format" value="{n}" maxlength="20"
+                   placeholder="{n}  or  FS-{n}  or  Item {n}">
+        </div>
+        <div class="modal-field">
+            <label for="seq-color">Badge color</label>
+            <input type="color" id="seq-color" value="#4a9eff">
+        </div>
+        <div class="modal-buttons">
+            <button id="seq-cancel" class="toolbar-btn">Cancel</button>
+            <button id="seq-create" class="toolbar-btn modal-btn-primary">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- CUSTOM STAMP MODAL                                                      -->
+<!-- ====================================================================== -->
+<div id="modal-new-stamp" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-stamp-title">
+    <div class="modal-overlay" id="modal-stamp-overlay"></div>
+    <div class="modal-box">
+        <h2 id="modal-stamp-title">Custom Stamp</h2>
+        <div class="modal-field">
+            <label for="stamp-label">Stamp text</label>
+            <input type="text" id="stamp-label" placeholder="e.g. FIELD CHANGE" maxlength="40">
+        </div>
+        <div class="modal-field">
+            <label for="stamp-color">Color</label>
+            <input type="color" id="stamp-color" value="#cc44cc">
+        </div>
+        <div class="modal-buttons">
+            <button id="stamp-cancel" class="toolbar-btn">Cancel</button>
+            <button id="stamp-create" class="toolbar-btn modal-btn-primary">Add Stamp</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}

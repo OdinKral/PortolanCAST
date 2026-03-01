@@ -168,6 +168,12 @@ export class PropertiesPanel {
             photoFileInput: document.getElementById('photo-file-input'),
             // Tag display — shows parsed #tags from the note field as chips
             tagDisplay: document.getElementById('prop-markup-tags'),
+            // Typography section — shown only for IText / Textbox objects
+            typographySection: document.getElementById('markup-typography'),
+            fontFamily:   document.getElementById('prop-font-family'),
+            fontSize:     document.getElementById('prop-font-size'),
+            fontBold:     document.getElementById('prop-font-bold'),
+            fontItalic:   document.getElementById('prop-font-italic'),
         };
 
         this._bindInputHandlers();
@@ -244,6 +250,54 @@ export class PropertiesPanel {
             this._els.strokeWidthVal.textContent = width;
             this._selectedObject.set('strokeWidth', width);
             this.canvas.fabricCanvas.renderAll();
+            this._fireChange();
+        });
+
+        // ── Typography handlers (IText / Textbox only) ───────────────────────
+        // These are always bound but only visible when a text object is selected.
+        // Changes persist to localStorage so the next text placement inherits them.
+
+        // Font family — dropdown change applies immediately to the selected text
+        this._els.fontFamily?.addEventListener('change', (e) => {
+            if (!this._selectedObject) return;
+            this._selectedObject.set('fontFamily', e.target.value);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
+            this._fireChange();
+        });
+
+        // Font size — clamped to safe range (8–200px); enforced on change not input
+        // so the user can type a full number without mid-digit clamping.
+        this._els.fontSize?.addEventListener('change', (e) => {
+            if (!this._selectedObject) return;
+            const sz = Math.max(8, Math.min(200, parseInt(e.target.value, 10) || 16));
+            this._els.fontSize.value = sz;  // write back the clamped value
+            this._selectedObject.set('fontSize', sz);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
+            this._fireChange();
+        });
+
+        // Bold toggle — flips between 'bold' and 'normal'; reflects state in CSS .active
+        this._els.fontBold?.addEventListener('click', () => {
+            if (!this._selectedObject) return;
+            const isBold = this._selectedObject.fontWeight === 'bold'
+                || this._selectedObject.fontWeight === '700';
+            this._selectedObject.set('fontWeight', isBold ? 'normal' : 'bold');
+            this._els.fontBold.classList.toggle('active', !isBold);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
+            this._fireChange();
+        });
+
+        // Italic toggle — flips between 'italic' and 'normal'; reflects state in .active
+        this._els.fontItalic?.addEventListener('click', () => {
+            if (!this._selectedObject) return;
+            const isItalic = this._selectedObject.fontStyle === 'italic';
+            this._selectedObject.set('fontStyle', isItalic ? 'normal' : 'italic');
+            this._els.fontItalic.classList.toggle('active', !isItalic);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
             this._fireChange();
         });
     }
@@ -473,6 +527,31 @@ export class PropertiesPanel {
         // Render tag chips derived from the current note (live feedback)
         this._renderTagChips(parseTags(obj.markupNote));
 
+        // Typography section — only shown for IText/Textbox; hidden for all shapes.
+        // Fabric.js 6 live objects report 'i-text'/'textbox' (lowercase); serialized
+        // JSON uses PascalCase 'IText'/'Textbox'. Guard for both.
+        const isTextObj = obj.type === 'i-text' || obj.type === 'textbox'
+            || obj.type === 'IText' || obj.type === 'Textbox';
+        if (this._els.typographySection) {
+            this._els.typographySection.style.display = isTextObj ? '' : 'none';
+        }
+        if (isTextObj) {
+            // Populate controls from the object's current state
+            if (this._els.fontFamily) {
+                this._els.fontFamily.value = obj.fontFamily || 'Arial, sans-serif';
+            }
+            if (this._els.fontSize) {
+                this._els.fontSize.value = obj.fontSize || 16;
+            }
+            if (this._els.fontBold) {
+                const isBold = obj.fontWeight === 'bold' || obj.fontWeight === '700';
+                this._els.fontBold.classList.toggle('active', isBold);
+            }
+            if (this._els.fontItalic) {
+                this._els.fontItalic.classList.toggle('active', obj.fontStyle === 'italic');
+            }
+        }
+
         // Show photo section and load photos for this markup
         if (this._els.photoSection) {
             this._els.photoSection.style.display = '';
@@ -492,6 +571,11 @@ export class PropertiesPanel {
 
         // Clear tag chips
         this._renderTagChips([]);
+
+        // Hide typography section — only relevant when a text object is selected
+        if (this._els.typographySection) {
+            this._els.typographySection.style.display = 'none';
+        }
 
         // Hide photo section and clear thumbnails
         if (this._els.photoSection) {
@@ -554,6 +638,31 @@ export class PropertiesPanel {
      */
     _fireChange() {
         if (this.onPropertyChange) this.onPropertyChange();
+    }
+
+    /**
+     * Persist current text object's typography properties to localStorage.
+     *
+     * toolbar.js reads 'portolancast-text-prefs' when placing new IText objects
+     * so newly created text inherits the last-used font settings. Silently
+     * ignores storage quota errors — prefs are a convenience, not critical data.
+     *
+     * Called by all four typography event handlers (fontFamily, fontSize,
+     * fontBold, fontItalic) after each change.
+     */
+    _saveTextPrefs() {
+        if (!this._selectedObject) return;
+        const prefs = {
+            fontFamily: this._selectedObject.fontFamily || 'Arial, sans-serif',
+            fontSize:   this._selectedObject.fontSize   || 16,
+            fontWeight: this._selectedObject.fontWeight || 'normal',
+            fontStyle:  this._selectedObject.fontStyle  || 'normal',
+        };
+        try {
+            localStorage.setItem('portolancast-text-prefs', JSON.stringify(prefs));
+        } catch {
+            // Silently absorb QuotaExceededError — non-critical preference storage
+        }
     }
 
     /**
