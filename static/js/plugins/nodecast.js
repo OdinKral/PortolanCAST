@@ -44,8 +44,15 @@
  *   - No remote network calls; all data comes from local Fabric canvas
  *   - Tag parsing uses a safe regex — no eval, no dynamic code execution
  *
+ * Phase 2 additions (0.2.0):
+ *   - All Pages toggle: cross-page graph via canvas.getAllPageMarkups() JSON
+ *   - Cross-page click navigation: goToPage(page) + setTimeout + find by markupId
+ *   - Toggle button in header with active state CSS class
+ *   - Status bar shows page count in all-pages mode
+ *   - Empty-state message adapts to current mode
+ *
  * Author: PortolanCAST
- * Version: 0.1.0  (Phase 1 nodeCAST experiment)
+ * Version: 0.2.0
  * Date: 2026-02-28
  */
 
@@ -108,14 +115,20 @@ export const NodeCastPlugin = {
     _app:       null,
 
     // Graph data built by _buildGraph() — reset on each call
-    _nodes:   [],   // [{ id, kind, type?, label, note?, fabricObj?, x, y, vx, vy }]
+    _nodes:   [],   // [{ id, kind, type?, label, note?, fabricObj?, page, x, y, vx, vy }]
     _edges:   [],   // [{ source: id, target: id }]
     _nodeMap: null, // Map<id → node> — used by simulation + SVG rendering
 
     // DOM element references (set in _renderShell)
-    _svg:      null,    // <svg> element
-    _emptyEl:  null,    // "No markups" div
-    _statusEl: null,    // status text span
+    _svg:        null,    // <svg> element
+    _emptyEl:    null,    // "No markups" div
+    _statusEl:   null,    // status text span
+    _pagesBtnEl: null,    // All Pages toggle button
+
+    // Graph mode — false = current page only, true = all document pages
+    // All-pages mode reads serialized JSON from canvas.getAllPageMarkups() so
+    // cross-page markup nodes can be shown even if their page isn't loaded.
+    _allPages: false,
 
     // =========================================================================
     // LIFECYCLE HOOKS (called by PluginLoader.emit)
@@ -186,12 +199,14 @@ export const NodeCastPlugin = {
 
     /**
      * Build the static panel shell.
-     * Creates: header (status + refresh button) + SVG viewport + empty-state div.
+     * Creates: header (status + refresh button + All Pages toggle) + SVG viewport
+     * + empty-state div + legend.
      * Called once in init(); subsequent updates mutate inner SVG contents only.
      *
      * HTML structure injected into container:
-     *   .nc-header    — flex row with status text + Refresh button
+     *   .nc-header    — flex row: status text | All Pages toggle | Refresh button
      *   .nc-graph-area — contains the <svg> and the empty-state div
+     *   .nc-legend     — type color key
      */
     _renderShell() {
         if (!this._container) return;
@@ -201,6 +216,10 @@ export const NodeCastPlugin = {
         this._container.innerHTML = `
             <div class="nc-header">
                 <span class="nc-status" id="nc-status">No document loaded.</span>
+                <button class="toolbar-btn nc-pages-btn" id="nc-pages-btn"
+                        title="Toggle between current page and all document pages">
+                    This Page
+                </button>
                 <button class="toolbar-btn nc-refresh-btn" id="nc-refresh" title="Rebuild graph">↺</button>
             </div>
             <div class="nc-graph-area" id="nc-graph-area">
@@ -228,13 +247,25 @@ export const NodeCastPlugin = {
             </div>
         `;
 
-        this._svg      = this._container.querySelector('#nc-svg');
-        this._statusEl = this._container.querySelector('#nc-status');
-        this._emptyEl  = this._container.querySelector('#nc-empty');
+        this._svg        = this._container.querySelector('#nc-svg');
+        this._statusEl   = this._container.querySelector('#nc-status');
+        this._emptyEl    = this._container.querySelector('#nc-empty');
+        this._pagesBtnEl = this._container.querySelector('#nc-pages-btn');
 
+        // Refresh button — rebuilds graph from live canvas state
         const refreshBtn = this._container.querySelector('#nc-refresh');
         if (refreshBtn) {
             refreshBtn.addEventListener('click', () => this._buildGraph());
+        }
+
+        // All Pages toggle — switches between current-page and all-pages mode.
+        // Visual state (active class + label) is updated in _buildGraph() after
+        // the mode actually changes, so button label always reflects true state.
+        if (this._pagesBtnEl) {
+            this._pagesBtnEl.addEventListener('click', () => {
+                this._allPages = !this._allPages;
+                this._buildGraph();
+            });
         }
     },
 
@@ -243,53 +274,111 @@ export const NodeCastPlugin = {
     // =========================================================================
 
     /**
-     * Collect markup objects from the current Fabric canvas, extract their
-     * #tags from markupNote, and build the _nodes/_edges/_nodeMap for
-     * the force simulation.
+     * Collect markup objects, build _nodes/_edges/_nodeMap, run simulation,
+     * and render the SVG.
      *
-     * Skips objects without markupType (measurement companions, temp shapes, etc.).
+     * Operates in two modes controlled by this._allPages:
+     *
+     *   false (This Page): reads live Fabric canvas objects. Markup nodes hold
+     *     a fabricObj reference so clicking immediately selects the object.
+     *
+     *   true  (All Pages): calls canvas.getAllPageMarkups() which flushes the
+     *     current page and returns { pageNum: fabricJSON } for every page.
+     *     Markup nodes hold { markupId, page } instead of a fabricObj reference.
+     *     Click navigates via viewer.goToPage(page), then finds the object by
+     *     markupId after a short settle delay.
+     *
+     * Skips objects without markupType (measurement companions, temp shapes, etc.)
+     * in both modes.
+     *
      * Each unique #tag becomes a shared tag node — two markups with the same
-     * tag share one tag node and are thus connected through it.
+     * tag are connected through it (this is the core nodeCAST hypothesis).
      */
     _buildGraph() {
         const fc = this._app?.canvas?.fabricCanvas;
         if (!fc) return;
 
-        // Only markup objects participate — filter out measurement companions
-        // (area IText labels, etc.) and temp drawing objects.
-        const objs = fc.getObjects().filter(o => !!o.markupType);
+        // ── Update toggle button visual state ─────────────────────────────────
+
+        if (this._pagesBtnEl) {
+            // Active class provides visual feedback that all-pages mode is on.
+            // SECURITY: textContent — only static literals used here.
+            this._pagesBtnEl.textContent = this._allPages ? 'All Pages' : 'This Page';
+            this._pagesBtnEl.classList.toggle('nc-pages-btn--active', this._allPages);
+        }
+
+        // ── Collect raw markup descriptors ────────────────────────────────────
+        //
+        // Each descriptor is a plain object:
+        //   { markupId, markupType, markupNote, fabricObj? (live), page? (all-pages) }
+        //
+        // We normalise both modes into this common shape so the graph-building
+        // loop below doesn't need to branch again.
+
+        const descriptors = [];  // [{ markupId, markupType, markupNote, fabricObj?, page? }]
+
+        if (this._allPages) {
+            // All-pages mode: iterate over every page's serialized Fabric JSON.
+            // getAllPageMarkups() flushes the current page first so it's included.
+            const pageMap = this._app.canvas.getAllPageMarkups();  // { pageNum: fabricJSON }
+
+            for (const [pageNum, json] of Object.entries(pageMap)) {
+                const page = parseInt(pageNum, 10);
+                // json.objects is the Fabric serialization array
+                const rawObjs = (json && json.objects) ? json.objects : [];
+                for (const raw of rawObjs) {
+                    // Only markup objects participate — same filter as live canvas
+                    if (!raw.markupType) continue;
+                    descriptors.push({
+                        markupId:   raw.markupId   || `__mu_${Math.random().toString(36).slice(2)}`,
+                        markupType: raw.markupType,
+                        markupNote: raw.markupNote || '',
+                        fabricObj:  null,   // not available in serialized form
+                        page,
+                    });
+                }
+            }
+        } else {
+            // Current-page mode: read live Fabric canvas objects directly.
+            for (const obj of fc.getObjects()) {
+                if (!obj.markupType) continue;
+                descriptors.push({
+                    markupId:   obj.markupId || `__mu_${Math.random().toString(36).slice(2)}`,
+                    markupType: obj.markupType,
+                    markupNote: obj.markupNote || '',
+                    fabricObj:  obj,    // live reference — enables direct selection
+                    page:       null,   // not needed for current page
+                });
+            }
+        }
 
         // ── Build node + edge data ────────────────────────────────────────────
 
         const nodeMap = new Map();  // id → node
         const edges   = [];
 
-        for (const obj of objs) {
-            // Use markupId UUID if available; fall back to generated ID.
-            // Generated IDs are stable within one _buildGraph() call but
-            // will differ across calls — click-to-select uses fabricObj ref,
-            // not the id, so this is acceptable.
-            const id   = obj.markupId || `__mu_${Math.random().toString(36).slice(2)}`;
-            const note = obj.markupNote || '';
-            const tags = this._parseTags(note);
+        for (const d of descriptors) {
+            const tags = this._parseTags(d.markupNote);
 
             // Markup node — starts near center with small random scatter
-            // so the simulation has different positions to work from
+            // so the simulation has different positions to work from.
             const mNode = {
-                id,
+                id:        d.markupId,
                 kind:      'markup',
-                type:      obj.markupType,
-                label:     obj.markupType,
-                note,
-                fabricObj: obj,
+                type:      d.markupType,
+                label:     d.markupType,
+                note:      d.markupNote,
+                fabricObj: d.fabricObj,  // null in all-pages mode
+                page:      d.page,       // null in current-page mode
                 x:  SVG_W / 2 + (Math.random() - 0.5) * 80,
                 y:  SVG_H / 2 + (Math.random() - 0.5) * 80,
                 vx: 0,
                 vy: 0,
             };
-            nodeMap.set(id, mNode);
+            nodeMap.set(d.markupId, mNode);
 
-            // Tag nodes — shared across all markups that use the same tag
+            // Tag nodes — shared across all markups that use the same tag.
+            // One tag node represents the same #tag across all pages.
             for (const tag of tags) {
                 if (!nodeMap.has(tag)) {
                     nodeMap.set(tag, {
@@ -302,7 +391,7 @@ export const NodeCastPlugin = {
                         vy: 0,
                     });
                 }
-                edges.push({ source: id, target: tag });
+                edges.push({ source: d.markupId, target: tag });
             }
         }
 
@@ -312,16 +401,28 @@ export const NodeCastPlugin = {
 
         // ── Update status bar ─────────────────────────────────────────────────
 
-        const markupCount = objs.length;
+        const markupCount = descriptors.length;
         const tagCount    = [...nodeMap.values()].filter(n => n.kind === 'tag').length;
+
         if (this._statusEl) {
             // SECURITY: textContent — counts are numbers, not user strings
-            this._statusEl.textContent =
+            let statusText =
                 `${markupCount} markup${markupCount !== 1 ? 's' : ''}, ` +
                 `${tagCount} tag${tagCount !== 1 ? 's' : ''}`;
+            // In all-pages mode, add a page count to clarify scope
+            if (this._allPages) {
+                const pageCount = Object.keys(this._app.canvas.getAllPageMarkups()).length;
+                statusText += `, ${pageCount} page${pageCount !== 1 ? 's' : ''}`;
+            }
+            this._statusEl.textContent = statusText;
         }
 
         // ── Handle empty state ────────────────────────────────────────────────
+
+        const emptyMsg = this._allPages
+            ? 'No markups in this document.'
+            : 'No markups on this page.';
+        if (this._emptyEl) this._emptyEl.textContent = emptyMsg;
 
         if (this._nodes.length === 0) {
             if (this._svg)     this._svg.style.display    = 'none';
@@ -579,18 +680,58 @@ export const NodeCastPlugin = {
 
     /**
      * Handle a click on a markup node in the SVG graph.
-     * Selects the corresponding Fabric object on the canvas, which also
-     * triggers the canvas selection:created event → onObjectSelected feedback loop.
+     *
+     * Two paths depending on whether the node has a live Fabric reference:
+     *
+     *   Current-page mode (fabricObj present):
+     *     Directly calls fc.setActiveObject(fabricObj) + fc.renderAll().
+     *     This also triggers canvas selection:created → onObjectSelected.
+     *
+     *   All-pages mode (fabricObj is null, page is set):
+     *     1. Navigate to node.page via viewer.goToPage(page).
+     *     2. Wait 500ms for the canvas to reload the page's markups.
+     *     3. Find the target Fabric object by markupId on the new canvas.
+     *     4. Select it. If not found (page has no canvas data yet), fail silently.
+     *
+     * The 500ms delay matches the canvas page-load settle time used in
+     * test_phase3a (cross-page navigation tests). The graph is not rebuilt
+     * here — the onPageChanged hook will fire and rebuild after navigation.
      *
      * Args:
-     *   node: The markup node object with a fabricObj reference.
+     *   node: The markup node object { kind, fabricObj?, markupId, page? }.
      */
     _onNodeClick(node) {
-        if (node.kind !== 'markup' || !node.fabricObj) return;
+        if (node.kind !== 'markup') return;
         const fc = this._app?.canvas?.fabricCanvas;
         if (!fc) return;
-        fc.setActiveObject(node.fabricObj);
-        fc.renderAll();
+
+        if (node.fabricObj) {
+            // Current-page mode: live reference — select directly.
+            fc.setActiveObject(node.fabricObj);
+            fc.renderAll();
+        } else if (node.page != null) {
+            // All-pages mode: navigate to the target page, then select by markupId.
+            // viewer.goToPage(page) triggers _onDocumentLoaded → canvas reload.
+            const viewer = this._app?.viewer;
+            if (!viewer) return;
+
+            viewer.goToPage(node.page);
+
+            // After page navigation, the canvas needs time to load markups.
+            // 500ms is conservative but reliable across typical document sizes.
+            setTimeout(() => {
+                const freshFc = this._app?.canvas?.fabricCanvas;
+                if (!freshFc) return;
+                // Find the target object by its markupId UUID on the newly-loaded page
+                const target = freshFc.getObjects().find(o => o.markupId === node.id);
+                if (target) {
+                    freshFc.setActiveObject(target);
+                    freshFc.renderAll();
+                }
+                // If not found, navigate still succeeded — user is on the right page.
+                // The graph will have rebuilt itself via onPageChanged by now.
+            }, 500);
+        }
     },
 
     /**

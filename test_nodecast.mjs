@@ -14,6 +14,9 @@
  *  10. onObjectDeselected → highlight cleared (stroke-width returns to 1.5).
  *  11. _parseTags extracts lowercase #tags from markupNote correctly.
  *  12. Graph rebuilt when the user navigates to another page (onPageChanged).
+ *  13. All Pages toggle button exists, switches label and adds active CSS class.
+ *  14. In All Pages mode, markups appear from serialized canvas data.
+ *  15. Toggling back to This Page restores default label, removes active class.
  *
  * Run via Windows Chrome:
  *   cmd.exe /c "cd C:\Users\User1\ClaudeProjects\PortolanCAST && node test_nodecast.mjs"
@@ -443,6 +446,102 @@ async function run() {
         );
         assert(nodesAfterPageChange === 2,
             `Graph shows 2 markup nodes after page-changed (got ${nodesAfterPageChange})`);
+
+        // ── Group 13: All Pages toggle button exists and works ────────────────
+        console.log('\n  -- Group 13: All Pages Toggle Button --');
+
+        // Button must have been injected into the panel header by _renderShell()
+        const pagesBtnExists = await page.evaluate(() =>
+            !!document.getElementById('nc-pages-btn')
+        );
+        assert(pagesBtnExists, '#nc-pages-btn toggle button exists in nodeCAST header');
+
+        // Default label is "This Page"
+        const defaultLabel = await page.evaluate(() =>
+            document.getElementById('nc-pages-btn')?.textContent?.trim() || ''
+        );
+        assert(defaultLabel === 'This Page',
+            `Default button label is "This Page" (got "${defaultLabel}")`);
+
+        // Default: no active class
+        const noActiveClass = await page.evaluate(() =>
+            !document.getElementById('nc-pages-btn')?.classList.contains('nc-pages-btn--active')
+        );
+        assert(noActiveClass, 'Default state has no --active class on toggle button');
+
+        // Click to switch to All Pages mode
+        await page.evaluate(() => document.getElementById('nc-pages-btn')?.click());
+        await page.waitForTimeout(300);
+
+        const allPagesLabel = await page.evaluate(() =>
+            document.getElementById('nc-pages-btn')?.textContent?.trim() || ''
+        );
+        assert(allPagesLabel === 'All Pages',
+            `After toggle, button label is "All Pages" (got "${allPagesLabel}")`);
+
+        const hasActiveClass = await page.evaluate(() =>
+            document.getElementById('nc-pages-btn')?.classList.contains('nc-pages-btn--active')
+        );
+        assert(hasActiveClass, 'All Pages mode adds --active class to toggle button');
+
+        // ── Group 14: All Pages mode shows markups from serialized data ────────
+        console.log('\n  -- Group 14: All Pages Mode Graph Data --');
+
+        // In all-pages mode, the graph should read from getAllPageMarkups()
+        // which includes the serialized markups we placed earlier (2 rects).
+        // On a single-page doc, the counts should match current-page mode.
+        const svgVisibleAllPages = await page.evaluate(() =>
+            document.getElementById('nc-svg')?.style.display !== 'none'
+        );
+        assert(svgVisibleAllPages, 'SVG visible in All Pages mode');
+
+        const markupNodesAllPages = await page.evaluate(() =>
+            document.querySelectorAll('#nc-svg circle[data-markup-id]').length
+        );
+        assert(markupNodesAllPages >= 2,
+            `All Pages mode shows >= 2 markup nodes (got ${markupNodesAllPages})`);
+
+        // Status bar should mention "page(s)" in all-pages mode
+        const statusAllPages = await page.evaluate(() =>
+            document.getElementById('nc-status')?.textContent?.trim() || ''
+        );
+        assert(statusAllPages.includes('page'),
+            `All Pages status includes "page" (got "${statusAllPages}")`);
+
+        // Plugin internal state reflects all-pages mode
+        const allPagesFlagSet = await page.evaluate(() =>
+            window.app.plugins.plugins.get('nodecast')?._allPages === true
+        );
+        assert(allPagesFlagSet, 'Plugin._allPages is true in all-pages mode');
+
+        // ── Group 15: Toggle back to This Page mode ────────────────────────────
+        console.log('\n  -- Group 15: Toggle Back to This Page Mode --');
+
+        await page.evaluate(() => document.getElementById('nc-pages-btn')?.click());
+        await page.waitForTimeout(300);
+
+        const restoredLabel = await page.evaluate(() =>
+            document.getElementById('nc-pages-btn')?.textContent?.trim() || ''
+        );
+        assert(restoredLabel === 'This Page',
+            `Label restored to "This Page" after toggle back (got "${restoredLabel}")`);
+
+        const activeClassGone = await page.evaluate(() =>
+            !document.getElementById('nc-pages-btn')?.classList.contains('nc-pages-btn--active')
+        );
+        assert(activeClassGone, '--active class removed after toggle back to This Page');
+
+        const allPagesFlagClear = await page.evaluate(() =>
+            window.app.plugins.plugins.get('nodecast')?._allPages === false
+        );
+        assert(allPagesFlagClear, 'Plugin._allPages is false after toggle back');
+
+        // Graph should still show the same 2 markup nodes on current page
+        const markupNodesRestored = await page.evaluate(() =>
+            document.querySelectorAll('#nc-svg circle[data-markup-id]').length
+        );
+        assert(markupNodesRestored === 2,
+            `This Page mode shows 2 markup nodes after toggle back (got ${markupNodesRestored})`);
 
     } finally {
         await browser.close();

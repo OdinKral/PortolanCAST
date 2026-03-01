@@ -258,6 +258,12 @@ export class Toolbar {
         if (btnSaveBundle) {
             btnSaveBundle.addEventListener('click', () => this._handleBundleSave());
         }
+
+        // Obsidian export button — export markup notes as Markdown .zip
+        const btnObsidian = document.getElementById('btn-export-obsidian');
+        if (btnObsidian) {
+            btnObsidian.addEventListener('click', () => this._handleObsidianExport());
+        }
     }
 
     // =========================================================================
@@ -2387,6 +2393,85 @@ export class Toolbar {
         } catch (err) {
             statusMsg.textContent = `Bundle save error: ${err.message}`;
             console.error('[Toolbar] Bundle save failed:', err);
+        }
+    }
+
+    /**
+     * Export all markup annotations as an Obsidian-compatible ZIP of Markdown files.
+     *
+     * Flow:
+     *   1. Flush current page to the pageMarkups map.
+     *   2. Collect all pages via getAllPageMarkups().
+     *   3. POST pages JSON to /api/documents/{id}/export-obsidian.
+     *   4. Trigger browser download of the returned ZIP.
+     *
+     * The export sends the live canvas state so unsaved markup changes are
+     * included in the download without requiring a manual save first.
+     *
+     * ZIP structure (generated server-side):
+     *   {document-stem}/page-{N}/{type}-{uuid}.md
+     *
+     * Each .md file has YAML frontmatter (markupId, type, status, tags, source URL)
+     * + the markup note text + Obsidian [[wikilinks]] for tags.
+     *
+     * The source URL deep-links back to PortolanCAST so the user can navigate
+     * from Obsidian → correct page → selected markup with one click.
+     */
+    async _handleObsidianExport() {
+        if (!this.viewer || !this.viewer.docId) {
+            alert('No document open to export.');
+            return;
+        }
+
+        const statusMsg = document.getElementById('status-message');
+        statusMsg.textContent = 'Generating Obsidian export...';
+
+        try {
+            // Flush current page into the pageMarkups map before reading all pages
+            if (this.canvas) {
+                this.canvas.onPageChanging(this.viewer.currentPage);
+            }
+
+            // Collect all pages (serialized Fabric JSON, integer keys)
+            const pages = this.canvas ? this.canvas.getAllPageMarkups() : {};
+
+            // POST the live canvas state to the server for export generation
+            const resp = await fetch(
+                `/api/documents/${this.viewer.docId}/export-obsidian`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pages }),
+                }
+            );
+
+            if (!resp.ok) {
+                // Server returns JSON errors; ZIP returns binary — only parse JSON on error
+                const err = await resp.json().catch(() => ({ detail: 'Export failed' }));
+                throw new Error(err.detail || 'Obsidian export failed');
+            }
+
+            const blob = await resp.blob();
+
+            // Extract filename from Content-Disposition header (fallback to generic name)
+            const cd = resp.headers.get('Content-Disposition') || '';
+            const match = cd.match(/filename="([^"]+)"/);
+            const filename = match ? match[1] : 'obsidian_export.zip';
+
+            // Trigger browser download — auto-revoke object URL after click
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+            statusMsg.textContent = `Obsidian export ready: ${filename}`;
+        } catch (err) {
+            statusMsg.textContent = `Obsidian export error: ${err.message}`;
+            console.error('[Toolbar] Obsidian export failed:', err);
         }
     }
 

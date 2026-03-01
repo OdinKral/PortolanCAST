@@ -82,6 +82,8 @@ const TEST_FILES = [
     'test_sticky_note.mjs',
     // nodeCAST Phase 1: force-directed markup graph plugin (tag-connected nodes, Graph tab)
     'test_nodecast.mjs',
+    // nodeCAST Phase 2 + Obsidian Export: All Pages toggle + Obsidian .zip exporter
+    'test_obsidian_export.mjs',
 ];
 
 // =============================================================================

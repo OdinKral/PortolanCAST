@@ -2318,8 +2318,15 @@ html, body {
     text-overflow: ellipsis;
 }
 
-/* Compact refresh button — same size as EC Brief's */
+/* Compact header buttons — same size as EC Brief's */
 .nc-refresh-btn { font-size: 11px !important; padding: 2px 8px !important; }
+.nc-pages-btn   { font-size: 11px !important; padding: 2px 8px !important; }
+/* Active state when All Pages mode is on — same accent as other active toolbar states */
+.nc-pages-btn--active {
+    background: #2a3a5c !important;
+    border-color: #4a7fc1 !important;
+    color: #90b8f0 !important;
+}
 
 /* SVG graph area — contains the <svg> and empty-state div */
 .nc-graph-area {

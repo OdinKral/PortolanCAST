@@ -2047,6 +2047,183 @@ async def review_brief(doc_id: int, request: Request):
 
 
 # =============================================================================
+# API ROUTES — OBSIDIAN EXPORT
+# =============================================================================
+
+@app.post("/api/documents/{doc_id}/export-obsidian")
+async def export_obsidian(doc_id: int, request: Request):
+    """
+    Export all markup annotations as an Obsidian-compatible ZIP of Markdown files.
+
+    Implements the one-way SyncAdapter described in the nodeCAST Phase 2 council
+    session. Each markup becomes one atomic Markdown note with YAML frontmatter
+    so the notes are immediately queryable via Obsidian Dataview.
+
+    Request body:
+        { "pages": { "0": {fabricJSON}, "1": {fabricJSON}, ... } }
+
+    The browser sends the live canvas state (same format as the markups save
+    endpoint) so the export always reflects the current session including any
+    unsaved changes.
+
+    ZIP structure:
+        {document_stem}/
+            page-{N}/
+                {type}-{uuid}.md   — one file per markup annotation
+
+    Each .md file YAML frontmatter fields:
+        markupId:   UUID string (stable key for future sync)
+        type:       markupType ('issue' | 'question' | 'change' | 'note' | 'approval')
+        status:     markupStatus ('open' | 'resolved')
+        tags:       YAML list of tag name strings (without # prefix)
+        document:   original PDF filename
+        page:       1-based page number
+        source:     deep-link URL back to the PortolanCAST canvas (markupId select)
+
+    After the frontmatter, the note body contains:
+        - The markupNote text (if present), then a blank line
+        - Obsidian wikilinks for each tag  ([[tagname]])
+
+    Security:
+        - Validates document exists before processing
+        - All user text written via yaml.safe_dump-style manual escaping
+          (no yaml module dependency needed — values are safe primitives)
+        - ZIP bytes returned in-memory — no temp files written to disk
+        - Content-Disposition filename derived from document stem (no path traversal)
+
+    Args:
+        doc_id: Document database ID.
+
+    Returns:
+        ZIP file as application/zip with Content-Disposition attachment.
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    body = await request.json()
+    pages = body.get("pages", {})
+    if not isinstance(pages, dict):
+        pages = {}
+
+    # Document stem used as the top-level folder inside the ZIP
+    # e.g. "Drawing_A1.pdf" → "Drawing_A1"
+    doc_stem = Path(doc["filename"]).stem
+
+    # Build an in-memory ZIP
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for page_key, fabric_json in pages.items():
+            if not isinstance(fabric_json, dict):
+                continue
+
+            try:
+                page_num_0 = int(page_key)   # 0-based page index
+            except (ValueError, TypeError):
+                continue
+
+            page_num_1 = page_num_0 + 1      # 1-based for human display
+
+            objects = fabric_json.get("objects", [])
+            if not isinstance(objects, list):
+                continue
+
+            for obj in objects:
+                if not isinstance(obj, dict):
+                    continue
+
+                # Only annotation markup objects — skip measurements + companions
+                markup_type = obj.get("markupType", "")
+                if not markup_type:
+                    continue
+                measurement_type = obj.get("measurementType", "")
+                if measurement_type in ("distance", "area", "count"):
+                    continue
+                # Area companion IText labels
+                obj_type = obj.get("type", "")
+                if measurement_type == "area" and obj_type in ("IText", "i-text"):
+                    continue
+
+                markup_id     = obj.get("markupId", "")
+                markup_status = obj.get("markupStatus", "open")
+                markup_note   = obj.get("markupNote", "") or ""
+                markup_author = obj.get("markupAuthor", "") or ""
+
+                tags = _parse_tags(markup_note)
+
+                # ── Build deep-link source URL ─────────────────────────────────
+                # The markupId UUID + page are enough to navigate back from Obsidian.
+                # Example: http://127.0.0.1:8000/edit/1?page=3&select=uuid
+                # This URL opens PortolanCAST, navigates to the page, and selects
+                # the markup — bidirectional navigation with no extra server changes.
+                source_url = (
+                    f"http://127.0.0.1:8000/edit/{doc_id}"
+                    f"?page={page_num_1}"
+                    + (f"&select={markup_id}" if markup_id else "")
+                )
+
+                # ── Build YAML frontmatter ─────────────────────────────────────
+                # Manual construction avoids a PyYAML dependency.
+                # Values are safe string primitives — no injection risk.
+                # Strings containing special YAML chars are quoted.
+
+                def yaml_str(s: str) -> str:
+                    """Quote a string value if it contains YAML special chars."""
+                    s = str(s)
+                    if any(c in s for c in (':', '#', '[', ']', '{', '}', ',', '|', '>', '"', "'")):
+                        # Use double-quote style; escape inner double quotes
+                        return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+                    return s if s else '""'
+
+                tag_list = (
+                    "\n" + "".join(f"  - {t}\n" for t in tags)
+                    if tags else " []"
+                )
+
+                frontmatter = (
+                    "---\n"
+                    f"markupId: {yaml_str(markup_id)}\n"
+                    f"type: {yaml_str(markup_type)}\n"
+                    f"status: {yaml_str(markup_status)}\n"
+                    f"tags:{tag_list}"
+                    f"document: {yaml_str(doc['filename'])}\n"
+                    f"page: {page_num_1}\n"
+                    f"author: {yaml_str(markup_author)}\n"
+                    f"source: {yaml_str(source_url)}\n"
+                    "---\n"
+                )
+
+                # ── Build note body ────────────────────────────────────────────
+                body_parts = []
+                if markup_note:
+                    body_parts.append(markup_note.strip())
+                if tags:
+                    wikilinks = "  ".join(f"[[{t}]]" for t in tags)
+                    body_parts.append(wikilinks)
+
+                note_body = "\n\n".join(body_parts) + "\n" if body_parts else "\n"
+
+                # ── ZIP path: {stem}/page-{N}/{type}-{uuid}.md ─────────────────
+                # Use a short suffix of the UUID if no ID exists (shouldn't happen
+                # in practice — all Fabric objects get a markupId via stampDefaults)
+                file_id = markup_id if markup_id else f"nouid-{obj_type}"
+                zip_path = f"{doc_stem}/page-{page_num_1}/{markup_type}-{file_id}.md"
+
+                zf.writestr(zip_path, frontmatter + note_body)
+
+    # Rewind buffer and return as a ZIP download
+    buf.seek(0)
+    safe_stem = doc_stem.replace(" ", "_")
+    filename  = f"{safe_stem}_obsidian.zip"
+
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# =============================================================================
 # TEXT / OCR EXTRACTION
 # =============================================================================
 
