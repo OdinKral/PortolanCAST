@@ -107,6 +107,57 @@ CREATE TABLE IF NOT EXISTS markup_photos (
 -- Index for fast photo lookups by markup (the most common access pattern)
 CREATE INDEX IF NOT EXISTS idx_markup_photos_markup_id
     ON markup_photos(document_id, markup_id);
+
+-- ==========================================================================
+-- STAGE 3: EQUIPMENT INTELLIGENCE
+-- ==========================================================================
+
+-- Global equipment entity registry.
+-- tag_number is the natural key (PRV-201, AHU-3) — UNIQUE constraint enables
+-- merge-on-conflict: INSERT raises IntegrityError, server returns 409 with
+-- the existing entity so the frontend can prompt "merge or create new?".
+CREATE TABLE IF NOT EXISTS entities (
+    id          TEXT PRIMARY KEY,           -- UUID hex (stable across tag renames)
+    tag_number  TEXT NOT NULL UNIQUE,       -- natural key: "PRV-201", "AHU-3"
+    equip_type  TEXT NOT NULL DEFAULT '',   -- "Pressure Valve", "Air Handler", etc.
+    model       TEXT NOT NULL DEFAULT '',   -- manufacturer model string
+    serial      TEXT NOT NULL DEFAULT '',   -- serial number (plate data)
+    location    TEXT NOT NULL DEFAULT '',   -- "Bldg-A / Floor-2 / HVAC-1"
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Timestamped maintenance and inspection log entries.
+-- Separate from markup notes (entity-level history, not observation-level).
+-- Entries are immutable once written — append-only to preserve audit trail.
+CREATE TABLE IF NOT EXISTS entity_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    note        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Join table: links a markup UUID → entity (cross-document).
+-- markup_id is the markupId UUID stamped on every Fabric object via stampDefaults().
+-- doc_id + page_number stored here so we can display navigation info without
+-- parsing the full Fabric JSON blob for every cross-doc query.
+CREATE TABLE IF NOT EXISTS markup_entities (
+    markup_id   TEXT NOT NULL,              -- UUID from Fabric obj.markupId
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    doc_id      INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    page_number INTEGER NOT NULL,
+    PRIMARY KEY (markup_id, entity_id)
+);
+
+-- Indexes for common access patterns
+CREATE INDEX IF NOT EXISTS idx_markup_entities_entity
+    ON markup_entities(entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_markup_entities_doc
+    ON markup_entities(doc_id, markup_id);
+
+CREATE INDEX IF NOT EXISTS idx_entity_log_entity
+    ON entity_log(entity_id, created_at DESC);
 """
 
 
@@ -543,6 +594,319 @@ class Database:
                 (document_id, photo_id)
             )
         return cursor.rowcount > 0
+
+    # =========================================================================
+    # ENTITY OPERATIONS (Stage 3 — Equipment Intelligence)
+    # =========================================================================
+
+    def create_entity(self, entity_id: str, tag_number: str,
+                      equip_type: str = '', model: str = '',
+                      serial: str = '', location: str = '') -> dict:
+        """
+        Create a new entity record.
+
+        Args:
+            entity_id:  Caller-generated UUID hex (stable identity across renames).
+            tag_number: Natural key — "PRV-201". UNIQUE constraint raises
+                        sqlite3.IntegrityError on collision; caller handles → 409.
+            equip_type: Equipment category (e.g., "Pressure Valve", "Air Handler").
+            model:      Manufacturer model string (e.g., "Watts 174A").
+            serial:     Nameplate serial number.
+            location:   Human-readable location string (e.g., "Bldg-A / MER / HVAC-1").
+
+        Returns:
+            The created entity as a dict.
+
+        Raises:
+            sqlite3.IntegrityError: If tag_number already exists (merge-on-conflict).
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO entities (id, tag_number, equip_type, model, serial, location)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (entity_id, tag_number, equip_type, model, serial, location)
+            )
+            row = conn.execute(
+                "SELECT * FROM entities WHERE id = ?", (entity_id,)
+            ).fetchone()
+            return dict(row)
+
+    def get_entity(self, entity_id: str) -> dict | None:
+        """
+        Return entity by UUID, or None if not found.
+
+        Args:
+            entity_id: UUID hex string of the entity.
+
+        Returns:
+            Entity dict or None.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM entities WHERE id = ?", (entity_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_entity_by_tag(self, tag_number: str) -> dict | None:
+        """
+        Look up an entity by its tag number (the natural key).
+
+        Used by the merge-on-conflict flow and OCR suggestion matching.
+        tag_number comparison is case-sensitive (tags are authoritative as stored).
+
+        Args:
+            tag_number: Equipment tag string (e.g., "PRV-201").
+
+        Returns:
+            Entity dict or None.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM entities WHERE tag_number = ?", (tag_number,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_all_entities(self, equip_type: str = None,
+                         location: str = None) -> list:
+        """
+        Return all entities, optionally filtered by equip_type or location prefix.
+
+        Ordered by tag_number ASC — matches how real equipment schedules are sorted.
+
+        Args:
+            equip_type: Exact match filter on equip_type (case-sensitive). None = no filter.
+            location:   Prefix match on location (LIKE 'prefix%'). None = no filter.
+
+        Returns:
+            List of entity dicts, sorted by tag_number.
+        """
+        with self._connect() as conn:
+            params = []
+            conditions = []
+
+            if equip_type is not None:
+                conditions.append("equip_type = ?")
+                params.append(equip_type)
+
+            if location is not None:
+                # Prefix match so "Bldg-A" also returns "Bldg-A / Floor-2 / HVAC-1"
+                conditions.append("location LIKE ?")
+                params.append(location + '%')
+
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            rows = conn.execute(
+                f"SELECT * FROM entities {where} ORDER BY tag_number ASC",
+                params
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_entity(self, entity_id: str, **fields) -> bool:
+        """
+        Update one or more entity fields dynamically.
+
+        Only keys present in **fields are updated; omitted fields are unchanged.
+        Always sets updated_at = datetime('now') to track modification time.
+
+        Allowed field names: tag_number, equip_type, model, serial, location.
+        Unknown keys are silently ignored — defensive against stale client data.
+
+        Args:
+            entity_id: UUID of the entity to update.
+            **fields:  Keyword arguments matching allowed column names.
+
+        Returns:
+            True if a row was updated, False if entity_id not found.
+        """
+        allowed = {'tag_number', 'equip_type', 'model', 'serial', 'location'}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+
+        set_clauses = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [entity_id]
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""UPDATE entities SET {set_clauses}, updated_at = datetime('now')
+                    WHERE id = ?""",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def delete_entity(self, entity_id: str) -> bool:
+        """
+        Delete entity, cascading to entity_log and markup_entities.
+
+        The ON DELETE CASCADE on entity_log and markup_entities ensures no
+        orphaned records remain after deletion.
+
+        Args:
+            entity_id: UUID of the entity to delete.
+
+        Returns:
+            True if a row was deleted, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM entities WHERE id = ?", (entity_id,)
+            )
+            return cursor.rowcount > 0
+
+    def add_entity_log(self, entity_id: str, note: str) -> int:
+        """
+        Append a maintenance/inspection log entry (append-only — entries are immutable).
+
+        Log entries preserve audit trail. They are never edited; new observations
+        are always new rows. This matches real-world maintenance log practice.
+
+        Args:
+            entity_id: UUID of the parent entity.
+            note:      Log entry text (e.g., "Replaced valve stem. Torqued 45 ft-lb.").
+
+        Returns:
+            The new log entry's integer id (for confirmation response).
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO entity_log (entity_id, note)
+                   VALUES (?, ?)""",
+                (entity_id, note)
+            )
+            return cursor.lastrowid
+
+    def get_entity_log(self, entity_id: str) -> list:
+        """
+        Return all log entries for an entity, ordered newest-first.
+
+        Newest-first matches how field engineers read logs — most recent
+        observation is always the most relevant.
+
+        Args:
+            entity_id: UUID of the entity.
+
+        Returns:
+            List of log entry dicts: [{ id, entity_id, note, created_at }, ...]
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT id, entity_id, note, created_at
+                   FROM entity_log
+                   WHERE entity_id = ?
+                   ORDER BY created_at DESC, id DESC""",
+                (entity_id,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def link_markup_entity(self, markup_id: str, entity_id: str,
+                           doc_id: int, page_number: int):
+        """
+        Link a markup UUID to an entity.
+
+        INSERT OR IGNORE — safe to call multiple times (idempotent).
+        If the same markup is re-linked to the same entity, nothing changes.
+
+        Args:
+            markup_id:   UUID from Fabric obj.markupId.
+            entity_id:   UUID of the entity to link to.
+            doc_id:      Parent document ID (stored for navigation queries).
+            page_number: Page the markup lives on (stored to avoid re-parsing Fabric blobs).
+        """
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO markup_entities
+                   (markup_id, entity_id, doc_id, page_number)
+                   VALUES (?, ?, ?, ?)""",
+                (markup_id, entity_id, doc_id, page_number)
+            )
+
+    def unlink_markup_entity(self, markup_id: str, entity_id: str) -> bool:
+        """
+        Remove a markup→entity link.
+
+        Args:
+            markup_id: UUID of the markup.
+            entity_id: UUID of the entity.
+
+        Returns:
+            True if the link existed and was removed, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """DELETE FROM markup_entities
+                   WHERE markup_id = ? AND entity_id = ?""",
+                (markup_id, entity_id)
+            )
+            return cursor.rowcount > 0
+
+    def get_entity_markups(self, entity_id: str) -> list:
+        """
+        Return all markups linked to an entity, across ALL documents.
+
+        Joins with the documents table to include doc filename for display —
+        avoids a second query per row in the entity modal.
+
+        This is the core cross-document query: one entity, many observations.
+
+        Args:
+            entity_id: UUID of the entity.
+
+        Returns:
+            List of dicts:
+            [{ markup_id, entity_id, doc_id, doc_name, page_number }, ...]
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT me.markup_id, me.entity_id, me.doc_id,
+                          d.filename AS doc_name, me.page_number
+                   FROM markup_entities me
+                   JOIN documents d ON d.id = me.doc_id
+                   WHERE me.entity_id = ?
+                   ORDER BY d.filename ASC, me.page_number ASC""",
+                (entity_id,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_markup_entity(self, markup_id: str) -> dict | None:
+        """
+        Return the entity linked to a specific markup UUID, or None.
+
+        Used by the properties panel on selection to check whether a markup
+        is already promoted to an entity — determines which of the 3 UI states to show.
+
+        Args:
+            markup_id: UUID of the markup (from Fabric obj.markupId).
+
+        Returns:
+            Entity dict or None.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """SELECT e.* FROM entities e
+                   JOIN markup_entities me ON me.entity_id = e.id
+                   WHERE me.markup_id = ?""",
+                (markup_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_entity_markup_count(self, entity_id: str) -> int:
+        """
+        Fast count of linked markups for an entity.
+
+        Used in the Equipment tab list rows to show "3 markups" without fetching
+        the full markup list for every entity in the panel.
+
+        Args:
+            entity_id: UUID of the entity.
+
+        Returns:
+            Integer count of linked markups.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM markup_entities WHERE entity_id = ?",
+                (entity_id,)
+            ).fetchone()
+            return row["cnt"] if row else 0
 
     # =========================================================================
     # GLOBAL SEARCH

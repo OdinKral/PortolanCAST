@@ -88,6 +88,9 @@ const TEST_FILES = [
     'test_toolchest.mjs',
     // Health Monitor: GET /api/health + Health panel UI + streaming dev test runner
     'test_health_monitor.mjs',
+    // Stage 3A — Equipment Intelligence Foundation: entity CRUD API, markup linking,
+    // properties panel entity section (3 states), data integrity
+    'test_stage3a.mjs',
 ];
 
 // =============================================================================

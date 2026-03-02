@@ -557,6 +557,11 @@ export class PropertiesPanel {
             this._els.photoSection.style.display = '';
             this._loadPhotos(obj.markupId);
         }
+
+        // Load entity section — checks if this markup is already linked to an entity.
+        // pageNumber comes from the canvas overlay's currentPage property.
+        const pageNumber = this.canvas?.currentPage ?? 0;
+        this._loadEntitySection(obj.markupId, this.docId, pageNumber);
     }
 
     /**
@@ -586,6 +591,12 @@ export class PropertiesPanel {
                 this._els.photoGrid.removeChild(this._els.photoGrid.firstChild);
             }
         }
+
+        // Hide entity section — reset to neutral state for next selection
+        const entitySection = document.getElementById('entity-section');
+        if (entitySection) entitySection.style.display = 'none';
+        this._entityMarkupId = null;
+        this._entityPageNumber = null;
 
         // Show doc info if a document is loaded
         if (this._els.docInfo) {
@@ -874,6 +885,268 @@ export class PropertiesPanel {
             this._loadPhotos(markupId);
         } catch (err) {
             console.error('[Properties] Photo delete failed:', err);
+        }
+    }
+
+    // =========================================================================
+    // ENTITY SECTION (Stage 3 — Equipment Intelligence)
+    // =========================================================================
+
+    /**
+     * Load and render the entity section for a selected markup.
+     *
+     * Checks whether this markup is already linked to an entity, then renders
+     * the appropriate state:
+     *   State 1 — unlinked: show tag input + Promote button
+     *   State 3 — linked:   show tag chip + View/Unlink buttons
+     *
+     * (State 2, the merge prompt, is triggered by _promoteMarkup() on 409.)
+     *
+     * Args:
+     *   markupId: The markupId UUID on the Fabric canvas object.
+     *   docId:    The current document ID.
+     *   pageNumber: Current 0-indexed page number (needed for the link API call).
+     */
+    async _loadEntitySection(markupId, docId, pageNumber) {
+        const section = document.getElementById('entity-section');
+        if (!section || !markupId || !docId) return;
+
+        section.style.display = '';
+
+        // Store context for event handlers — captured in closures below
+        this._entityMarkupId = markupId;
+        this._entityPageNumber = pageNumber;
+
+        try {
+            const resp = await fetch(
+                `/api/documents/${docId}/markup-entities/${encodeURIComponent(markupId)}`
+            );
+            if (!resp.ok) throw new Error(resp.statusText);
+            const data = await resp.json();
+
+            if (data.entity) {
+                this._renderEntityLinked(data.entity);
+            } else {
+                this._renderEntityUnlinked();
+            }
+        } catch (err) {
+            console.error('[Properties] Failed to load entity section:', err);
+            // On error show unlinked state — safer than hiding the section entirely
+            this._renderEntityUnlinked();
+        }
+    }
+
+    /**
+     * Render State 1: no entity linked.
+     * Shows the tag number input and "Promote to Entity" button.
+     */
+    _renderEntityUnlinked() {
+        document.getElementById('entity-unlinked')?.style && (document.getElementById('entity-unlinked').style.display = '');
+        document.getElementById('entity-merge-prompt').style.display = 'none';
+        document.getElementById('entity-linked-view').style.display = 'none';
+
+        // Clear input
+        const input = document.getElementById('entity-tag-input');
+        if (input) input.value = '';
+
+        // Wire Promote button — replace onclick each time to capture current markupId
+        const promoteBtn = document.getElementById('entity-promote-btn');
+        if (promoteBtn) {
+            promoteBtn.onclick = () => {
+                const tag = document.getElementById('entity-tag-input')?.value?.trim();
+                if (tag) this._promoteMarkup(tag);
+            };
+        }
+
+        // Allow Enter key in the tag input to trigger Promote
+        const tagInput = document.getElementById('entity-tag-input');
+        if (tagInput) {
+            tagInput.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    const tag = tagInput.value.trim();
+                    if (tag) this._promoteMarkup(tag);
+                }
+            };
+        }
+    }
+
+    /**
+     * Render State 3: entity is linked to this markup.
+     *
+     * Shows the entity tag chip with type subtitle, plus View and Unlink buttons.
+     *
+     * Args:
+     *   entity: Entity dict { id, tag_number, equip_type, ... }
+     */
+    _renderEntityLinked(entity) {
+        document.getElementById('entity-unlinked').style.display = 'none';
+        document.getElementById('entity-merge-prompt').style.display = 'none';
+        const view = document.getElementById('entity-linked-view');
+        view.style.display = '';
+
+        // Tag chip text — show tag + type if available
+        const chipText = document.getElementById('entity-chip-text');
+        if (chipText) {
+            // SECURITY: textContent only — entity data is DB-stored but still sanitize display
+            chipText.textContent = entity.equip_type
+                ? `${entity.tag_number} — ${entity.equip_type}`
+                : entity.tag_number;
+        }
+
+        // View button → open entity modal (delegates to app.entityModal when Stage 3B lands)
+        const viewBtn = document.getElementById('entity-view-btn');
+        if (viewBtn) {
+            viewBtn.onclick = () => {
+                // Stage 3B: app.entityModal.open(entity.id)
+                // For Stage 3A, dispatch a custom event so tests can detect the click
+                document.dispatchEvent(new CustomEvent('entity-view-requested', {
+                    detail: { entityId: entity.id }
+                }));
+            };
+        }
+
+        // Unlink button → remove markup→entity link
+        const unlinkBtn = document.getElementById('entity-unlink-btn');
+        if (unlinkBtn) {
+            unlinkBtn.onclick = () => this._unlinkMarkup(this._entityMarkupId);
+        }
+    }
+
+    /**
+     * Render State 2: merge prompt — a different entity already has this tag number.
+     *
+     * Shows a prompt with two choices:
+     *   "Link to existing" — links this markup to the existing entity
+     *   "Create new"      — clears the conflict and re-shows the unlinked state
+     *                       (user must type a different tag)
+     *
+     * Args:
+     *   existingEntity: The entity that already owns this tag_number.
+     *   tagNumber:      The tag number the user typed (same as existingEntity.tag_number).
+     */
+    _renderEntityMergePrompt(existingEntity, tagNumber) {
+        document.getElementById('entity-unlinked').style.display = 'none';
+        document.getElementById('entity-linked-view').style.display = 'none';
+        const prompt = document.getElementById('entity-merge-prompt');
+        prompt.style.display = '';
+
+        const msg = document.getElementById('entity-merge-msg');
+        if (msg) {
+            // SECURITY: textContent — tag_number from server, not innerHTML
+            msg.textContent = `"${existingEntity.tag_number}" already exists. Link this markup to it?`;
+        }
+
+        // "Link to existing" — adds this markup as another observation of the existing entity
+        const linkBtn = document.getElementById('entity-link-existing-btn');
+        if (linkBtn) {
+            linkBtn.onclick = () => this._linkToExisting(existingEntity);
+        }
+
+        // "Create new" — user wants a different tag; return to unlinked state
+        const createBtn = document.getElementById('entity-create-new-btn');
+        if (createBtn) {
+            createBtn.onclick = () => {
+                this._renderEntityUnlinked();
+                const input = document.getElementById('entity-tag-input');
+                if (input) { input.value = tagNumber; input.focus(); }
+            };
+        }
+    }
+
+    /**
+     * Promote a markup to an entity: POST /api/entities, then link the markup.
+     *
+     * Handles three outcomes:
+     *   201 → entity created, link it → show State 3
+     *   409 → entity exists → show merge prompt (State 2)
+     *   other → log error, stay in State 1
+     *
+     * Args:
+     *   tagNumber: Equipment tag string from the input field.
+     */
+    async _promoteMarkup(tagNumber) {
+        if (!this.docId || !this._entityMarkupId) return;
+
+        try {
+            const resp = await fetch('/api/entities', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tag_number: tagNumber })
+            });
+
+            if (resp.status === 201) {
+                const data = await resp.json();
+                // New entity created — now link this markup to it
+                await this._linkMarkupToEntity(data.id);
+                this._renderEntityLinked(data);
+
+            } else if (resp.status === 409) {
+                const data = await resp.json();
+                // Tag already exists — show merge prompt
+                this._renderEntityMergePrompt(data.entity, tagNumber);
+
+            } else {
+                const text = await resp.text();
+                console.error('[Properties] Entity creation failed:', text);
+            }
+        } catch (err) {
+            console.error('[Properties] _promoteMarkup error:', err);
+        }
+    }
+
+    /**
+     * Link this markup to an existing entity (chosen from the merge prompt).
+     *
+     * Args:
+     *   entity: The existing entity dict to link to.
+     */
+    async _linkToExisting(entity) {
+        if (!this.docId || !this._entityMarkupId) return;
+        await this._linkMarkupToEntity(entity.id);
+        this._renderEntityLinked(entity);
+    }
+
+    /**
+     * Internal helper: POST the markup→entity link to the server.
+     *
+     * Args:
+     *   entityId: UUID of the entity to link to.
+     */
+    async _linkMarkupToEntity(entityId) {
+        const resp = await fetch(
+            `/api/documents/${this.docId}/markup-entities`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    markup_id: this._entityMarkupId,
+                    entity_id: entityId,
+                    page_number: this._entityPageNumber || 0
+                })
+            }
+        );
+        if (!resp.ok) {
+            throw new Error(`Link failed: ${resp.statusText}`);
+        }
+    }
+
+    /**
+     * Unlink this markup from its entity and return to the unlinked state.
+     *
+     * Args:
+     *   markupId: UUID of the markup to unlink.
+     */
+    async _unlinkMarkup(markupId) {
+        if (!this.docId || !markupId) return;
+        try {
+            const resp = await fetch(
+                `/api/documents/${this.docId}/markup-entities/${encodeURIComponent(markupId)}`,
+                { method: 'DELETE' }
+            );
+            if (!resp.ok) throw new Error(resp.statusText);
+            this._renderEntityUnlinked();
+        } catch (err) {
+            console.error('[Properties] Unlink failed:', err);
         }
     }
 }

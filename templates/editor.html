@@ -176,6 +176,7 @@
             <button class="panel-tab" data-panel="rfi">RFI</button>
             <button class="panel-tab" data-panel="text">Text</button>
             <button class="panel-tab" data-panel="tools">Tools</button>
+            <button class="panel-tab" data-panel="equipment" title="Equipment Registry">Equipment</button>
         </div>
 
         <!-- Pages tab content -->
@@ -427,6 +428,26 @@
             </div>
 
         </div><!-- /#tab-tools -->
+
+        <!-- Equipment Registry tab — populated by entity-manager.js (Stage 3B).
+             For Stage 3A, this tab exists but shows a placeholder until 3B is implemented. -->
+        <div id="tab-equipment" class="tab-content">
+            <div class="equip-toolbar">
+                <input type="text" id="equip-search" placeholder="Search tag…"
+                       class="panel-search-input" autocomplete="off">
+                <select id="equip-filter-type" class="panel-filter-select">
+                    <option value="">All types</option>
+                </select>
+                <input type="text" id="equip-filter-loc" placeholder="Location…"
+                       class="panel-search-input" autocomplete="off">
+            </div>
+            <div id="equip-list"></div>
+            <div id="equip-empty" class="muted-text" style="display:none;">
+                No equipment entities yet.<br>
+                Select a markup and use the Entity section in the properties panel to promote it.
+            </div>
+        </div><!-- /#tab-equipment -->
+
     </div>
 
     <!-- CENTER: PDF Canvas viewport -->
@@ -547,6 +568,47 @@
                                 title="Attach a photo to this markup">
                             + Attach Photo
                         </button>
+                    </div>
+
+                    <!-- Entity section — hidden by default, shown when a markup is selected.
+                         Three states rendered by properties.js:
+                           State 1: unlinked (tag input + Promote button)
+                           State 2: merge prompt (409 conflict)
+                           State 3: linked (tag chip + View/Unlink) -->
+                    <div id="entity-section" class="entity-section" style="display: none;">
+                        <div class="entity-section-header">Entity</div>
+
+                        <!-- State 1: no entity linked -->
+                        <div id="entity-unlinked" style="display: none;">
+                            <div class="prop-field">
+                                <input type="text" id="entity-tag-input"
+                                       placeholder="Tag number (e.g. PRV-201)"
+                                       maxlength="128" autocomplete="off">
+                            </div>
+                            <button id="entity-promote-btn" class="toolbar-btn entity-promote-btn">
+                                Promote to Entity
+                            </button>
+                        </div>
+
+                        <!-- State 2: tag exists — merge prompt (shown on 409) -->
+                        <div id="entity-merge-prompt" style="display: none;">
+                            <div id="entity-merge-msg" class="entity-merge-msg"></div>
+                            <div class="prop-field" style="gap: 6px; display: flex; flex-direction: column;">
+                                <button id="entity-link-existing-btn" class="toolbar-btn">Link to existing</button>
+                                <button id="entity-create-new-btn" class="toolbar-btn">Create new</button>
+                            </div>
+                        </div>
+
+                        <!-- State 3: entity linked -->
+                        <div id="entity-linked-view" style="display: none;">
+                            <div class="entity-tag-chip" id="entity-chip">
+                                <span id="entity-chip-text"></span>
+                            </div>
+                            <div class="entity-linked-actions">
+                                <button id="entity-view-btn" class="toolbar-btn entity-promote-btn">View</button>
+                                <button id="entity-unlink-btn" class="toolbar-btn" title="Unlink this markup from entity">✕ Unlink</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Typography — shown only for IText/Textbox objects (text tool, sticky note).
@@ -887,6 +949,21 @@
             <button id="stamp-cancel" class="toolbar-btn">Cancel</button>
             <button id="stamp-create" class="toolbar-btn modal-btn-primary">Add Stamp</button>
         </div>
+    </div>
+</div>
+
+<!-- Entity detail modal — full overlay populated by entity-modal.js (Stage 3B).
+     The overlay structure is declared here so Stage 3A tests can verify it exists.
+     entity-modal.js will render the full content into #entity-modal-body on open(). -->
+<div id="entity-modal" class="entity-modal-overlay" style="display:none;"
+     role="dialog" aria-modal="true" aria-label="Equipment Entity Details">
+    <div class="entity-modal-header">
+        <button id="entity-modal-close" class="toolbar-btn" title="Back to editor">◄ Back</button>
+        <span id="entity-modal-title" class="entity-modal-title"></span>
+        <button id="entity-modal-edit-btn" class="toolbar-btn entity-promote-btn">Edit</button>
+    </div>
+    <div id="entity-modal-body" class="entity-modal-body">
+        <!-- Populated by EntityModal.open() in entity-modal.js (Stage 3B) -->
     </div>
 </div>
 

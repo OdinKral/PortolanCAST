@@ -2927,3 +2927,287 @@ html, body {
     /* Hidden until the user clicks Run Full Test Suite */
     min-height: 0;
 }
+
+/* =============================================================================
+   STAGE 3 — EQUIPMENT INTELLIGENCE
+   Entity section in properties panel, equipment tab, entity modal overlay.
+   ============================================================================= */
+
+/* Entity section in the properties panel */
+.entity-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #2a2a3d;
+}
+
+.entity-section-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin-bottom: 6px;
+}
+
+/* Blue pill chip shown when an entity is linked */
+.entity-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #1e3a5f;
+    border: 1px solid #4a7fc1;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #90b8f0;
+    margin-bottom: 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Row of View / Unlink buttons when entity is linked */
+.entity-linked-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.entity-promote-btn {
+    font-size: 11px;
+    background: #1e3a5f;
+    border-color: #4a7fc1;
+    color: #90b8f0;
+}
+
+.entity-promote-btn:hover {
+    background: #2a4a7f;
+}
+
+/* 409 merge-prompt message */
+.entity-merge-msg {
+    font-size: 11px;
+    color: #f0a878;
+    margin-bottom: 6px;
+    padding: 5px 7px;
+    background: #3a2a1e;
+    border: 1px solid #8a5030;
+    border-radius: 4px;
+}
+
+/* OCR suggestion chip (Stage 3C) */
+.entity-suggestion-chip {
+    background: #2a3a1e;
+    border: 1px solid #5a8a30;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 11px;
+    color: #a0c878;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.entity-suggestion-actions {
+    display: flex;
+    gap: 6px;
+}
+
+/* Equipment tab filter toolbar */
+.equip-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+    border-bottom: 1px solid #2a2a3d;
+}
+
+.panel-filter-select {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 11px;
+    padding: 4px 6px;
+    width: 100%;
+}
+
+/* Equipment entity list rows */
+.equip-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #1a1a2a;
+}
+
+.equip-row:hover {
+    background: #2a2a3d;
+}
+
+.equip-tag {
+    font-weight: 700;
+    color: #90b8f0;
+    min-width: 70px;
+    flex-shrink: 0;
+}
+
+.equip-type {
+    flex: 1;
+    color: #c0c0d0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.equip-location {
+    font-size: 10px;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 80px;
+}
+
+.equip-count {
+    font-size: 11px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+/* Entity detail modal — full overlay */
+.entity-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: #12121e;
+    z-index: 1000;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.entity-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid #2a2a3d;
+    position: sticky;
+    top: 0;
+    background: #12121e;
+    z-index: 1;
+}
+
+.entity-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    flex: 1;
+    color: #e0e0f0;
+}
+
+.entity-modal-body {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 900px;
+}
+
+/* Section labels inside the modal */
+.entity-modal-section-header {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin-bottom: 10px;
+}
+
+/* Equipment record fields table */
+.entity-fields-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.entity-fields-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #2a2a3d;
+    vertical-align: top;
+}
+
+.entity-fields-table td:first-child {
+    color: #888;
+    width: 120px;
+    flex-shrink: 0;
+}
+
+.entity-field-input {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 12px;
+    padding: 3px 6px;
+    width: 100%;
+}
+
+/* Linked markups list in the modal */
+.entity-markup-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid #1a1a2a;
+}
+
+.entity-markup-row:hover {
+    background: #2a2a3d;
+}
+
+/* Maintenance log */
+.entity-log-entry {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid #1a1a2e;
+    font-size: 12px;
+}
+
+.entity-log-date {
+    color: #666;
+    min-width: 80px;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.entity-log-note {
+    color: #c0c0d0;
+    flex: 1;
+}
+
+.entity-log-add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.entity-log-textarea {
+    flex: 1;
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 12px;
+    padding: 6px 8px;
+    resize: vertical;
+    min-height: 48px;
+}
