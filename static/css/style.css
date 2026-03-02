@@ -1206,6 +1206,13 @@ html, body {
     border: 1px solid rgba(170, 85, 255, 0.4);
 }
 
+/* Image overlay badge — steel blue; visually distinct from annotation intent types */
+.markup-type-badge.type-image-overlay {
+    background: rgba(74, 158, 255, 0.12);
+    color: #6ab4ff;
+    border: 1px solid rgba(74, 158, 255, 0.35);
+}
+
 /* Measurement status dot — neutral gray (no open/resolved concept for measurements) */
 .markup-status-dot.status-measurement {
     background: #5a5a70;

@@ -91,6 +91,8 @@ const TEST_FILES = [
     // Stage 3A — Equipment Intelligence Foundation: entity CRUD API, markup linking,
     // properties panel entity section (3 states), data integrity
     'test_stage3a.mjs',
+    // Image Overlay: place photo as canvas markup, layer assignment, save/load round-trip
+    'test_image_overlay.mjs',
 ];
 
 // =============================================================================

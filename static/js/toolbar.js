@@ -91,7 +91,7 @@ export class Toolbar {
             hand: 'navigate', select: 'navigate',
             pen: 'markup', rect: 'markup', ellipse: 'markup', line: 'markup',
             highlighter: 'markup', text: 'markup', cloud: 'markup', callout: 'markup',
-            polyline: 'markup', arrow: 'markup', 'sticky-note': 'markup',
+            polyline: 'markup', arrow: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
             distance: 'measure', area: 'measure', count: 'measure',
             calibrate: 'measure', 'node-edit': 'measure',
         };
@@ -127,6 +127,7 @@ export class Toolbar {
 
         this._bindButtons();
         this._bindKeyboard();
+        this._bindImageOverlay();
         // Apply the persisted tab on startup (after DOM is ready via _bindButtons)
         this._setActiveTab(this._activeTab);
     }
@@ -293,6 +294,120 @@ export class Toolbar {
         if (btnObsidian) {
             btnObsidian.addEventListener('click', () => this._handleObsidianExport());
         }
+    }
+
+    // =========================================================================
+    // IMAGE OVERLAY
+    // =========================================================================
+
+    /**
+     * Wire the hidden #image-overlay-input file picker to the placement pipeline.
+     *
+     * Called once from the constructor. Listens for file selection, uploads the
+     * image to the existing markup-photos endpoint (reusing server infrastructure),
+     * then places a fabric.Image on the canvas as a full markup object.
+     *
+     * Architecture:
+     *   1. User triggers the picker via the Image toolbar button (setTool → .click())
+     *   2. File change fires this handler
+     *   3. Upload to /api/documents/{docId}/markup-photos with a pre-generated UUID
+     *      so the canvas object's markupId matches the photo record from day one.
+     *   4. fabric.Image.fromURL() loads the image from the same-origin static path.
+     *   5. stampDefaults() stamps the full markup metadata (preserveColor skips stroke).
+     *   6. canvas.add() fires object:added → layer auto-assigned by canvas.js.
+     *   7. Tool reverts to select so the user can immediately reposition the image.
+     *
+     * Security:
+     *   - SECURITY: docId is read from this.viewer (set by PDFViewer.loadDocument), not from user input.
+     *   - SECURITY: upload goes through the existing server endpoint which validates
+     *     file type and size — no client-side file validation needed here.
+     *   - SECURITY: the returned URL is a relative same-origin path (/data/photos/...).
+     */
+    _bindImageOverlay() {
+        const input = document.getElementById('image-overlay-input');
+        if (!input) return;
+
+        input.addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            // Reset immediately so the same file can be re-selected next time
+            input.value = '';
+            // Revert to select mode before any async work so the UI is never stuck
+            this.setTool('select');
+
+            // docId lives on the PDFViewer instance, not on the canvas overlay
+            const docId = this.viewer?.docId;
+            if (!file || !docId) return;
+
+            // Pre-generate the markupId so the photo record and canvas object share
+            // the same stable identifier from creation. stampDefaults() checks
+            // !obj.markupId and will not overwrite this pre-set value.
+            const markupId = crypto.randomUUID().replace(/-/g, '');
+
+            // Upload via the existing markup-photos endpoint — no new routes needed.
+            const form = new FormData();
+            form.append('markup_id', markupId);
+            form.append('photo', file);
+            form.append('description', '');   // description optional; user can add in properties panel
+
+            let url;
+            try {
+                const resp = await fetch(
+                    `/api/documents/${docId}/markup-photos`,
+                    { method: 'POST', body: form }
+                );
+                if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
+                const data = await resp.json();
+                url = data.url;
+            } catch (err) {
+                console.error('[Toolbar] Image overlay upload failed:', err);
+                return;
+            }
+
+            // Load the image from the same-origin server URL.
+            // No crossOrigin option: /data/photos/ is always same-origin, and FastAPI
+            // StaticFiles does not set CORS headers. Adding crossOrigin: 'anonymous'
+            // would trigger CORS preflight and fail silently on same-origin servers.
+            const fc = this.canvas.fabricCanvas;
+            let img;
+            try {
+                img = await fabric.Image.fromURL(url);
+            } catch (err) {
+                console.error('[Toolbar] fabric.Image.fromURL failed:', err, 'url:', url);
+                return;
+            }
+
+            // Scale to fit — max 60% of canvas display dimensions, maintain aspect ratio.
+            // Math.min(..., 1) ensures we never upscale a small image.
+            const maxW = fc.getWidth() * 0.6;
+            const maxH = fc.getHeight() * 0.6;
+            const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+            img.scale(scale);
+
+            // Center at the current viewport center in natural (pre-zoom) coordinates.
+            // vpt = [scaleX, 0, 0, scaleY, translateX, translateY]
+            const vpt = fc.viewportTransform;
+            const centerX = (fc.getWidth() / 2 - vpt[4]) / vpt[0];
+            const centerY = (fc.getHeight() / 2 - vpt[5]) / vpt[3];
+            img.set({ left: centerX, top: centerY, originX: 'center', originY: 'center' });
+
+            // Pre-set markupId before stampDefaults so the photo record and canvas
+            // object share the same UUID. stampDefaults skips markupId when already set.
+            img.markupId = markupId;
+            this.canvas.stampDefaults(img, {
+                markupType: 'image-overlay',
+                // preserveColor prevents stampDefaults from applying a stroke color.
+                // Images don't have semantic stroke; we clear it explicitly below.
+                preserveColor: true,
+            });
+            // Ensure no stroke border is rendered on the image (strokeWidth defaults
+            // to 1 on fabric.Image; zero gives a clean appearance).
+            img.set({ stroke: null, strokeWidth: 0 });
+
+            fc.add(img);                        // object:added → layer auto-assigned
+            fc.setActiveObject(img);
+            fc.renderAll();
+            this.canvas.onContentChange?.();    // trigger auto-save
+        });
     }
 
     // =========================================================================
@@ -491,6 +606,13 @@ export class Toolbar {
                     }
                     break;
 
+                // I: Image Overlay — upload a photo and place it as a Fabric.Image markup
+                case 'i':
+                    if (!e.ctrlKey) {
+                        this.setTool('image-overlay');
+                    }
+                    break;
+
                 // N: Count tool (mnemonic: Number)
                 case 'n':
                     if (!e.ctrlKey) {
@@ -657,6 +779,17 @@ export class Toolbar {
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 this._initStickyNotePlacement();
+                break;
+
+            case 'image-overlay':
+                // Upload-and-place: opens a file picker, uploads the chosen image to the
+                // server's existing markup-photos endpoint, then places a fabric.Image on
+                // the canvas. The actual work is done by _bindImageOverlay's change handler.
+                // This case just opens the picker; the tool reverts to select after placement.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                document.getElementById('image-overlay-input').click();
                 break;
 
             case 'text':

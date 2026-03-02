@@ -46,6 +46,8 @@ const TYPE_LABELS = {
     'group': 'Callout',    'Group': 'Callout',
     'i-text': 'Text',      'IText': 'Text',
     'textbox': 'Text',     'Textbox': 'Text',
+    // Image overlay: fabric.Image type names (live lowercase, serialized PascalCase)
+    'image': 'Image',      'Image': 'Image',
 };
 
 import { MARKUP_COLORS } from './canvas.js';

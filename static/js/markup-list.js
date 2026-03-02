@@ -64,6 +64,8 @@ const TYPE_LABELS = {
     'distance': 'Dist',
     'area': 'Area',
     'count': 'Count',
+    // Phase 3: image overlay — photo placed as a canvas markup object
+    'image-overlay': 'Image',
 };
 
 // =============================================================================

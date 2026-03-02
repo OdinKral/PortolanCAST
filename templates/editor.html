@@ -130,6 +130,9 @@
                 <button class="toolbar-btn tool-btn" data-tool="sticky-note" title="Sticky Note (S)">
                     <span class="icon">&#128203;</span> Sticky Note
                 </button>
+                <button class="toolbar-btn tool-btn" data-tool="image-overlay" title="Image Overlay (I)">
+                    <span class="icon">&#128444;</span> Image
+                </button>
             </div>
         </div>
 
@@ -681,6 +684,13 @@
                  a hidden parent div — calling .click() on a hidden-parent
                  input can suppress the file picker in some browsers. -->
             <input type="file" id="photo-file-input"
+                   accept=".jpg,.jpeg,.png,.gif,.webp"
+                   style="display: none;">
+
+            <!-- Hidden file input for image-overlay tool (toolbar Image button).
+                 Separate from #photo-file-input so the two workflows don't share
+                 event state. Placed at top-level so it's never inside a hidden parent. -->
+            <input type="file" id="image-overlay-input"
                    accept=".jpg,.jpeg,.png,.gif,.webp"
                    style="display: none;">
         </div>

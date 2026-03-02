@@ -90,6 +90,9 @@ export const MARKUP_COLORS = {
     question: '#ffaa00',  // Amber — uncertainty, needs answer
     approval: '#44cc66',  // Green — accepted, good to go
     change:   '#4a9eff',  // Blue — modification, scope change
+    // Image overlays carry no stroke — transparent keeps stampDefaults() safe
+    // if preserveColor is ever omitted by a future caller.
+    'image-overlay': 'transparent',
 };
 
 /**
