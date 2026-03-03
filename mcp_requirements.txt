@@ -1,0 +1,9 @@
+# MCP server dependencies for PortolanCAST
+# Install into the existing venv:
+#   venv/bin/pip install -r mcp_requirements.txt
+
+# Model Context Protocol Python SDK — FastMCP decorator API
+mcp>=1.0.0
+
+# Async HTTP client — used by both MCP servers to call FastAPI at 127.0.0.1:8000
+httpx>=0.27.0
