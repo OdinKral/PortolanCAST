@@ -34,3 +34,13 @@ relay*.ps1
 
 # Generated test output
 test_results.txt
+
+# Electron / Desktop build
+electron/node_modules/
+electron/dist/
+electron/portolan-server/
+build/
+
+# PyInstaller auto-generated specs (CLI-generated, not our tracked spec)
+# Note: electron/pyinstaller.spec is NOT ignored — it's the build config.
+main.spec

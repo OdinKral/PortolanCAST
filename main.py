@@ -49,17 +49,23 @@ from pdf_engine import PDFEngine
 # CONFIGURATION
 # =============================================================================
 
-# Base directory — all paths relative to this
+# Base directory — all paths relative to this (app code, templates, static)
 BASE_DIR = Path(__file__).parent
 
+# Data directory — user-writable location for projects, DB, photos.
+# When running inside Electron, PORTOLANCAST_DATA_DIR points to
+# app.getPath('userData')/data (e.g. %APPDATA%/PortolanCAST/data on Windows).
+# In development, falls back to BASE_DIR/data alongside the source code.
+DATA_DIR = Path(os.environ.get('PORTOLANCAST_DATA_DIR', BASE_DIR / "data"))
+
 # Where uploaded PDFs are stored
-PROJECTS_DIR = BASE_DIR / "data" / "projects"
-TEMP_DIR = BASE_DIR / "data" / "temp"
+PROJECTS_DIR = DATA_DIR / "projects"
+TEMP_DIR = DATA_DIR / "temp"
 
 # Where markup photo attachments are stored (served statically at /data/photos/)
 # Created here at module load (not in startup()) because StaticFiles mount
 # below requires the directory to exist at import time.
-PHOTOS_DIR = BASE_DIR / "data" / "photos"
+PHOTOS_DIR = DATA_DIR / "photos"
 PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Maximum upload size: 200MB (large-format construction drawings can be big)
@@ -2744,11 +2750,24 @@ async def detect_tags(doc_id: int, page_number: int):
 # =============================================================================
 
 if __name__ == "__main__":
+    import argparse
     import uvicorn
+
+    parser = argparse.ArgumentParser(description="PortolanCAST server")
+    parser.add_argument(
+        "--port", type=int, default=8000,
+        help="Port to listen on (default: 8000)"
+    )
+    parser.add_argument(
+        "--no-reload", action="store_true",
+        help="Disable auto-reload (use in production / frozen builds)"
+    )
+    args = parser.parse_args()
+
     uvicorn.run(
         "main:app",
         host="127.0.0.1",
-        port=8000,
-        reload=True,
+        port=args.port,
+        reload=not args.no_reload,
         log_level="info"
     )

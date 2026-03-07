@@ -26,8 +26,11 @@ from contextlib import contextmanager
 # CONFIGURATION
 # =============================================================================
 
-# Default database location relative to app data directory
-DEFAULT_DB_PATH = Path(__file__).parent / "data" / "portolancast.db"
+# Default database location — uses PORTOLANCAST_DATA_DIR when set (Electron),
+# otherwise falls back to data/ alongside the source code (development).
+_data_dir = Path(os.environ.get('PORTOLANCAST_DATA_DIR',
+                                 Path(__file__).parent / "data"))
+DEFAULT_DB_PATH = _data_dir / "portolancast.db"
 
 
 # =============================================================================
@@ -678,24 +681,32 @@ class Database:
             location:   Prefix match on location (LIKE 'prefix%'). None = no filter.
 
         Returns:
-            List of entity dicts, sorted by tag_number.
+            List of entity dicts (with markup_count), sorted by tag_number.
         """
         with self._connect() as conn:
             params = []
             conditions = []
 
             if equip_type is not None:
-                conditions.append("equip_type = ?")
+                conditions.append("e.equip_type = ?")
                 params.append(equip_type)
 
             if location is not None:
                 # Prefix match so "Bldg-A" also returns "Bldg-A / Floor-2 / HVAC-1"
-                conditions.append("location LIKE ?")
+                conditions.append("e.location LIKE ?")
                 params.append(location + '%')
 
             where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            # LEFT JOIN subquery for markup_count — avoids N+1 queries in Equipment tab
             rows = conn.execute(
-                f"SELECT * FROM entities {where} ORDER BY tag_number ASC",
+                f"""SELECT e.*, COALESCE(mc.cnt, 0) AS markup_count
+                    FROM entities e
+                    LEFT JOIN (
+                        SELECT entity_id, COUNT(*) AS cnt
+                        FROM markup_entities GROUP BY entity_id
+                    ) mc ON mc.entity_id = e.id
+                    {where}
+                    ORDER BY e.tag_number ASC""",
                 params
             ).fetchall()
             return [dict(row) for row in rows]
