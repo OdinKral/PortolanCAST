@@ -995,15 +995,15 @@ export class PropertiesPanel {
                 : entity.tag_number;
         }
 
-        // View button → open entity modal (delegates to app.entityModal when Stage 3B lands)
+        // View button → open entity detail modal
         const viewBtn = document.getElementById('entity-view-btn');
         if (viewBtn) {
             viewBtn.onclick = () => {
-                // Stage 3B: app.entityModal.open(entity.id)
-                // For Stage 3A, dispatch a custom event so tests can detect the click
-                document.dispatchEvent(new CustomEvent('entity-view-requested', {
-                    detail: { entityId: entity.id }
-                }));
+                if (this.entityModal) {
+                    this.entityModal.open(entity.id);
+                } else if (window.app && window.app.entityModal) {
+                    window.app.entityModal.open(entity.id);
+                }
             };
         }
 

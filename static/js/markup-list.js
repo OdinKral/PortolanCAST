@@ -146,6 +146,14 @@ export class MarkupList {
         this.reviewBrief = null;
 
         /**
+         * EntityManager instance — set by app.js after init.
+         * When the user switches to the Equipment panel tab, _bindTabSwitching()
+         * calls entityManager.refresh() so the entity list is always current.
+         * @type {import('./entity-manager.js').EntityManager|null}
+         */
+        this.entityManager = null;
+
+        /**
          * RFIGenerator instance — set by app.js after init.
          * The RFI tab does NOT auto-generate on switch (header fields may be empty).
          * The user clicks Generate explicitly — this ref is kept for future hooks.
@@ -254,6 +262,11 @@ export class MarkupList {
 
                 // RFI tab: no auto-generate — user fills header fields first, then clicks Generate
                 // (nothing to do here; the button handler in rfi-generator.js handles generation)
+
+                // Refresh Equipment tab when switching to it
+                if (tab.dataset.panel === 'equipment' && this.entityManager) {
+                    this.entityManager.refresh();
+                }
             });
         });
     }

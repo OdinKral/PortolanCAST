@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    PortolanCAST brand mark — Ship of Theseus
+    ===========================================
+    A medieval square-rigged ship, the iconic form used on portolan navigational
+    charts. Named for the philosophical puzzle of identity through transformation:
+    the ship that is repaired plank-by-plank remains itself, as accumulated
+    knowledge remains itself through the people and systems that carry it.
+
+    This mark represents PortolanCAST in the equipment icon system. All
+    equipment icons use the ship hull as the base form; PortolanCAST itself
+    is the Ship of Theseus — the whole that gives meaning to its parts.
+
+    Colors:
+      #4a9eff — brand blue (matches .brand-name in style.css)
+      #2d78cc — hull shadow (depth on underside of keel)
+      #ffd700 — gold pennant (identity signal at masthead)
+
+    Design notes:
+      - Readable at 16×16 (favicon), 24×24 (toolbar), and larger
+      - Transparent background — designed for dark toolbars (#252538)
+      - Medieval carrack silhouette: aft castle (left/stern), main deck
+        (center), pointed fore castle (right/bow), square sail on mast
+      - The gold pennant at top of mast is the single identity-signal element
+  -->
+
+  <!-- PENNANT — gold flag at masthead; signals identity at a distance -->
+  <polygon points="16,4 21,6 16,7.5" fill="#ffd700"/>
+
+  <!-- MAST — vertical spine of the ship, rises from deck -->
+  <line x1="16" y1="4" x2="16" y2="18" stroke="#4a9eff" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- YARDARM — horizontal boom from which the square sail hangs -->
+  <line x1="10" y1="9" x2="22" y2="9" stroke="#4a9eff" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- MAIN SAIL — square sail, slightly tapered at foot (wind-filled) -->
+  <path d="M10.5 9.5 L21.5 9.5 L21 16 L11 16 Z" fill="#4a9eff" opacity="0.65"/>
+
+  <!-- AFT CASTLE (stern / left) — raised rear deck of a medieval ship -->
+  <rect x="3" y="15" width="7" height="6" rx="1" fill="#4a9eff"/>
+
+  <!-- MAIN DECK (amidships) — central hull body at the waterline -->
+  <rect x="8" y="17" width="17" height="4" fill="#4a9eff"/>
+
+  <!-- FORE CASTLE (bow / right) — pointed forward deck; gives the ship its direction -->
+  <path d="M23 16 L29 19 L29 21 L23 21 Z" fill="#4a9eff"/>
+
+  <!-- KEEL CURVE — the curved underside of the hull, the deepest part of the vessel -->
+  <!-- SECURITY: This path is purely decorative — no user input touches this file -->
+  <path d="M3 21 Q16 30 29 21 L29 22.5 Q16 31.5 3 22.5 Z" fill="#2d78cc"/>
+
+</svg>

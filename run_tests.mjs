@@ -93,6 +93,8 @@ const TEST_FILES = [
     'test_stage3a.mjs',
     // Image Overlay: place photo as canvas markup, layer assignment, save/load round-trip
     'test_image_overlay.mjs',
+    // Stage 3B — Equipment Tab + Entity Detail Modal: list, filters, modal CRUD, integration
+    'test_stage3b.mjs',
 ];
 
 // =============================================================================

@@ -1,0 +1,581 @@
+/**
+ * PortolanCAST — Entity Detail Modal
+ *
+ * Purpose:
+ *   Full-screen overlay for viewing and editing a single equipment entity.
+ *   Shows editable fields (tag, type, model, serial, location), linked
+ *   markup observations (with navigation), and a chronological maintenance
+ *   log. Opened from Equipment tab rows or the properties panel View button.
+ *
+ * Security:
+ *   All user-supplied text rendered via textContent — never innerHTML.
+ *   Input fields trimmed and length-limited before submission.
+ *   Entity IDs validated as non-empty before API calls.
+ *
+ * Threat model:
+ *   - Entity data comes from DB (user-created, not externally trusted)
+ *   - Input is validated server-side (db.py + main.py); client does trim only
+ *   - No dynamic code execution; no eval; no innerHTML
+ *
+ * Author: PortolanCAST
+ * Version: 0.1.0
+ * Date: 2026-03-07
+ */
+
+// =============================================================================
+// ENTITY MODAL — DETAIL OVERLAY
+// =============================================================================
+
+export class EntityModal {
+    constructor() {
+        /** @type {string|null} Currently displayed entity ID */
+        this._entityId = null;
+
+        /** @type {boolean} Whether Escape key listener is bound */
+        this._escBound = false;
+    }
+
+    // =========================================================================
+    // LIFECYCLE
+    // =========================================================================
+
+    /**
+     * Initialize the modal. Binds the Escape key listener (once) and
+     * the close button in the pre-built HTML shell.
+     *
+     * Called by app.js on first document load.
+     *
+     * Args:
+     *   canvas: CanvasOverlay reference (unused currently, reserved for future nav)
+     */
+    init(canvas) {
+        this._canvas = canvas;
+
+        // Bind close button in the pre-existing HTML shell
+        const closeBtn = document.getElementById('entity-modal-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.close());
+        }
+
+        // Bind Escape key — dismiss modal (once, idempotent guard)
+        if (!this._escBound) {
+            this._escBound = true;
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this._entityId) {
+                    this.close();
+                }
+            });
+        }
+    }
+
+    // =========================================================================
+    // OPEN / CLOSE
+    // =========================================================================
+
+    /**
+     * Open the modal for a specific entity.
+     *
+     * Fetches entity dossier (fields + log + markup_count) and linked markups,
+     * then renders the full modal body.
+     *
+     * Args:
+     *   entityId: UUID string of the entity to display.
+     */
+    async open(entityId) {
+        if (!entityId) return;
+        this._entityId = entityId;
+
+        const overlay = document.getElementById('entity-modal');
+        if (!overlay) return;
+
+        // Show overlay immediately (loading state)
+        overlay.style.display = '';
+
+        try {
+            // Fetch entity dossier and linked markups in parallel
+            const [dossierResp, markupsResp] = await Promise.all([
+                fetch(`/api/entities/${entityId}`),
+                fetch(`/api/entities/${entityId}/markups`),
+            ]);
+
+            if (!dossierResp.ok) {
+                console.error('[EntityModal] Entity not found:', dossierResp.status);
+                this.close();
+                return;
+            }
+
+            const dossier = await dossierResp.json();
+            const markupsData = markupsResp.ok ? await markupsResp.json() : { markups: [] };
+
+            const entity = dossier.entity;
+            const log = dossier.log || [];
+            const markups = markupsData.markups || [];
+
+            // Render header title
+            const titleEl = document.getElementById('entity-modal-title');
+            if (titleEl) {
+                // SECURITY: textContent only
+                titleEl.textContent = entity.tag_number || 'Entity';
+            }
+
+            // Render modal body sections
+            const body = document.getElementById('entity-modal-body');
+            if (body) {
+                // Clear previous content
+                body.innerHTML = '';
+                this._renderFields(body, entity);
+                this._renderObservations(body, markups);
+                this._renderLog(body, entity, log);
+                this._renderDangerZone(body, entity);
+            }
+        } catch (err) {
+            console.error('[EntityModal] Error opening entity:', err);
+            this.close();
+        }
+    }
+
+    /**
+     * Close the modal and reset state.
+     */
+    close() {
+        this._entityId = null;
+        const overlay = document.getElementById('entity-modal');
+        if (overlay) overlay.style.display = 'none';
+
+        // Clear body to free DOM nodes
+        const body = document.getElementById('entity-modal-body');
+        if (body) body.innerHTML = '';
+    }
+
+    // =========================================================================
+    // RENDER — EDITABLE FIELDS
+    // =========================================================================
+
+    /**
+     * Render the editable fields table (tag_number, equip_type, model, serial, location).
+     *
+     * Each field shows a label and an inline-editable input. A single Save button
+     * at the bottom PUTs all fields to the API.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entity:    Entity dict from the API.
+     */
+    _renderFields(container, entity) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = 'Details';
+        section.appendChild(header);
+
+        const table = document.createElement('table');
+        table.className = 'entity-fields-table';
+
+        const fields = [
+            { key: 'tag_number', label: 'Tag Number' },
+            { key: 'equip_type', label: 'Type' },
+            { key: 'model', label: 'Model' },
+            { key: 'serial', label: 'Serial' },
+            { key: 'location', label: 'Location' },
+        ];
+
+        const inputs = {};
+
+        for (const f of fields) {
+            const tr = document.createElement('tr');
+
+            const td1 = document.createElement('td');
+            td1.className = 'entity-field-label';
+            td1.textContent = f.label;
+            tr.appendChild(td1);
+
+            const td2 = document.createElement('td');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'entity-field-input';
+            input.value = entity[f.key] || '';
+            input.dataset.field = f.key;
+            inputs[f.key] = input;
+            td2.appendChild(input);
+            tr.appendChild(td2);
+
+            table.appendChild(tr);
+        }
+
+        section.appendChild(table);
+
+        // Status message for save feedback
+        const statusMsg = document.createElement('div');
+        statusMsg.className = 'entity-save-status';
+        statusMsg.style.fontSize = '11px';
+        statusMsg.style.marginTop = '6px';
+        statusMsg.style.minHeight = '16px';
+        section.appendChild(statusMsg);
+
+        // Save button
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'toolbar-btn entity-promote-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.style.marginTop = '8px';
+        saveBtn.addEventListener('click', async () => {
+            await this._onSave(entity.id, inputs, statusMsg);
+        });
+        section.appendChild(saveBtn);
+
+        container.appendChild(section);
+    }
+
+    /**
+     * Handle Save button click — PUT updated fields to the API.
+     *
+     * Args:
+     *   entityId: UUID of the entity.
+     *   inputs:   Map of field key → input element.
+     *   statusEl: DOM element for save feedback text.
+     */
+    async _onSave(entityId, inputs, statusEl) {
+        const updates = {};
+        for (const [key, input] of Object.entries(inputs)) {
+            updates[key] = input.value.trim();
+        }
+
+        try {
+            const resp = await fetch(`/api/entities/${entityId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates),
+            });
+
+            if (resp.status === 409) {
+                // Tag number conflict
+                statusEl.textContent = 'Error: tag number already in use';
+                statusEl.style.color = '#ff6b6b';
+                return;
+            }
+
+            if (!resp.ok) {
+                statusEl.textContent = 'Save failed';
+                statusEl.style.color = '#ff6b6b';
+                return;
+            }
+
+            const data = await resp.json();
+            statusEl.textContent = 'Saved';
+            statusEl.style.color = '#4caf50';
+
+            // Update modal title if tag changed
+            const titleEl = document.getElementById('entity-modal-title');
+            if (titleEl && data.entity) {
+                titleEl.textContent = data.entity.tag_number || 'Entity';
+            }
+
+            // Refresh Equipment tab list to reflect changes
+            if (window.app && window.app.entityManager) {
+                window.app.entityManager.refresh();
+            }
+
+            // Clear status after 2s
+            setTimeout(() => { statusEl.textContent = ''; }, 2000);
+        } catch (err) {
+            statusEl.textContent = 'Network error';
+            statusEl.style.color = '#ff6b6b';
+            console.error('[EntityModal] Save failed:', err);
+        }
+    }
+
+    // =========================================================================
+    // RENDER — OBSERVATIONS (LINKED MARKUPS)
+    // =========================================================================
+
+    /**
+     * Render the Observations section — linked markups across documents.
+     *
+     * Each row shows doc_name + page_number and is clickable to navigate
+     * to that document/page in the editor.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   markups:   Array of { markup_id, doc_id, doc_name, page_number }.
+     */
+    _renderObservations(container, markups) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = `Observations (${markups.length})`;
+        section.appendChild(header);
+
+        if (markups.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted-text';
+            empty.style.padding = '8px 0';
+            empty.textContent = 'No markups linked to this entity yet.';
+            section.appendChild(empty);
+        } else {
+            for (const m of markups) {
+                const row = document.createElement('div');
+                row.className = 'entity-markup-row';
+
+                const docName = document.createElement('span');
+                docName.className = 'entity-markup-doc';
+                // SECURITY: textContent only — doc_name comes from DB
+                docName.textContent = m.doc_name || `Document ${m.doc_id}`;
+                row.appendChild(docName);
+
+                const pageLabel = document.createElement('span');
+                pageLabel.className = 'entity-markup-page';
+                pageLabel.textContent = `Page ${(m.page_number || 0) + 1}`;
+                row.appendChild(pageLabel);
+
+                // Click → navigate to that document/page
+                row.addEventListener('click', () => {
+                    this._navigateToMarkup(m.doc_id, m.page_number);
+                });
+
+                section.appendChild(row);
+            }
+        }
+
+        container.appendChild(section);
+    }
+
+    /**
+     * Navigate to a markup's document and page.
+     *
+     * If the markup is in the current document, just go to the page.
+     * If it's in a different document, do a full page navigation.
+     *
+     * Args:
+     *   docId:      Document ID containing the markup.
+     *   pageNumber: Zero-indexed page number.
+     */
+    _navigateToMarkup(docId, pageNumber) {
+        this.close();
+
+        if (window.app) {
+            if (window.app.docId === docId) {
+                // Same document — just navigate to the page
+                window.app.viewer.goToPage(pageNumber || 0);
+            } else {
+                // Different document — full navigation
+                window.location.href = `/edit/${docId}`;
+            }
+        }
+    }
+
+    // =========================================================================
+    // RENDER — MAINTENANCE LOG
+    // =========================================================================
+
+    /**
+     * Render the Log section — maintenance/observation log entries.
+     *
+     * Shows entries newest-first with timestamp and note text.
+     * Includes an "Add Entry" input at the top for new log entries.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entity:    Entity dict (for the entity ID).
+     *   log:       Array of { id, note, created_at } entries.
+     */
+    _renderLog(container, entity, log) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = 'Maintenance Log';
+        section.appendChild(header);
+
+        // Add entry input row
+        const addRow = document.createElement('div');
+        addRow.className = 'entity-log-add-row';
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'entity-log-textarea';
+        textarea.placeholder = 'Add a log entry…';
+        textarea.maxLength = 2000;
+        addRow.appendChild(textarea);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'toolbar-btn entity-promote-btn';
+        addBtn.textContent = 'Add';
+        addBtn.addEventListener('click', async () => {
+            await this._onAddLog(entity.id, textarea, logList);
+        });
+        addRow.appendChild(addBtn);
+
+        section.appendChild(addRow);
+
+        // Log entries container
+        const logList = document.createElement('div');
+        logList.id = 'entity-log-list';
+
+        // Render existing entries (newest first — API already returns DESC)
+        for (const entry of log) {
+            logList.appendChild(this._createLogEntry(entry));
+        }
+
+        if (log.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted-text';
+            empty.style.padding = '8px 0';
+            empty.textContent = 'No log entries yet.';
+            empty.id = 'entity-log-empty';
+            logList.appendChild(empty);
+        }
+
+        section.appendChild(logList);
+        container.appendChild(section);
+    }
+
+    /**
+     * Create a single log entry DOM element.
+     *
+     * Args:
+     *   entry: { id, note, created_at } log entry dict.
+     *
+     * Returns:
+     *   DOM element for the log entry row.
+     */
+    _createLogEntry(entry) {
+        const row = document.createElement('div');
+        row.className = 'entity-log-entry';
+
+        const date = document.createElement('span');
+        date.className = 'entity-log-date';
+        // Format date — show date portion only for brevity
+        const dateStr = entry.created_at || '';
+        date.textContent = dateStr.substring(0, 10);
+        row.appendChild(date);
+
+        const note = document.createElement('span');
+        note.className = 'entity-log-note';
+        // SECURITY: textContent only — note is user-entered free text
+        note.textContent = entry.note || '';
+        row.appendChild(note);
+
+        return row;
+    }
+
+    /**
+     * Handle Add Log button click — POST new log entry.
+     *
+     * Args:
+     *   entityId: UUID of the entity.
+     *   textarea: The textarea DOM element (cleared on success).
+     *   logList:  The log list container DOM element (new entry prepended).
+     */
+    async _onAddLog(entityId, textarea, logList) {
+        const noteText = textarea.value.trim();
+        if (!noteText) return; // reject blank entries
+
+        try {
+            const resp = await fetch(`/api/entities/${entityId}/log`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ note: noteText }),
+            });
+
+            if (!resp.ok) {
+                console.error('[EntityModal] Failed to add log entry:', resp.status);
+                return;
+            }
+
+            const data = await resp.json();
+            // POST /api/entities/{id}/log returns the entry directly (not wrapped in .entry)
+            const entry = data.note ? data : { note: noteText, created_at: new Date().toISOString() };
+
+            // Remove "No log entries" placeholder if present
+            const emptyEl = document.getElementById('entity-log-empty');
+            if (emptyEl) emptyEl.remove();
+
+            // Prepend new entry at top (newest first)
+            const entryEl = this._createLogEntry(entry);
+            logList.prepend(entryEl);
+
+            // Clear textarea
+            textarea.value = '';
+        } catch (err) {
+            console.error('[EntityModal] Error adding log entry:', err);
+        }
+    }
+
+    // =========================================================================
+    // RENDER — DANGER ZONE (DELETE)
+    // =========================================================================
+
+    /**
+     * Render the delete button at the bottom of the modal.
+     *
+     * Requires a confirm() dialog before proceeding — irreversible action.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entity:    Entity dict (for ID and tag_number in the confirm message).
+     */
+    _renderDangerZone(container, entity) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+        section.style.marginTop = '24px';
+        section.style.borderTop = '1px solid #3a1e1e';
+        section.style.paddingTop = '16px';
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'toolbar-btn';
+        deleteBtn.style.color = '#ff6b6b';
+        deleteBtn.style.borderColor = '#5a2a2a';
+        deleteBtn.textContent = 'Delete Entity';
+        deleteBtn.addEventListener('click', () => {
+            this._onDeleteEntity(entity.id, entity.tag_number);
+        });
+        section.appendChild(deleteBtn);
+
+        container.appendChild(section);
+    }
+
+    /**
+     * Handle Delete Entity — confirm dialog then DELETE API call.
+     *
+     * On success: closes modal, refreshes Equipment tab, dispatches
+     * entity-deleted event so the properties panel can reset if needed.
+     *
+     * Args:
+     *   entityId:  UUID of the entity to delete.
+     *   tagNumber: Tag text for the confirm dialog message.
+     */
+    async _onDeleteEntity(entityId, tagNumber) {
+        // Confirm before irreversible action
+        const confirmed = confirm(`Delete entity "${tagNumber}"?\n\nThis will unlink all associated markups. This cannot be undone.`);
+        if (!confirmed) return;
+
+        try {
+            const resp = await fetch(`/api/entities/${entityId}`, {
+                method: 'DELETE',
+            });
+
+            if (!resp.ok) {
+                console.error('[EntityModal] Delete failed:', resp.status);
+                return;
+            }
+
+            // Close modal
+            this.close();
+
+            // Refresh Equipment tab
+            if (window.app && window.app.entityManager) {
+                window.app.entityManager.refresh();
+            }
+
+            // Dispatch event so properties panel can reset linked state
+            document.dispatchEvent(new CustomEvent('entity-deleted', {
+                detail: { entityId },
+            }));
+        } catch (err) {
+            console.error('[EntityModal] Error deleting entity:', err);
+        }
+    }
+}

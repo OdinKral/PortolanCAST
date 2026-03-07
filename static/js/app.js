@@ -29,6 +29,8 @@ import { SearchPanel } from './search.js';
 import { ReviewBrief } from './review-brief.js';
 import { RFIGenerator } from './rfi-generator.js';
 import { StampManager, ToolPresetsPanel, SequenceManager } from './tools-panel.js';
+import { EntityManager } from './entity-manager.js';
+import { EntityModal } from './entity-modal.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -59,6 +61,9 @@ class App {
         this.sequenceManager = new SequenceManager();
         // PageTextPanel is a plain script (page-text.js); class is on globalThis
         this.pageText = new PageTextPanel();
+        // Stage 3B: Equipment tab list + entity detail modal
+        this.entityManager = new EntityManager();
+        this.entityModal = new EntityModal();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -302,6 +307,22 @@ class App {
         this.properties.scale = this.scale;
         // Inject docId so properties panel can call the markup-photos API
         this.properties.docId = info.id;
+        // Wire entity modal reference so properties panel View button can open it
+        this.properties.entityModal = this.entityModal;
+
+        // Initialize entity modal — once per app lifetime (binds Escape key + close button)
+        if (!this.entityModal._escBound || !this.entityModal._canvas) {
+            this.entityModal.init(this.canvas);
+        }
+
+        // Initialize entity manager for each document — stores docId for context
+        this.entityManager.init(info.id);
+
+        // Cross-wire: MarkupList tab-switching code triggers
+        // entityManager.refresh() when the user clicks the Equipment tab.
+        if (!this.markupList.entityManager) {
+            this.markupList.entityManager = this.entityManager;
+        }
 
         // Initialize review brief panel — once per app lifetime; docId updated per document.
         if (!this.reviewBrief.canvas) {
