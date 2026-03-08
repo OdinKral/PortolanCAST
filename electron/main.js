@@ -73,6 +73,9 @@ let mainWindow = null;
 /** @type {number} */
 let serverPort = 0;
 
+/** @type {boolean} Guard against re-entrant before-quit calls */
+let isQuitting = false;
+
 // =============================================================================
 // PORT SELECTION
 // =============================================================================
@@ -249,8 +252,12 @@ function waitForHealth() {
     return new Promise((resolve, reject) => {
         const startTime = Date.now();
 
+        // Sequential polling: each poll fully completes (success, error, or
+        // timeout) before the next one starts. This prevents connection flooding
+        // which caused ECONNRESET on Windows when multiple concurrent requests
+        // overwhelmed the TCP stack / Windows Defender inspection.
         const poll = () => {
-            // Timeout check
+            // Overall timeout check
             if (Date.now() - startTime > HEALTH_TIMEOUT_MS) {
                 reject(new Error(
                     `Backend did not respond within ${HEALTH_TIMEOUT_MS / 1000}s`
@@ -264,26 +271,49 @@ function waitForHealth() {
                 return;
             }
 
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            console.log(`[PortolanCAST] Health poll (${elapsed}s) → 127.0.0.1:${serverPort}`);
+
+            // Track whether THIS poll has completed to prevent double-scheduling
+            let pollDone = false;
+            const scheduleNext = () => {
+                if (!pollDone) {
+                    pollDone = true;
+                    setTimeout(poll, HEALTH_POLL_INTERVAL_MS);
+                }
+            };
+
             const req = http.get(
                 `http://127.0.0.1:${serverPort}/api/health`,
-                { timeout: 2000 },
+                // 10s timeout per request — Windows Defender can delay localhost
+                { timeout: 10_000 },
                 (res) => {
+                    // Consume body to free the socket
+                    res.resume();
+
+                    console.log(`[PortolanCAST] Health response: ${res.statusCode}`);
                     if (res.statusCode === 200) {
+                        pollDone = true;
+                        console.log('[PortolanCAST] Health check passed — backend is ready');
                         resolve();
                     } else {
-                        setTimeout(poll, HEALTH_POLL_INTERVAL_MS);
+                        scheduleNext();
                     }
                 }
             );
 
-            req.on('error', () => {
-                // Connection refused — server not ready yet
-                setTimeout(poll, HEALTH_POLL_INTERVAL_MS);
+            req.on('error', (err) => {
+                // Connection refused = server not ready yet (normal during startup)
+                if (err.code !== 'ECONNREFUSED') {
+                    console.log(`[PortolanCAST] Health poll error: ${err.code || err.message}`);
+                }
+                scheduleNext();
             });
 
             req.on('timeout', () => {
+                console.log('[PortolanCAST] Health poll timeout — destroying request');
                 req.destroy();
-                setTimeout(poll, HEALTH_POLL_INTERVAL_MS);
+                scheduleNext();
             });
         };
 
@@ -324,6 +354,9 @@ function createSplashWindow() {
  * Closes the splash screen once the main window is ready.
  */
 function createMainWindow() {
+    const url = `http://127.0.0.1:${serverPort}/`;
+    console.log(`[PortolanCAST] Creating main window → ${url}`);
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -339,9 +372,39 @@ function createMainWindow() {
         }
     });
 
-    mainWindow.loadURL(`http://127.0.0.1:${serverPort}/`);
+    // Diagnostic: track page load lifecycle
+    mainWindow.webContents.on('did-start-loading', () => {
+        console.log('[PortolanCAST] Main window: did-start-loading');
+    });
+
+    mainWindow.webContents.on('did-finish-load', () => {
+        console.log('[PortolanCAST] Main window: did-finish-load');
+    });
+
+    // CRITICAL: catch page load failures — without this, a failed loadURL
+    // leaves an invisible window and no error feedback
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.error(`[PortolanCAST] Main window load failed: ${errorDescription} (code ${errorCode}) for ${validatedURL}`);
+
+        // Show the window with an error message rather than leaving it invisible
+        if (splashWindow && !splashWindow.isDestroyed()) {
+            splashWindow.close();
+            splashWindow = null;
+        }
+
+        dialog.showErrorBox(
+            'PortolanCAST — Page Load Failed',
+            `Could not load the application UI.\n\n` +
+            `URL: ${validatedURL}\n` +
+            `Error: ${errorDescription} (${errorCode})\n\n` +
+            `The backend is running but the page failed to load.`
+        );
+    });
+
+    mainWindow.loadURL(url);
 
     mainWindow.once('ready-to-show', () => {
+        console.log('[PortolanCAST] Main window: ready-to-show — displaying');
         // Close splash, show main window
         if (splashWindow && !splashWindow.isDestroyed()) {
             splashWindow.close();
@@ -351,6 +414,7 @@ function createMainWindow() {
     });
 
     mainWindow.on('closed', () => {
+        console.log('[PortolanCAST] Main window closed');
         mainWindow = null;
     });
 }
@@ -381,6 +445,7 @@ app.whenReady().then(async () => {
 
         // Step 4: Wait for backend to become healthy
         await waitForHealth();
+        console.log(`[PortolanCAST] Backend healthy on port ${serverPort}`);
 
         // Step 5: Open the main window
         createMainWindow();
@@ -413,8 +478,10 @@ app.on('activate', () => {
 });
 
 // Graceful shutdown — stop backend before quitting
+// Guard flag prevents re-entrant loop: before-quit → stopBackend → app.quit → before-quit
 app.on('before-quit', async (event) => {
-    if (backendProcess) {
+    if (backendProcess && !isQuitting) {
+        isQuitting = true;
         event.preventDefault();
         await stopBackend();
         app.quit();
