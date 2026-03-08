@@ -39,7 +39,9 @@ import os
 import sys
 
 # Ensure the project root is on the path for Analysis
-project_root = os.path.join(os.path.dirname(SPECPATH), '..')
+# NOTE: PyInstaller sets SPECPATH to the directory containing the spec file,
+# NOT the spec file path itself. So SPECPATH = .../electron/ already.
+project_root = os.path.dirname(SPECPATH)  # electron/ -> PortolanCAST/
 
 a = Analysis(
     [os.path.join(project_root, 'main.py')],

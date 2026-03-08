@@ -45,7 +45,8 @@ const fs = require('fs');
 // =============================================================================
 
 // How long to wait for the backend to start (ms)
-const HEALTH_TIMEOUT_MS = 30_000;
+// PyInstaller-frozen backends can take 30-60s on first launch (antivirus scanning, DLL loading)
+const HEALTH_TIMEOUT_MS = 90_000;
 
 // How often to poll /api/health (ms)
 const HEALTH_POLL_INTERVAL_MS = 500;

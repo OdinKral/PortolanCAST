@@ -15,14 +15,15 @@
     "extraResources": [
       { "from": "portolan-server", "to": "portolan-server" }
     ],
+    "icon": "build/icon.ico",
     "win": {
       "target": "nsis",
-      "icon": "icons/icon.ico"
+      "icon": "build/icon.ico"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "icons/icon.png",
-      "category": "Office"
+      "category": "Office",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -2764,10 +2764,23 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    uvicorn.run(
-        "main:app",
-        host="127.0.0.1",
-        port=args.port,
-        reload=not args.no_reload,
-        log_level="info"
-    )
+    # When --no-reload is set (frozen PyInstaller builds), pass the app object
+    # directly. uvicorn.run("main:app") tries to re-import "main" as a module,
+    # which fails inside a PyInstaller bundle where the module system is different.
+    # With reload enabled (development), the string form is required so uvicorn
+    # can re-import the module on file changes.
+    if args.no_reload:
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=args.port,
+            log_level="info"
+        )
+    else:
+        uvicorn.run(
+            "main:app",
+            host="127.0.0.1",
+            port=args.port,
+            reload=True,
+            log_level="info"
+        )
