@@ -109,10 +109,7 @@ async function apiLinkMarkup(page, docId, markupId, entityId, pageNumber = 0) {
 // =============================================================================
 
 async function run() {
-    const browser = await chromium.launch({
-        headless: true,
-        executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    });
+    const browser = await chromium.launch();
     const context = await browser.newContext();
     const page    = await context.newPage();
 

@@ -53,10 +53,7 @@ const TINY_JPEG_BASE64 =
     '6Onq8fLz9PX29/j5+v/aAAwDAQACEQMRAD8A9/ooooA//9k=';
 
 async function run() {
-    const browser = await chromium.launch({
-        headless: true,
-        executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    });
+    const browser = await chromium.launch();
     const context = await browser.newContext();
     const page = await context.newPage();
 
