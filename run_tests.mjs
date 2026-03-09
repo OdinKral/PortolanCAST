@@ -95,6 +95,8 @@ const TEST_FILES = [
     'test_image_overlay.mjs',
     // Stage 3B — Equipment Tab + Entity Detail Modal: list, filters, modal CRUD, integration
     'test_stage3b.mjs',
+    // Sprint 1: Quick Capture (entity tasks, entity photos, capture panel, maintenance report)
+    'test_sprint1_capture.mjs',
 ];
 
 // =============================================================================

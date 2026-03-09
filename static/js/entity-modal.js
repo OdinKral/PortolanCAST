@@ -92,10 +92,12 @@ export class EntityModal {
         overlay.style.display = '';
 
         try {
-            // Fetch entity dossier and linked markups in parallel
-            const [dossierResp, markupsResp] = await Promise.all([
+            // Fetch entity dossier, markups, tasks, and photos in parallel
+            const [dossierResp, markupsResp, tasksResp, photosResp] = await Promise.all([
                 fetch(`/api/entities/${entityId}`),
                 fetch(`/api/entities/${entityId}/markups`),
+                fetch(`/api/entities/${entityId}/tasks`),
+                fetch(`/api/entities/${entityId}/photos`),
             ]);
 
             if (!dossierResp.ok) {
@@ -106,10 +108,14 @@ export class EntityModal {
 
             const dossier = await dossierResp.json();
             const markupsData = markupsResp.ok ? await markupsResp.json() : { markups: [] };
+            const tasksData = tasksResp.ok ? await tasksResp.json() : { tasks: [] };
+            const photosData = photosResp.ok ? await photosResp.json() : { photos: [] };
 
             const entity = dossier.entity;
             const log = dossier.log || [];
             const markups = markupsData.markups || [];
+            const tasks = tasksData.tasks || [];
+            const photos = photosData.photos || [];
 
             // Render header title
             const titleEl = document.getElementById('entity-modal-title');
@@ -126,6 +132,8 @@ export class EntityModal {
                 this._renderFields(body, entity);
                 this._renderObservations(body, markups);
                 this._renderLog(body, entity, log);
+                this._renderTasks(body, entity.id, tasks);
+                this._renderPhotos(body, entity.id, photos);
                 this._renderDangerZone(body, entity);
             }
         } catch (err) {
@@ -502,6 +510,365 @@ export class EntityModal {
         } catch (err) {
             console.error('[EntityModal] Error adding log entry:', err);
         }
+    }
+
+    // =========================================================================
+    // RENDER — TASKS
+    // =========================================================================
+
+    /**
+     * Render the Tasks section — maintenance/work tasks for this entity.
+     *
+     * Each task has a checkbox (toggle open↔done), title, priority badge,
+     * and optional due date. Includes an inline add form.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entityId:  UUID of the entity.
+     *   tasks:     Array of task objects from the API.
+     */
+    _renderTasks(container, entityId, tasks) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = `Tasks (${tasks.length})`;
+        section.appendChild(header);
+
+        // Task list container
+        const taskList = document.createElement('div');
+        taskList.id = 'entity-task-list';
+
+        if (tasks.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted-text';
+            empty.style.padding = '8px 0';
+            empty.textContent = 'No tasks yet.';
+            empty.id = 'entity-tasks-empty';
+            taskList.appendChild(empty);
+        } else {
+            for (const task of tasks) {
+                taskList.appendChild(this._createTaskRow(task, taskList, entityId));
+            }
+        }
+
+        section.appendChild(taskList);
+
+        // Inline add-task form
+        const addRow = document.createElement('div');
+        addRow.className = 'entity-task-add-row';
+
+        const titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.placeholder = 'New task…';
+        titleInput.maxLength = 500;
+        addRow.appendChild(titleInput);
+
+        const prioritySelect = document.createElement('select');
+        for (const p of ['normal', 'low', 'high', 'urgent']) {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            prioritySelect.appendChild(opt);
+        }
+        addRow.appendChild(prioritySelect);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'toolbar-btn entity-promote-btn';
+        addBtn.textContent = 'Add';
+        addBtn.addEventListener('click', async () => {
+            const title = titleInput.value.trim();
+            if (!title) return;
+
+            try {
+                const resp = await fetch(`/api/entities/${entityId}/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        priority: prioritySelect.value,
+                    }),
+                });
+                if (!resp.ok) return;
+
+                const data = await resp.json();
+
+                // Remove empty placeholder if present
+                const emptyEl = document.getElementById('entity-tasks-empty');
+                if (emptyEl) emptyEl.remove();
+
+                // Prepend new task at top (newest first)
+                taskList.prepend(this._createTaskRow(data.task, taskList, entityId));
+                titleInput.value = '';
+
+                // Update section header count
+                const count = taskList.querySelectorAll('.entity-task-row').length;
+                header.textContent = `Tasks (${count})`;
+            } catch (err) {
+                console.error('[EntityModal] Failed to add task:', err);
+            }
+        });
+        addRow.appendChild(addBtn);
+
+        section.appendChild(addRow);
+        container.appendChild(section);
+    }
+
+    /**
+     * Create a single task row DOM element.
+     *
+     * Args:
+     *   task:     Task object from the API.
+     *   taskList: Container DOM element (for removal on delete).
+     *   entityId: UUID of the parent entity.
+     *
+     * Returns:
+     *   DOM element for the task row.
+     */
+    _createTaskRow(task, taskList, entityId) {
+        const row = document.createElement('div');
+        row.className = 'entity-task-row';
+        row.dataset.taskId = task.id;
+
+        // Checkbox — toggle open/done
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'entity-task-checkbox';
+        checkbox.checked = task.status === 'done';
+        checkbox.addEventListener('change', async () => {
+            const newStatus = checkbox.checked ? 'done' : 'open';
+            try {
+                await fetch(`/api/tasks/${task.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus }),
+                });
+                titleSpan.classList.toggle('done', checkbox.checked);
+            } catch (err) {
+                // Revert on failure
+                checkbox.checked = !checkbox.checked;
+                console.error('[EntityModal] Failed to update task:', err);
+            }
+        });
+        row.appendChild(checkbox);
+
+        // Title
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'entity-task-title' + (task.status === 'done' ? ' done' : '');
+        // SECURITY: textContent only
+        titleSpan.textContent = task.title;
+        row.appendChild(titleSpan);
+
+        // Priority badge (skip 'normal' to reduce visual noise)
+        if (task.priority && task.priority !== 'normal') {
+            const badge = document.createElement('span');
+            badge.className = `task-priority-badge ${task.priority}`;
+            badge.textContent = task.priority;
+            row.appendChild(badge);
+        }
+
+        // Due date
+        if (task.due_date) {
+            const due = document.createElement('span');
+            due.className = 'entity-task-due';
+            due.textContent = task.due_date;
+            row.appendChild(due);
+        }
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'toolbar-btn';
+        deleteBtn.style.fontSize = '10px';
+        deleteBtn.style.padding = '1px 5px';
+        deleteBtn.style.color = '#666';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = 'Delete task';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                const resp = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    // Grab header BEFORE removing row from DOM (closest won't work after removal)
+                    const hdr = row.closest('.entity-modal-section')?.querySelector('.entity-modal-section-header');
+                    row.remove();
+                    // Update header count
+                    const count = taskList.querySelectorAll('.entity-task-row').length;
+                    if (hdr) hdr.textContent = `Tasks (${count})`;
+                    // Show empty placeholder if no tasks remain
+                    if (count === 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'muted-text';
+                        empty.style.padding = '8px 0';
+                        empty.textContent = 'No tasks yet.';
+                        empty.id = 'entity-tasks-empty';
+                        taskList.appendChild(empty);
+                    }
+                }
+            } catch (err) {
+                console.error('[EntityModal] Failed to delete task:', err);
+            }
+        });
+        row.appendChild(deleteBtn);
+
+        return row;
+    }
+
+    // =========================================================================
+    // RENDER — PHOTOS
+    // =========================================================================
+
+    /**
+     * Render the Photos section — direct entity photo attachments.
+     *
+     * Shows photos in a 3-column grid with thumbnails, captions, and delete buttons.
+     * Includes an "Add Photo" button that triggers a hidden file input.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entityId:  UUID of the entity.
+     *   photos:    Array of photo objects from the API (each has url, caption, id).
+     */
+    _renderPhotos(container, entityId, photos) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = `Photos (${photos.length})`;
+        section.appendChild(header);
+
+        // Photo grid container
+        const grid = document.createElement('div');
+        grid.className = 'entity-photo-grid';
+        grid.id = 'entity-photo-grid';
+
+        if (photos.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted-text';
+            empty.style.padding = '8px 0';
+            empty.textContent = 'No photos yet.';
+            empty.id = 'entity-photos-empty';
+            grid.appendChild(empty);
+        } else {
+            for (const photo of photos) {
+                grid.appendChild(this._createPhotoItem(photo, grid, header));
+            }
+        }
+
+        section.appendChild(grid);
+
+        // Add Photo button + hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const resp = await fetch(`/api/entities/${entityId}/photos`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!resp.ok) return;
+
+                const data = await resp.json();
+
+                // Remove empty placeholder if present
+                const emptyEl = document.getElementById('entity-photos-empty');
+                if (emptyEl) emptyEl.remove();
+
+                // Add new photo to grid
+                grid.appendChild(this._createPhotoItem(data.photo, grid, header));
+
+                // Update header count
+                const count = grid.querySelectorAll('.entity-photo-item').length;
+                header.textContent = `Photos (${count})`;
+            } catch (err) {
+                console.error('[EntityModal] Failed to upload photo:', err);
+            }
+
+            // Reset input so the same file can be re-selected
+            fileInput.value = '';
+        });
+        section.appendChild(fileInput);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'toolbar-btn entity-promote-btn';
+        addBtn.textContent = '+ Add Photo';
+        addBtn.style.marginTop = '8px';
+        addBtn.addEventListener('click', () => fileInput.click());
+        section.appendChild(addBtn);
+
+        container.appendChild(section);
+    }
+
+    /**
+     * Create a single photo grid item.
+     *
+     * Args:
+     *   photo:  Photo object from the API (id, url, caption, filename).
+     *   grid:   Grid container DOM element (for removal on delete).
+     *   header: Section header DOM element (for updating count on delete).
+     *
+     * Returns:
+     *   DOM element for the photo grid item.
+     */
+    _createPhotoItem(photo, grid, header) {
+        const item = document.createElement('div');
+        item.className = 'entity-photo-item';
+        item.dataset.photoId = photo.id;
+
+        const img = document.createElement('img');
+        img.className = 'entity-photo-thumb';
+        img.src = photo.url;
+        img.alt = photo.caption || 'Entity photo';
+        img.loading = 'lazy';
+        // Click → open full image in new tab
+        img.addEventListener('click', () => window.open(photo.url, '_blank'));
+        item.appendChild(img);
+
+        if (photo.caption) {
+            const caption = document.createElement('div');
+            caption.className = 'entity-photo-caption';
+            // SECURITY: textContent only
+            caption.textContent = photo.caption;
+            item.appendChild(caption);
+        }
+
+        // Delete button (visible on hover via CSS)
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'entity-photo-delete';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = 'Delete photo';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                const resp = await fetch(`/api/entity-photos/${photo.id}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    item.remove();
+                    const count = grid.querySelectorAll('.entity-photo-item').length;
+                    header.textContent = `Photos (${count})`;
+                    if (count === 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'muted-text';
+                        empty.style.padding = '8px 0';
+                        empty.textContent = 'No photos yet.';
+                        empty.id = 'entity-photos-empty';
+                        grid.appendChild(empty);
+                    }
+                }
+            } catch (err) {
+                console.error('[EntityModal] Failed to delete photo:', err);
+            }
+        });
+        item.appendChild(deleteBtn);
+
+        return item;
     }
 
     // =========================================================================

@@ -161,6 +161,47 @@ CREATE INDEX IF NOT EXISTS idx_markup_entities_doc
 
 CREATE INDEX IF NOT EXISTS idx_entity_log_entity
     ON entity_log(entity_id, created_at DESC);
+
+-- ==========================================================================
+-- SPRINT 1: QUICK CAPTURE — Tasks & Direct Entity Photos
+-- ==========================================================================
+
+-- Maintenance/work tasks tied to entities.
+-- Status workflow: open → in_progress → done.
+-- Priority levels: low | normal | high | urgent.
+-- Separate from entity_log (append-only observations) — tasks are mutable work items.
+CREATE TABLE IF NOT EXISTS entity_tasks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    title       TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open',
+    priority    TEXT NOT NULL DEFAULT 'normal',
+    due_date    TEXT,
+    notes       TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_tasks_entity
+    ON entity_tasks(entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_entity_tasks_status
+    ON entity_tasks(status);
+
+-- Photos attached directly to entities (not via markup observations).
+-- Enables field capture: snap photo of nameplate/equipment → attach to entity
+-- without requiring a PDF drawing to be open.
+-- filename is a UUID.ext stored in PHOTOS_DIR/entities/ subdirectory.
+CREATE TABLE IF NOT EXISTS entity_photos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    filename    TEXT NOT NULL,
+    caption     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_photos_entity
+    ON entity_photos(entity_id);
 """
 
 
@@ -918,6 +959,270 @@ class Database:
                 (entity_id,)
             ).fetchone()
             return row["cnt"] if row else 0
+
+    # =========================================================================
+    # ENTITY TASK OPERATIONS (Sprint 1 — Quick Capture)
+    # =========================================================================
+
+    def create_task(self, entity_id: str, title: str,
+                    priority: str = 'normal', due_date: str = None,
+                    notes: str = '') -> dict:
+        """
+        Create a maintenance/work task for an entity.
+
+        Args:
+            entity_id: UUID of the parent entity.
+            title:     Task title (e.g., "Replace belt on AHU-3").
+            priority:  low | normal | high | urgent.
+            due_date:  ISO date string or None.
+            notes:     Additional detail text.
+
+        Returns:
+            The created task as a dict.
+        """
+        # SECURITY: validate priority against allowed values
+        allowed_priorities = {'low', 'normal', 'high', 'urgent'}
+        if priority not in allowed_priorities:
+            priority = 'normal'
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO entity_tasks
+                   (entity_id, title, priority, due_date, notes)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (entity_id, title, priority, due_date, notes)
+            )
+            row = conn.execute(
+                "SELECT * FROM entity_tasks WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            return dict(row)
+
+    def get_tasks(self, entity_id: str, status: str = None) -> list:
+        """
+        List tasks for an entity, optionally filtered by status.
+
+        Args:
+            entity_id: UUID of the entity.
+            status:    Optional filter: 'open', 'in_progress', or 'done'.
+
+        Returns:
+            List of task dicts, ordered by created_at DESC.
+        """
+        with self._connect() as conn:
+            if status:
+                rows = conn.execute(
+                    """SELECT * FROM entity_tasks
+                       WHERE entity_id = ? AND status = ?
+                       ORDER BY created_at DESC, id DESC""",
+                    (entity_id, status)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT * FROM entity_tasks
+                       WHERE entity_id = ?
+                       ORDER BY created_at DESC, id DESC""",
+                    (entity_id,)
+                ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_task(self, task_id: int, **fields) -> bool:
+        """
+        Update one or more task fields.
+
+        Allowed fields: title, status, priority, due_date, notes.
+        Always bumps updated_at on change.
+
+        Args:
+            task_id:  Integer PK of the task.
+            **fields: Keyword arguments matching allowed column names.
+
+        Returns:
+            True if a row was updated, False if task_id not found.
+        """
+        allowed = {'title', 'status', 'priority', 'due_date', 'notes'}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+
+        # SECURITY: validate status and priority if provided
+        if 'status' in updates and updates['status'] not in ('open', 'in_progress', 'done'):
+            return False
+        if 'priority' in updates and updates['priority'] not in ('low', 'normal', 'high', 'urgent'):
+            return False
+
+        set_clauses = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [task_id]
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""UPDATE entity_tasks SET {set_clauses}, updated_at = datetime('now')
+                    WHERE id = ?""",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def delete_task(self, task_id: int) -> bool:
+        """
+        Delete a task by ID.
+
+        Args:
+            task_id: Integer PK of the task.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM entity_tasks WHERE id = ?", (task_id,)
+            )
+            return cursor.rowcount > 0
+
+    def get_all_tasks(self, status: str = None) -> list:
+        """
+        Cross-entity task list — used by maintenance reports.
+
+        Joins entities to include tag_number and location for grouping.
+
+        Args:
+            status: Optional filter: 'open', 'in_progress', or 'done'.
+
+        Returns:
+            List of task dicts with entity tag_number and location.
+        """
+        with self._connect() as conn:
+            if status:
+                rows = conn.execute(
+                    """SELECT t.*, e.tag_number, e.location, e.equip_type
+                       FROM entity_tasks t
+                       JOIN entities e ON e.id = t.entity_id
+                       WHERE t.status = ?
+                       ORDER BY t.created_at DESC, t.id DESC""",
+                    (status,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT t.*, e.tag_number, e.location, e.equip_type
+                       FROM entity_tasks t
+                       JOIN entities e ON e.id = t.entity_id
+                       ORDER BY t.created_at DESC, t.id DESC"""
+                ).fetchall()
+            return [dict(row) for row in rows]
+
+    # =========================================================================
+    # ENTITY PHOTO OPERATIONS (Sprint 1 — Quick Capture)
+    # =========================================================================
+
+    def add_entity_photo(self, entity_id: str, filename: str,
+                         caption: str = '') -> dict:
+        """
+        Register a photo attached directly to an entity.
+
+        Photos are stored in PHOTOS_DIR/entities/ — the caller saves the file
+        and passes the stored filename (UUID.ext format).
+
+        Args:
+            entity_id: UUID of the parent entity.
+            filename:  Stored filename (e.g., "abc123.jpg").
+            caption:   Optional caption text.
+
+        Returns:
+            The created photo record as a dict.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO entity_photos (entity_id, filename, caption)
+                   VALUES (?, ?, ?)""",
+                (entity_id, filename, caption)
+            )
+            row = conn.execute(
+                "SELECT * FROM entity_photos WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            return dict(row)
+
+    def get_entity_photos(self, entity_id: str) -> list:
+        """
+        List all photos for an entity, ordered by creation time.
+
+        Args:
+            entity_id: UUID of the entity.
+
+        Returns:
+            List of photo record dicts.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM entity_photos
+                   WHERE entity_id = ?
+                   ORDER BY created_at ASC""",
+                (entity_id,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_entity_photo(self, photo_id: int) -> dict | None:
+        """
+        Delete a photo record and return it (so caller can delete the file).
+
+        Args:
+            photo_id: Integer PK of the photo record.
+
+        Returns:
+            The deleted photo record as a dict, or None if not found.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM entity_photos WHERE id = ?", (photo_id,)
+            ).fetchone()
+            if not row:
+                return None
+            photo = dict(row)
+            conn.execute("DELETE FROM entity_photos WHERE id = ?", (photo_id,))
+            return photo
+
+    def get_maintenance_report_data(self) -> list:
+        """
+        Gather data for the maintenance report: entities grouped by location,
+        each with open tasks and last 3 log entries.
+
+        Returns:
+            List of dicts:
+            [{ entity (dict), open_tasks (list), recent_log (list) }, ...]
+            Sorted by location ASC, then tag_number ASC.
+        """
+        with self._connect() as conn:
+            # Get all entities sorted by location, tag
+            entities = conn.execute(
+                """SELECT * FROM entities
+                   ORDER BY location ASC, tag_number ASC"""
+            ).fetchall()
+
+            results = []
+            for entity in entities:
+                eid = entity["id"]
+
+                # Open tasks for this entity
+                tasks = conn.execute(
+                    """SELECT * FROM entity_tasks
+                       WHERE entity_id = ? AND status != 'done'
+                       ORDER BY priority DESC, created_at DESC""",
+                    (eid,)
+                ).fetchall()
+
+                # Last 3 log entries
+                logs = conn.execute(
+                    """SELECT * FROM entity_log
+                       WHERE entity_id = ?
+                       ORDER BY created_at DESC, id DESC
+                       LIMIT 3""",
+                    (eid,)
+                ).fetchall()
+
+                results.append({
+                    "entity": dict(entity),
+                    "open_tasks": [dict(t) for t in tasks],
+                    "recent_log": [dict(l) for l in logs],
+                })
+
+            return results
 
     # =========================================================================
     # GLOBAL SEARCH

@@ -68,6 +68,11 @@ TEMP_DIR = DATA_DIR / "temp"
 PHOTOS_DIR = DATA_DIR / "photos"
 PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Entity photos subdirectory — direct photo attachments to entities (Sprint 1).
+# Under PHOTOS_DIR so the existing StaticFiles mount at /data/photos/ serves them.
+ENTITY_PHOTOS_DIR = PHOTOS_DIR / "entities"
+ENTITY_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+
 # Maximum upload size: 200MB (large-format construction drawings can be big)
 MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 
@@ -2743,6 +2748,291 @@ async def detect_tags(doc_id: int, page_number: int):
                 })
 
     return JSONResponse({"tags": found_tags})
+
+
+# =============================================================================
+# SPRINT 1: QUICK CAPTURE — Task & Entity Photo Routes
+# =============================================================================
+
+# ---- Entity Tasks ----
+
+@app.post("/api/entities/{entity_id}/tasks")
+async def create_entity_task(entity_id: str, request: Request):
+    """
+    Create a maintenance/work task for an entity.
+
+    Body:
+        { title, priority?, due_date?, notes? }
+
+    Returns:
+        201: { task: {...} }
+    """
+    if not db.get_entity(entity_id):
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    body = await request.json()
+
+    # SECURITY: validate and sanitize inputs
+    title = str(body.get("title", "")).strip()[:500]
+    if not title:
+        raise HTTPException(status_code=400, detail="title is required")
+
+    priority = str(body.get("priority", "normal")).strip()
+    due_date = body.get("due_date")
+    if due_date:
+        due_date = str(due_date).strip()[:20]
+    notes = str(body.get("notes", "")).strip()[:2000]
+
+    task = db.create_task(entity_id, title, priority=priority,
+                          due_date=due_date, notes=notes)
+    return JSONResponse(status_code=201, content={"task": task})
+
+
+@app.get("/api/entities/{entity_id}/tasks")
+async def get_entity_tasks(entity_id: str, request: Request):
+    """
+    List tasks for an entity, optionally filtered by status query param.
+
+    Query params:
+        ?status=open|in_progress|done  (optional)
+
+    Returns:
+        { tasks: [...] }
+    """
+    if not db.get_entity(entity_id):
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    status_filter = request.query_params.get("status")
+    tasks = db.get_tasks(entity_id, status=status_filter)
+    return JSONResponse({"tasks": tasks})
+
+
+@app.put("/api/tasks/{task_id}")
+async def update_task(task_id: int, request: Request):
+    """
+    Update a task's fields (title, status, priority, due_date, notes).
+
+    Body:
+        { title?, status?, priority?, due_date?, notes? }
+
+    Returns:
+        { updated: true }  or  404
+    """
+    body = await request.json()
+
+    # SECURITY: sanitize string fields
+    fields = {}
+    if "title" in body:
+        fields["title"] = str(body["title"]).strip()[:500]
+    if "status" in body:
+        fields["status"] = str(body["status"]).strip()
+    if "priority" in body:
+        fields["priority"] = str(body["priority"]).strip()
+    if "due_date" in body:
+        val = body["due_date"]
+        fields["due_date"] = str(val).strip()[:20] if val else None
+    if "notes" in body:
+        fields["notes"] = str(body["notes"]).strip()[:2000]
+
+    if not fields:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    success = db.update_task(task_id, **fields)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return JSONResponse({"updated": True})
+
+
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(task_id: int):
+    """
+    Delete a task.
+
+    Returns:
+        { deleted: true }  or  404
+    """
+    success = db.delete_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return JSONResponse({"deleted": True})
+
+
+@app.get("/api/tasks")
+async def get_all_tasks(request: Request):
+    """
+    Cross-entity task list — for maintenance report generation.
+
+    Query params:
+        ?status=open|in_progress|done  (optional)
+
+    Returns:
+        { tasks: [...] }  — each task includes entity tag_number and location.
+    """
+    status_filter = request.query_params.get("status")
+    tasks = db.get_all_tasks(status=status_filter)
+    return JSONResponse({"tasks": tasks})
+
+
+# ---- Entity Photos ----
+
+@app.post("/api/entities/{entity_id}/photos")
+async def upload_entity_photo(entity_id: str, file: UploadFile = File(...)):
+    """
+    Upload a photo directly to an entity (not via markup).
+
+    Accepts multipart form upload. Validates file extension.
+    Stores file as UUID.ext in PHOTOS_DIR/entities/.
+
+    Returns:
+        201: { photo: { id, entity_id, filename, caption, created_at, url } }
+    """
+    if not db.get_entity(entity_id):
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # SECURITY: validate file extension
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_PHOTO_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File type not allowed. Allowed: {', '.join(ALLOWED_PHOTO_EXTENSIONS)}"
+        )
+
+    # SECURITY: check file size
+    contents = await file.read()
+    if len(contents) > MAX_PHOTO_SIZE:
+        raise HTTPException(status_code=400, detail="Photo exceeds 20MB limit")
+
+    # Generate unique filename — UUID prevents collisions and path traversal
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    stored_path = ENTITY_PHOTOS_DIR / stored_name
+
+    with open(stored_path, "wb") as f:
+        f.write(contents)
+
+    photo = db.add_entity_photo(entity_id, stored_name)
+    # Add URL for frontend consumption
+    photo["url"] = f"/data/photos/entities/{stored_name}"
+    return JSONResponse(status_code=201, content={"photo": photo})
+
+
+@app.get("/api/entities/{entity_id}/photos")
+async def get_entity_photos(entity_id: str):
+    """
+    List all photos for an entity, with URLs.
+
+    Returns:
+        { photos: [{ id, entity_id, filename, caption, created_at, url }] }
+    """
+    if not db.get_entity(entity_id):
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    photos = db.get_entity_photos(entity_id)
+    # Add URL for each photo
+    for p in photos:
+        p["url"] = f"/data/photos/entities/{p['filename']}"
+    return JSONResponse({"photos": photos})
+
+
+@app.delete("/api/entity-photos/{photo_id}")
+async def delete_entity_photo(photo_id: int):
+    """
+    Delete an entity photo record and its file on disk.
+
+    Returns:
+        { deleted: true }  or  404
+    """
+    photo = db.delete_entity_photo(photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    # Delete the file from disk (best-effort — DB record already removed)
+    file_path = ENTITY_PHOTOS_DIR / photo["filename"]
+    try:
+        if file_path.exists():
+            file_path.unlink()
+    except OSError as e:
+        # Log but don't fail — DB record is already cleaned up
+        print(f"[WARN] Failed to delete entity photo file {file_path}: {e}")
+
+    return JSONResponse({"deleted": True})
+
+
+# ---- Maintenance Report ----
+
+@app.get("/api/maintenance-report")
+async def get_maintenance_report():
+    """
+    Generate a Markdown maintenance report grouped by location.
+
+    Each entity section shows open tasks and last 3 log entries.
+    Designed for copy-paste into email or printing.
+
+    Returns:
+        { report: "# Maintenance Report\\n..." }
+    """
+    data = db.get_maintenance_report_data()
+
+    lines = [
+        "# Maintenance Report",
+        f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}*",
+        "",
+    ]
+
+    if not data:
+        lines.append("No equipment entities in the database.")
+        return JSONResponse({"report": "\n".join(lines)})
+
+    # Group by location
+    locations = {}
+    for item in data:
+        loc = item["entity"]["location"] or "Unspecified Location"
+        if loc not in locations:
+            locations[loc] = []
+        locations[loc].append(item)
+
+    for loc, items in sorted(locations.items()):
+        lines.append(f"## {loc}")
+        lines.append("")
+
+        for item in items:
+            entity = item["entity"]
+            tasks = item["open_tasks"]
+            logs = item["recent_log"]
+
+            lines.append(f"### {entity['tag_number']}")
+            if entity["equip_type"]:
+                lines.append(f"**Type:** {entity['equip_type']}")
+            lines.append("")
+
+            # Open tasks
+            if tasks:
+                lines.append("**Open Tasks:**")
+                for t in tasks:
+                    priority_marker = ""
+                    if t["priority"] == "urgent":
+                        priority_marker = " [URGENT]"
+                    elif t["priority"] == "high":
+                        priority_marker = " [HIGH]"
+                    due = f" (due: {t['due_date']})" if t.get("due_date") else ""
+                    lines.append(f"- [ ] {t['title']}{priority_marker}{due}")
+                lines.append("")
+
+            # Recent log entries
+            if logs:
+                lines.append("**Recent Log:**")
+                for entry in logs:
+                    date = (entry.get("created_at") or "")[:10]
+                    lines.append(f"- {date}: {entry['note']}")
+                lines.append("")
+
+        lines.append("---")
+        lines.append("")
+
+    return JSONResponse({"report": "\n".join(lines)})
 
 
 # =============================================================================

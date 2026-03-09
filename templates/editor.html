@@ -438,6 +438,12 @@
              For Stage 3A, this tab exists but shows a placeholder until 3B is implemented. -->
         <div id="tab-equipment" class="tab-content">
             <div class="equip-toolbar">
+                <div class="equip-toolbar-actions">
+                    <button id="equip-btn-add" class="toolbar-btn equip-toolbar-btn"
+                            title="Quick Capture (Q)">+ Add</button>
+                    <button id="equip-btn-report" class="toolbar-btn equip-toolbar-btn"
+                            title="Generate maintenance report">Report</button>
+                </div>
                 <input type="text" id="equip-search" placeholder="Search tag…"
                        class="panel-search-input" autocomplete="off">
                 <select id="equip-filter-type" class="panel-filter-select">
@@ -961,6 +967,60 @@
             <button id="stamp-cancel" class="toolbar-btn">Cancel</button>
             <button id="stamp-create" class="toolbar-btn modal-btn-primary">Add Stamp</button>
         </div>
+    </div>
+</div>
+
+<!-- Quick Capture panel — slide-in from right for rapid equipment entry.
+     Triggered by Q hotkey or Equipment tab "+" button.
+     quick-capture.js manages open/close/save lifecycle. -->
+<div id="quick-capture-panel" class="quick-capture-panel" style="display:none;"
+     role="dialog" aria-label="Quick Capture">
+    <div class="qc-header">
+        <span class="qc-title">Quick Capture</span>
+        <button id="qc-close" class="toolbar-btn" title="Close (Esc)">✕</button>
+    </div>
+    <div class="qc-body">
+        <label class="qc-label" for="qc-tag">Tag Number *</label>
+        <input type="text" id="qc-tag" class="qc-input" placeholder="e.g. AHU-3"
+               autocomplete="off" maxlength="128">
+        <div id="qc-tag-conflict" class="qc-conflict" style="display:none;"></div>
+
+        <label class="qc-label" for="qc-type">Equipment Type</label>
+        <select id="qc-type" class="qc-select">
+            <option value="">Select type…</option>
+            <option value="AHU">AHU</option>
+            <option value="RTU">RTU</option>
+            <option value="FCU">FCU</option>
+            <option value="VAV">VAV</option>
+            <option value="Chiller">Chiller</option>
+            <option value="Boiler">Boiler</option>
+            <option value="Pump">Pump</option>
+            <option value="VFD">VFD</option>
+            <option value="Damper">Damper</option>
+            <option value="Sensor">Sensor</option>
+            <option value="Other">Other</option>
+        </select>
+
+        <label class="qc-label" for="qc-location">Location</label>
+        <input type="text" id="qc-location" class="qc-input"
+               placeholder="e.g. Bldg-A / Floor-2 / MER"
+               autocomplete="off" maxlength="256">
+
+        <label class="qc-label" for="qc-note">Note</label>
+        <textarea id="qc-note" class="qc-input qc-textarea"
+                  placeholder="Initial observation…" maxlength="2000"></textarea>
+
+        <label class="qc-label">Photo (optional)</label>
+        <input type="file" id="qc-photo-input" accept="image/*" style="display:none;">
+        <button id="qc-photo-btn" class="toolbar-btn qc-photo-btn">Add Photo</button>
+        <div id="qc-photo-preview" class="qc-photo-preview" style="display:none;">
+            <img id="qc-photo-thumb" class="qc-photo-thumb" alt="Preview">
+            <button id="qc-photo-remove" class="toolbar-btn qc-photo-remove">✕</button>
+        </div>
+    </div>
+    <div class="qc-footer">
+        <div id="qc-status" class="qc-status"></div>
+        <button id="qc-save" class="toolbar-btn entity-promote-btn">Save</button>
     </div>
 </div>
 

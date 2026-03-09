@@ -31,6 +31,7 @@ import { RFIGenerator } from './rfi-generator.js';
 import { StampManager, ToolPresetsPanel, SequenceManager } from './tools-panel.js';
 import { EntityManager } from './entity-manager.js';
 import { EntityModal } from './entity-modal.js';
+import { QuickCapture } from './quick-capture.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -64,6 +65,8 @@ class App {
         // Stage 3B: Equipment tab list + entity detail modal
         this.entityManager = new EntityManager();
         this.entityModal = new EntityModal();
+        // Sprint 1: Quick Capture panel for rapid field equipment entry
+        this.quickCapture = new QuickCapture();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -322,6 +325,11 @@ class App {
         // entityManager.refresh() when the user clicks the Equipment tab.
         if (!this.markupList.entityManager) {
             this.markupList.entityManager = this.entityManager;
+        }
+
+        // Initialize Quick Capture panel — once per app lifetime (binds buttons + keyboard)
+        if (!this.quickCapture._initialized) {
+            this.quickCapture.init(this.entityManager);
         }
 
         // Initialize review brief panel — once per app lifetime; docId updated per document.

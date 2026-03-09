@@ -627,6 +627,13 @@ export class Toolbar {
                     }
                     break;
 
+                // Q: Quick Capture — opens entity capture panel (not a drawing tool)
+                case 'q':
+                    if (!e.ctrlKey && window.app && window.app.quickCapture) {
+                        window.app.quickCapture.open();
+                    }
+                    break;
+
                 // Delete/Backspace: remove selected object
                 case 'Delete':
                 case 'Backspace':
