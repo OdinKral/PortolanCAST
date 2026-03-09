@@ -482,9 +482,9 @@ async function run() {
 
         // Open the entity modal for our task test entity
         await page.evaluate(async (entityId) => {
-            window.app.entityModal.open(entityId);
+            await window.app.entityModal.open(entityId);
         }, taskEntityId);
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(200);
 
         // 5.1 Modal shows Tasks section with task list
         const hasTaskSection = await page.evaluate(() => {
@@ -584,9 +584,9 @@ async function run() {
 
         // Open the entity modal for our photo test entity
         await page.evaluate(async (entityId) => {
-            window.app.entityModal.open(entityId);
+            await window.app.entityModal.open(entityId);
         }, photoEntityId);
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(200);
 
         // 6.1 Modal shows Photos section with grid
         const hasPhotoSection = await page.evaluate(() => {
@@ -615,7 +615,13 @@ async function run() {
             const btn = document.querySelector('.entity-photo-delete');
             if (btn) btn.click();
         });
-        await page.waitForTimeout(500);
+        // Wait for the async delete handler to remove the DOM element
+        // (the click triggers fetch → item.remove(), which is async)
+        try {
+            await page.waitForFunction((before) => {
+                return document.querySelectorAll('.entity-photo-item').length < before;
+            }, photosBeforeDel, { timeout: 5000 });
+        } catch (_) { /* timeout — assert below will catch it */ }
         const photosAfterDel = await page.evaluate(() => {
             return document.querySelectorAll('.entity-photo-item').length;
         });

@@ -634,6 +634,13 @@ export class Toolbar {
                     }
                     break;
 
+                // M: Equipment Marker — click-to-place entity pin on drawing
+                case 'm':
+                    if (!e.ctrlKey) {
+                        this.setTool('equipment-marker');
+                    }
+                    break;
+
                 // Delete/Backspace: remove selected object
                 case 'Delete':
                 case 'Backspace':
@@ -797,6 +804,16 @@ export class Toolbar {
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 document.getElementById('image-overlay-input').click();
+                break;
+
+            case 'equipment-marker':
+                // Click-to-place equipment pin: places a circle+label Group on the
+                // canvas, then opens the Equipment Marker panel for entity linking.
+                // One-shot: reverts to select after placement.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initEquipmentMarkerPlacement();
                 break;
 
             case 'text':
@@ -2864,5 +2881,97 @@ export class Toolbar {
         };
 
         textItem.on('editing:exited', onEditingExited);
+    }
+
+    // =========================================================================
+    // EQUIPMENT MARKER PLACEMENT (click-to-place pin + open link panel)
+    // =========================================================================
+
+    /**
+     * Set up a one-shot click handler for placing an equipment marker pin.
+     *
+     * Builds a fabric.Group with a colored circle and "..." placeholder label,
+     * stamps it with markupType 'equipment-marker', then opens the Equipment
+     * Marker panel for entity search/linking. Reverts to select after placement.
+     *
+     * Visual design follows the Count marker pattern (_buildCountMarker):
+     * circle with white stroke + centered text label below.
+     */
+    _initEquipmentMarkerPlacement() {
+        const fc = this.canvas.fabricCanvas;
+        const MARKER_COLOR = MARKUP_COLORS['equipment-marker'] || '#c678dd';
+        const RADIUS = 10;       // Pin head radius in natural coords
+        const LABEL_OFFSET = 4;  // Gap between circle bottom and label top
+
+        const onMouseDown = (opt) => {
+            // Ignore clicks on existing objects — don't place a marker over a markup
+            if (opt.target) return;
+
+            const pointer = fc.getPointer(opt.e);
+
+            // Pin head circle
+            const circle = new fabric.Circle({
+                left: pointer.x - RADIUS,
+                top: pointer.y - RADIUS,
+                radius: RADIUS,
+                fill: MARKER_COLOR,
+                stroke: '#ffffff',
+                strokeWidth: 1.5,
+                selectable: false,
+                evented: false,
+            });
+
+            // Placeholder label — will be updated to entity tag_number by the panel
+            const label = new fabric.IText('...', {
+                left: pointer.x,
+                top: pointer.y + RADIUS + LABEL_OFFSET,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 10,
+                fontWeight: 'bold',
+                fill: '#ffffff',
+                stroke: null,
+                strokeWidth: 0,
+                selectable: false,
+                editable: false,
+                originX: 'center',
+                originY: 'top',
+                backgroundColor: 'rgba(30, 30, 46, 0.8)',
+                padding: 2,
+            });
+
+            const group = new fabric.Group([circle, label], {
+                selectable: true,
+                subTargetCheck: false,
+            });
+
+            fc.add(group);
+
+            // Stamp semantic metadata — preserveColor keeps our purple fill
+            this.canvas.stampDefaults(group, {
+                markupType: 'equipment-marker',
+                preserveColor: true,
+            });
+
+            fc.renderAll();
+
+            // Open the Equipment Marker panel for entity linking
+            if (window.app && window.app.equipmentMarkerPanel) {
+                window.app.equipmentMarkerPanel.open(group);
+            }
+
+            // One-shot: clean up handler and revert to select tool
+            this._cleanupShapeDrawing();
+            this.activeTool = 'select';
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === 'select');
+            });
+        };
+
+        fc.on('mouse:down', onMouseDown);
+
+        // Store for cleanup (same _shapeHandlers mechanism as all other tools)
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+        };
     }
 }

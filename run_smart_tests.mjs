@@ -89,6 +89,7 @@ const DEPENDENCY_MAP = {
         'test_phase4a.mjs', 'test_phase5_layers.mjs',
         'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
         'test_toolchest.mjs', 'test_nodecast.mjs', 'test_image_overlay.mjs',
+        'test_equipment_marker.mjs',
     ],
     'static/js/toolbar.js': [
         'test_shapes.mjs', 'test_phase1_tools.mjs', 'test_phase1_polish.mjs',
@@ -96,6 +97,7 @@ const DEPENDENCY_MAP = {
         'test_l2_toolbar_custom.mjs', 'test_l3_mode_bar.mjs',
         'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
         'test_image_overlay.mjs', 'test_sprint1_capture.mjs',
+        'test_equipment_marker.mjs',
     ],
     'static/js/properties.js': [
         'test_properties.mjs', 'test_phase1_tools.mjs', 'test_phase2.mjs',
@@ -135,6 +137,9 @@ const DEPENDENCY_MAP = {
     ],
     'static/js/entity-modal.js': [
         'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+    ],
+    'static/js/equipment-marker.js': [
+        'test_equipment_marker.mjs',
     ],
     'static/js/search.js': [
         'test_search.mjs',

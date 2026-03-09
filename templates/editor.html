@@ -135,6 +135,9 @@
                 <button class="toolbar-btn tool-btn" data-tool="image-overlay" title="Image Overlay (I)">
                     <span class="icon">&#128444;</span> Image
                 </button>
+                <button class="toolbar-btn tool-btn" data-tool="equipment-marker" title="Equipment Marker (M)">
+                    <span class="icon">&#128205;</span> Marker
+                </button>
             </div>
         </div>
 
@@ -1021,6 +1024,55 @@
     <div class="qc-footer">
         <div id="qc-status" class="qc-status"></div>
         <button id="qc-save" class="toolbar-btn entity-promote-btn">Save</button>
+    </div>
+</div>
+
+<!-- Equipment Marker panel — slide-in from right for linking a canvas pin to an entity.
+     Triggered by M hotkey click-to-place flow.
+     equipment-marker.js manages open/close/search/link lifecycle. -->
+<div id="em-panel" class="em-panel" style="display:none;"
+     role="dialog" aria-label="Link Equipment">
+    <div class="em-header">
+        <span class="em-title">Link Equipment</span>
+        <button id="em-close" class="toolbar-btn" title="Close (Esc)">✕</button>
+    </div>
+    <div class="em-body">
+        <label class="em-label" for="em-search">Search entities</label>
+        <input type="text" id="em-search" class="em-input"
+               placeholder="Type to filter by tag or type…"
+               autocomplete="off" maxlength="128">
+        <div id="em-results" class="em-results">
+            <!-- Populated dynamically by equipment-marker.js -->
+        </div>
+
+        <div class="em-divider">
+            <span class="em-divider-text">or create new</span>
+        </div>
+
+        <label class="em-label" for="em-new-tag">Tag Number *</label>
+        <input type="text" id="em-new-tag" class="em-input"
+               placeholder="e.g. AHU-3" autocomplete="off" maxlength="128">
+
+        <label class="em-label" for="em-new-type">Equipment Type</label>
+        <select id="em-new-type" class="em-select">
+            <option value="">Select type…</option>
+            <option value="AHU">AHU</option>
+            <option value="RTU">RTU</option>
+            <option value="FCU">FCU</option>
+            <option value="VAV">VAV</option>
+            <option value="Chiller">Chiller</option>
+            <option value="Boiler">Boiler</option>
+            <option value="Pump">Pump</option>
+            <option value="VFD">VFD</option>
+            <option value="Damper">Damper</option>
+            <option value="Sensor">Sensor</option>
+            <option value="Other">Other</option>
+        </select>
+
+        <button id="em-create-btn" class="toolbar-btn entity-promote-btn em-create-btn">Create &amp; Link</button>
+    </div>
+    <div class="em-footer">
+        <div id="em-status" class="em-status"></div>
     </div>
 </div>
 

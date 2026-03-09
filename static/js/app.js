@@ -32,6 +32,7 @@ import { StampManager, ToolPresetsPanel, SequenceManager } from './tools-panel.j
 import { EntityManager } from './entity-manager.js';
 import { EntityModal } from './entity-modal.js';
 import { QuickCapture } from './quick-capture.js';
+import { EquipmentMarkerPanel } from './equipment-marker.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -67,6 +68,8 @@ class App {
         this.entityModal = new EntityModal();
         // Sprint 1: Quick Capture panel for rapid field equipment entry
         this.quickCapture = new QuickCapture();
+        // Equipment Marker: click-to-place entity pin on drawings
+        this.equipmentMarkerPanel = new EquipmentMarkerPanel();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -330,6 +333,16 @@ class App {
         // Initialize Quick Capture panel — once per app lifetime (binds buttons + keyboard)
         if (!this.quickCapture._initialized) {
             this.quickCapture.init(this.entityManager);
+        }
+
+        // Initialize Equipment Marker panel — once per app lifetime (binds buttons + keyboard).
+        // docId and canvas update on each document load for correct API targeting.
+        if (!this.equipmentMarkerPanel._initialized) {
+            this.equipmentMarkerPanel.init(info.id, this.canvas);
+        } else {
+            // Already initialized — just update docId and canvas for the new document
+            this.equipmentMarkerPanel._docId = info.id;
+            this.equipmentMarkerPanel._canvas = this.canvas;
         }
 
         // Initialize review brief panel — once per app lifetime; docId updated per document.

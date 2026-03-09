@@ -71,6 +71,9 @@ const CUSTOM_PROPERTIES = [
     // Q2: callout group identification — survives save/load so double-click
     // editing is always available without relying on child object inspection.
     '_isCallout',
+    // Equipment marker: links a visual pin on the drawing to a DB entity ID.
+    // Set when the user picks/creates an entity in the Equipment Marker panel.
+    'entityId',
 ];
 
 /**
@@ -93,6 +96,8 @@ export const MARKUP_COLORS = {
     // Image overlays carry no stroke — transparent keeps stampDefaults() safe
     // if preserveColor is ever omitted by a future caller.
     'image-overlay': 'transparent',
+    // Equipment marker pin — purple distinguishes entity pins from markup annotations
+    'equipment-marker': '#c678dd',
 };
 
 /**

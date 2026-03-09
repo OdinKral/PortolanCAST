@@ -259,10 +259,10 @@ async function run() {
         console.log('\n  -- Group 2: Entity Modal — Display --');
 
         // Open modal for entity 1
-        await page.evaluate((id) => {
-            window.app.entityModal.open(id);
+        await page.evaluate(async (id) => {
+            await window.app.entityModal.open(id);
         }, entityIdForModal);
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(200);
 
         // 2.1 Modal overlay appears with correct z-index
         const modalStyle = await page.evaluate(() => {
@@ -322,10 +322,10 @@ async function run() {
         assert(modalHidden, '2.7 Close button dismisses modal');
 
         // 2.8 Escape key dismisses modal
-        await page.evaluate((id) => {
-            window.app.entityModal.open(id);
+        await page.evaluate(async (id) => {
+            await window.app.entityModal.open(id);
         }, entityIdForModal);
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(200);
         await page.keyboard.press('Escape');
         await page.waitForTimeout(200);
         const modalHiddenEsc = await page.evaluate(() => {
@@ -341,10 +341,10 @@ async function run() {
 
         // Open modal for entity 2
         const entityId2 = e2.body.id;
-        await page.evaluate((id) => {
-            window.app.entityModal.open(id);
+        await page.evaluate(async (id) => {
+            await window.app.entityModal.open(id);
         }, entityId2);
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(200);
 
         // 3.1 Edit equip_type field and save
         await page.evaluate(() => {
@@ -352,13 +352,18 @@ async function run() {
             const typeInput = Array.from(inputs).find(i => i.dataset.field === 'equip_type');
             if (typeInput) typeInput.value = 'RTU';
         });
-        // Click Save button
+        // Click Save button and wait for status to show "Saved"
         await page.evaluate(() => {
             const btns = document.querySelectorAll('.entity-modal-body .entity-promote-btn');
             const saveBtn = Array.from(btns).find(b => b.textContent === 'Save');
             if (saveBtn) saveBtn.click();
         });
-        await page.waitForTimeout(500);
+        try {
+            await page.waitForFunction(
+                () => document.querySelector('.entity-save-status')?.textContent === 'Saved',
+                { timeout: 5000 }
+            );
+        } catch (_) { /* timeout */ }
         // Verify via API
         const updatedEntity = await page.evaluate(async (id) => {
             const r = await fetch(`/api/entities/${id}`);
@@ -377,7 +382,12 @@ async function run() {
             const saveBtn = Array.from(btns).find(b => b.textContent === 'Save');
             if (saveBtn) saveBtn.click();
         });
-        await page.waitForTimeout(500);
+        try {
+            await page.waitForFunction(
+                () => document.querySelector('.entity-save-status')?.textContent === 'Saved',
+                { timeout: 5000 }
+            );
+        } catch (_) { /* timeout */ }
         const updatedEntity2 = await page.evaluate(async (id) => {
             const r = await fetch(`/api/entities/${id}`);
             return (await r.json()).entity;
@@ -387,8 +397,8 @@ async function run() {
         // Close and reopen to test log (fresh modal state)
         await page.evaluate(() => document.getElementById('entity-modal-close')?.click());
         await page.waitForTimeout(200);
-        await page.evaluate((id) => window.app.entityModal.open(id), entityId2);
-        await page.waitForTimeout(500);
+        await page.evaluate(async (id) => await window.app.entityModal.open(id), entityId2);
+        await page.waitForTimeout(200);
 
         // 3.3 Add log entry → appears at top of log list
         await page.evaluate(() => {
@@ -400,7 +410,13 @@ async function run() {
             const addBtn = Array.from(btns).find(b => b.textContent === 'Add');
             if (addBtn) addBtn.click();
         });
-        await page.waitForTimeout(500);
+        // Wait for log entry to appear (async POST → prepend entry to DOM)
+        try {
+            await page.waitForFunction(
+                () => document.querySelectorAll('#entity-log-list .entity-log-entry').length > 0,
+                { timeout: 5000 }
+            );
+        } catch (_) { /* timeout = entry never appeared */ }
         const logEntries = await page.evaluate(() => {
             const entries = document.querySelectorAll('#entity-log-list .entity-log-entry');
             return entries.length;
@@ -432,7 +448,13 @@ async function run() {
             const saveBtn = Array.from(btns).find(b => b.textContent === 'Save');
             if (saveBtn) saveBtn.click();
         });
-        await page.waitForTimeout(500);
+        // Wait for save status to populate (async PUT → 409 → sets textContent)
+        try {
+            await page.waitForFunction(
+                () => (document.querySelector('.entity-save-status')?.textContent || '').length > 0,
+                { timeout: 5000 }
+            );
+        } catch (_) { /* timeout = status never populated */ }
         const errorMsg = await page.evaluate(() => {
             const status = document.querySelector('.entity-save-status');
             return status?.textContent || '';
@@ -450,7 +472,13 @@ async function run() {
             const saveBtn = Array.from(btns).find(b => b.textContent === 'Save');
             if (saveBtn) saveBtn.click();
         });
-        await page.waitForTimeout(300);
+        // Wait for save to complete (status changes from error to "Saved")
+        try {
+            await page.waitForFunction(
+                () => document.querySelector('.entity-save-status')?.textContent === 'Saved',
+                { timeout: 5000 }
+            );
+        } catch (_) { /* timeout */ }
 
         // 3.7 Empty note rejected (no blank log entries)
         await page.evaluate(() => {
@@ -482,8 +510,8 @@ async function run() {
         // Don't add to createdEntityIds — we're about to delete it
 
         // Open modal for the disposable entity
-        await page.evaluate((id) => window.app.entityModal.open(id), delId);
-        await page.waitForTimeout(500);
+        await page.evaluate(async (id) => await window.app.entityModal.open(id), delId);
+        await page.waitForTimeout(200);
 
         // Override confirm() to auto-accept
         await page.evaluate(() => { window._origConfirm = window.confirm; window.confirm = () => true; });
@@ -563,8 +591,8 @@ async function run() {
         const markupId4_3 = `test-obs-${RUN_TAG}`;
         await apiLinkMarkup(page, DOC_ID, markupId4_3, entityIdForModal, 0);
 
-        await page.evaluate((id) => window.app.entityModal.open(id), entityIdForModal);
-        await page.waitForTimeout(500);
+        await page.evaluate(async (id) => await window.app.entityModal.open(id), entityIdForModal);
+        await page.waitForTimeout(200);
         const obsCount = await page.evaluate(() => {
             return document.querySelectorAll('.entity-markup-row').length;
         });
@@ -605,8 +633,8 @@ async function run() {
 
         // 4.6 Equipment tab refreshes after entity edit in modal
         // Edit entity 3's type
-        await page.evaluate((id) => window.app.entityModal.open(id), e3.body.id);
-        await page.waitForTimeout(500);
+        await page.evaluate(async (id) => await window.app.entityModal.open(id), e3.body.id);
+        await page.waitForTimeout(200);
         await page.evaluate(() => {
             const inputs = document.querySelectorAll('.entity-fields-table .entity-field-input');
             const typeInput = Array.from(inputs).find(i => i.dataset.field === 'equip_type');
