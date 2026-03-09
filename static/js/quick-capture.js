@@ -267,7 +267,7 @@ export class QuickCapture {
             }
 
             const entityData = await entityResp.json();
-            const entityId = entityData.entity.id;
+            const entityId = entityData.id;
 
             // 2. Add log entry if note provided
             if (note) {

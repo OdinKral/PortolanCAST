@@ -99,7 +99,7 @@ async function run() {
             location: 'Test Building / Floor 1',
         });
         assert(entityResult.status === 201, '1.0 Create test entity for tasks');
-        const taskEntityId = entityResult.body.entity.id;
+        const taskEntityId = entityResult.body.id;
         createdEntityIds.push(taskEntityId);
 
         // 1.1 Create task for entity → 201 + returned task object
@@ -205,7 +205,7 @@ async function run() {
             equip_type: 'Pump',
             location: 'Test Building / Basement',
         });
-        const photoEntityId = photoEntityResult.body.entity.id;
+        const photoEntityId = photoEntityResult.body.id;
         createdEntityIds.push(photoEntityId);
 
         // 2.1 Upload photo to entity → 201 + photo record
@@ -315,7 +315,7 @@ async function run() {
         const rptEntity1 = await apiCreateEntity(page, reportTag1, {
             equip_type: 'AHU', location: 'Report Building / Floor 1',
         });
-        const rptId1 = rptEntity1.body.entity.id;
+        const rptId1 = rptEntity1.body.id;
         createdEntityIds.push(rptId1);
 
         // Add a task and log entry to entity 1
@@ -630,13 +630,23 @@ async function run() {
         assert(photoHeaderHasCount, '6.5 Photos section header includes count');
 
         // 6.6 Empty photos shows placeholder
-        // After deleting all photos, placeholder should appear
+        // Delete any remaining photos so we can verify the empty-state placeholder
+        let remaining = photosAfterDel;
+        while (remaining > 0) {
+            await page.evaluate(() => {
+                const btn = document.querySelector('.entity-photo-delete');
+                if (btn) btn.click();
+            });
+            await page.waitForTimeout(400);
+            remaining = await page.evaluate(() => {
+                return document.querySelectorAll('.entity-photo-item').length;
+            });
+        }
         const emptyPlaceholder = await page.evaluate(() => {
             const el = document.getElementById('entity-photos-empty');
             return el && el.textContent.includes('No photos');
         });
-        // May or may not show if there are still photos from test 2.7
-        assert(emptyPlaceholder || photosAfterDel === 0, '6.6 Empty photos shows placeholder');
+        assert(emptyPlaceholder, '6.6 Empty photos shows placeholder');
 
         // Close modal
         await page.evaluate(() => window.app.entityModal.close());
