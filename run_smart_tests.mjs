@@ -1,0 +1,539 @@
+/**
+ * PortolanCAST — Smart Test Runner
+ *
+ * Purpose:
+ *   Runs only the test suites affected by recent code changes, plus any
+ *   previously-failed suites. Uses git diff to detect changed files, then
+ *   maps them to test suites via a static dependency graph.
+ *
+ * Usage:
+ *   node run_smart_tests.mjs              # changed files since last commit
+ *   node run_smart_tests.mjs --staged     # only staged changes
+ *   node run_smart_tests.mjs --all        # run everything (same as run_tests.mjs)
+ *   node run_smart_tests.mjs --retry      # re-run only previously failed suites
+ *   node run_smart_tests.mjs --since HEAD~3  # changes in last 3 commits
+ *
+ * How it works:
+ *   1. Reads git diff to find changed source files
+ *   2. Looks up each file in DEPENDENCY_MAP → collects affected test suites
+ *   3. Loads .test_failures.json (if exists) → adds previously-failed suites
+ *   4. Deduplicates and runs only the targeted suites
+ *   5. Saves failures to .test_failures.json for next --retry run
+ *
+ * The full runner (run_tests.mjs) is still available for CI / full regression.
+ *
+ * Author: PortolanCAST
+ * Version: 1.0.0
+ * Date: 2026-03-09
+ */
+
+import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+
+// =============================================================================
+// DEPENDENCY MAP: source file → test suites that exercise it
+// =============================================================================
+// Key: path relative to project root (supports prefix matching for directories)
+// Value: array of test suite filenames
+//
+// Design: when a source file changes, we run every test suite that could be
+// affected. The map is intentionally broad — false positives (running an extra
+// suite) are cheap; false negatives (missing a broken suite) are expensive.
+// =============================================================================
+
+const DEPENDENCY_MAP = {
+    // ── Backend ─────────────────────────────────────────────────────────
+    'db.py': [
+        // DB schema/methods underpin almost everything, but these suites
+        // exercise DB-heavy features directly
+        'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+        'test_phase2.mjs', 'test_phase5_layers.mjs', 'test_bundle.mjs',
+        'test_photos.mjs', 'test_brief_tags.mjs', 'test_search.mjs',
+        'test_stage3a.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+        'test_nodecast.mjs', 'test_obsidian_export.mjs',
+    ],
+    'main.py': [
+        // API routes — broad blast radius. Run core + feature suites.
+        'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+        'test_phase1_tools.mjs', 'test_phase2.mjs',
+        'test_phase3a.mjs', 'test_phase3b.mjs',
+        'test_phase4a.mjs', 'test_phase4b.mjs', 'test_phase4c.mjs',
+        'test_phase5_layers.mjs', 'test_bundle.mjs',
+        'test_photos.mjs', 'test_search.mjs', 'test_brief_tags.mjs',
+        'test_rfi_generator.mjs', 'test_health_monitor.mjs',
+        'test_stage3a.mjs', 'test_stage3b.mjs',
+        'test_ocr_text.mjs', 'test_image_overlay.mjs',
+        'test_nodecast.mjs', 'test_obsidian_export.mjs',
+        'test_sprint1_capture.mjs',
+    ],
+    'pdf_engine.py': [
+        'test_ocr_text.mjs', 'test_phase2.mjs', 'test_l1_rotation.mjs',
+    ],
+
+    // ── Frontend: Core modules ──────────────────────────────────────────
+    'static/js/app.js': [
+        // App controller initializes everything — run core suites
+        'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+        'test_phase1_tools.mjs', 'test_phase2.mjs',
+        'test_phase3a.mjs', 'test_phase3b.mjs',
+        'test_phase4a.mjs', 'test_phase4b.mjs', 'test_phase4c.mjs',
+        'test_phase5_layers.mjs', 'test_toolchest.mjs',
+        'test_health_monitor.mjs', 'test_stage3b.mjs',
+        'test_sprint1_capture.mjs',
+    ],
+    'static/js/canvas.js': [
+        'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+        'test_phase1_tools.mjs', 'test_phase1_polish.mjs',
+        'test_phase2.mjs', 'test_phase3a.mjs', 'test_phase3b.mjs',
+        'test_color_meaning.mjs', 'test_highlight_color.mjs',
+        'test_phase4a.mjs', 'test_phase5_layers.mjs',
+        'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
+        'test_toolchest.mjs', 'test_nodecast.mjs', 'test_image_overlay.mjs',
+    ],
+    'static/js/toolbar.js': [
+        'test_shapes.mjs', 'test_phase1_tools.mjs', 'test_phase1_polish.mjs',
+        'test_phase2.mjs', 'test_phase3b.mjs',
+        'test_l2_toolbar_custom.mjs', 'test_l3_mode_bar.mjs',
+        'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
+        'test_image_overlay.mjs', 'test_sprint1_capture.mjs',
+    ],
+    'static/js/properties.js': [
+        'test_properties.mjs', 'test_phase1_tools.mjs', 'test_phase2.mjs',
+        'test_color_meaning.mjs', 'test_highlight_color.mjs',
+        'test_photos.mjs', 'test_stage3a.mjs', 'test_stage3b.mjs',
+        'test_sprint1_capture.mjs', 'test_image_overlay.mjs',
+    ],
+    'static/js/markup-list.mjs': [
+        'test_markup_list.mjs', 'test_phase1_tools.mjs', 'test_phase2.mjs',
+        'test_phase4a.mjs', 'test_phase5_layers.mjs',
+        'test_brief_tags.mjs', 'test_image_overlay.mjs',
+    ],
+    'static/js/pdf-viewer.js': [
+        'test_shapes.mjs', 'test_properties.mjs', 'test_phase1_tools.mjs',
+        'test_phase2.mjs', 'test_l1_rotation.mjs', 'test_ocr_text.mjs',
+    ],
+    'static/js/layers.js': [
+        'test_phase5_layers.mjs', 'test_q3_layer_context.mjs',
+        'test_image_overlay.mjs',
+    ],
+    'static/js/measure.js': [
+        'test_phase2.mjs', 'test_phase4a.mjs',
+    ],
+    'static/js/measure-summary.js': [
+        'test_phase4a.mjs',
+    ],
+    'static/js/scale.js': [
+        'test_phase2.mjs',
+    ],
+
+    // ── Frontend: Feature modules ───────────────────────────────────────
+    'static/js/quick-capture.js': [
+        'test_sprint1_capture.mjs',
+    ],
+    'static/js/entity-manager.js': [
+        'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+    ],
+    'static/js/entity-modal.js': [
+        'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+    ],
+    'static/js/search.js': [
+        'test_search.mjs',
+    ],
+    'static/js/review-brief.js': [
+        'test_brief_tags.mjs', 'test_phase4c.mjs',
+    ],
+    'static/js/rfi-generator.js': [
+        'test_rfi_generator.mjs',
+    ],
+    'static/js/page-text.js': [
+        'test_ocr_text.mjs',
+    ],
+    'static/js/node-editor.js': [
+        'test_phase3a.mjs',
+    ],
+    'static/js/tools-panel.js': [
+        'test_toolchest.mjs',
+    ],
+    'static/js/plugins.js': [
+        'test_phase4b.mjs', 'test_phase4c.mjs',
+        'test_health_monitor.mjs', 'test_nodecast.mjs',
+    ],
+    'static/js/plugins/extended-cognition.js': [
+        'test_phase4c.mjs',
+    ],
+    'static/js/plugins/health-monitor.js': [
+        'test_health_monitor.mjs',
+    ],
+    'static/js/plugins/nodecast.js': [
+        'test_nodecast.mjs', 'test_obsidian_export.mjs',
+    ],
+
+    // ── HTML & CSS ──────────────────────────────────────────────────────
+    // editor.html DOM changes can break any browser test — run a broad set
+    'templates/editor.html': [
+        'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+        'test_phase1_tools.mjs', 'test_phase2.mjs',
+        'test_phase4a.mjs', 'test_phase4b.mjs', 'test_phase4c.mjs',
+        'test_phase5_layers.mjs', 'test_bundle.mjs',
+        'test_photos.mjs', 'test_search.mjs', 'test_brief_tags.mjs',
+        'test_rfi_generator.mjs', 'test_health_monitor.mjs',
+        'test_stage3a.mjs', 'test_stage3b.mjs', 'test_ocr_text.mjs',
+        'test_toolchest.mjs', 'test_nodecast.mjs',
+        'test_image_overlay.mjs', 'test_sprint1_capture.mjs',
+    ],
+    // CSS rarely breaks tests, but these suites check visual properties
+    'static/css/style.css': [
+        'test_l1_rotation.mjs', 'test_l2_toolbar_custom.mjs',
+        'test_l3_mode_bar.mjs', 'test_highlight_color.mjs',
+        'test_b3_scroll.mjs',
+    ],
+    'templates/base.html': [
+        'test_shapes.mjs', 'test_properties.mjs',
+    ],
+};
+
+// Complete list of all test files (same order as run_tests.mjs)
+const ALL_TEST_FILES = [
+    'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
+    'test_color_meaning.mjs', 'test_phase1_tools.mjs', 'test_phase1_polish.mjs',
+    'test_phase2.mjs', 'test_phase3a.mjs', 'test_phase3b.mjs',
+    'test_phase4a.mjs', 'test_phase4b.mjs', 'test_phase4c.mjs',
+    'test_phase5_layers.mjs', 'test_bundle.mjs', 'test_photos.mjs',
+    'test_search.mjs', 'test_brief_tags.mjs', 'test_rfi_generator.mjs',
+    'test_highlight_color.mjs', 'test_b3_scroll.mjs',
+    'test_q3_layer_context.mjs', 'test_q1_bundle_naming.mjs',
+    'test_q2_callout_edit.mjs', 'test_l1_rotation.mjs',
+    'test_l2_toolbar_custom.mjs', 'test_l3_mode_bar.mjs',
+    'test_ocr_text.mjs', 'test_polyline.mjs', 'test_arrow.mjs',
+    'test_sticky_note.mjs', 'test_nodecast.mjs', 'test_obsidian_export.mjs',
+    'test_toolchest.mjs', 'test_health_monitor.mjs', 'test_stage3a.mjs',
+    'test_image_overlay.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+];
+
+const FAILURES_FILE = '.test_failures.json';
+
+// =============================================================================
+// CLI ARGUMENT PARSING
+// =============================================================================
+
+const args = process.argv.slice(2);
+const flagAll    = args.includes('--all');
+const flagRetry  = args.includes('--retry');
+const flagStaged = args.includes('--staged');
+const flagHelp   = args.includes('--help') || args.includes('-h');
+
+// --since HEAD~N: compare against a specific ref instead of HEAD
+const sinceIdx = args.indexOf('--since');
+const sinceRef = sinceIdx !== -1 ? args[sinceIdx + 1] : null;
+
+if (flagHelp) {
+    console.log(`
+PortolanCAST — Smart Test Runner
+
+Usage:
+  node run_smart_tests.mjs              Run tests affected by uncommitted changes
+  node run_smart_tests.mjs --staged     Run tests affected by staged changes only
+  node run_smart_tests.mjs --since REF  Run tests affected by changes since REF
+                                        (e.g. --since HEAD~3, --since main)
+  node run_smart_tests.mjs --retry      Re-run only previously failed suites
+  node run_smart_tests.mjs --all        Run all suites (full regression)
+  node run_smart_tests.mjs --help       Show this help
+
+Previously-failed suites are always included automatically.
+Failures are saved to .test_failures.json for the next --retry run.
+`);
+    process.exit(0);
+}
+
+// =============================================================================
+// DETECT CHANGED FILES
+// =============================================================================
+
+/**
+ * Get list of changed files from git.
+ *
+ * Strategy:
+ *   --staged   → git diff --cached --name-only
+ *   --since X  → git diff X --name-only
+ *   default    → git diff HEAD --name-only (staged + unstaged vs last commit)
+ *
+ * Returns: array of file paths relative to repo root
+ */
+function getChangedFiles() {
+    let cmd;
+    if (flagStaged) {
+        cmd = 'git diff --cached --name-only';
+    } else if (sinceRef) {
+        cmd = `git diff ${sinceRef} --name-only`;
+    } else {
+        // Uncommitted changes (staged + unstaged) vs HEAD
+        // Plus untracked test files (in case a new test was added)
+        const tracked = execSync('git diff HEAD --name-only', { encoding: 'utf-8' }).trim();
+        const untracked = execSync('git ls-files --others --exclude-standard', { encoding: 'utf-8' }).trim();
+        const combined = [tracked, untracked].filter(Boolean).join('\n');
+        return combined ? combined.split('\n').filter(Boolean) : [];
+    }
+    const output = execSync(cmd, { encoding: 'utf-8' }).trim();
+    return output ? output.split('\n').filter(Boolean) : [];
+}
+
+// =============================================================================
+// MAP CHANGED FILES → TEST SUITES
+// =============================================================================
+
+/**
+ * Given a list of changed file paths, return the set of test suites to run.
+ *
+ * Logic:
+ *   1. If a test file itself changed → include it directly
+ *   2. If a source file matches a DEPENDENCY_MAP key → include mapped suites
+ *   3. If a changed file matches no map entry → flag it (unknown impact)
+ *
+ * Returns: { suites: Set<string>, reasons: Map<string, string[]> }
+ */
+function mapFilesToSuites(changedFiles) {
+    const suites = new Set();
+    const reasons = new Map(); // suite → [reasons]
+    const unmapped = [];
+
+    for (const file of changedFiles) {
+        // 1. Changed test file → run it directly
+        if (file.startsWith('test_') && file.endsWith('.mjs')) {
+            suites.add(file);
+            addReason(reasons, file, `self-changed`);
+            continue;
+        }
+
+        // 2. Check dependency map (exact match or prefix match)
+        let matched = false;
+        for (const [source, tests] of Object.entries(DEPENDENCY_MAP)) {
+            if (file === source || file.startsWith(source + '/')) {
+                for (const t of tests) {
+                    suites.add(t);
+                    addReason(reasons, t, file);
+                }
+                matched = true;
+            }
+        }
+
+        // 3. Unmapped file — track for reporting but don't panic
+        if (!matched) {
+            unmapped.push(file);
+        }
+    }
+
+    return { suites, reasons, unmapped };
+}
+
+function addReason(map, suite, reason) {
+    if (!map.has(suite)) map.set(suite, []);
+    map.get(suite).push(reason);
+}
+
+// =============================================================================
+// LOAD PREVIOUS FAILURES
+// =============================================================================
+
+function loadPreviousFailures() {
+    try {
+        if (existsSync(FAILURES_FILE)) {
+            const data = JSON.parse(readFileSync(FAILURES_FILE, 'utf-8'));
+            return data.failed || [];
+        }
+    } catch (_) { /* corrupted file — ignore */ }
+    return [];
+}
+
+function saveFailures(failedSuites) {
+    writeFileSync(FAILURES_FILE, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        failed: failedSuites,
+    }, null, 2));
+}
+
+// =============================================================================
+// SUITE RUNNER (reuses run_tests.mjs logic)
+// =============================================================================
+
+function runSuite(file) {
+    try {
+        const output = execSync(`node ${file}`, {
+            encoding: 'utf-8',
+            timeout: 120000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        console.log(output);
+        const match = output.match(/Results:\s*(\d+)\s*passed,\s*(\d+)\s*failed/);
+        if (match) {
+            return { file, passed: +match[1], failed: +match[2], error: false };
+        }
+        // Parseable alt format: "Suite Name: N passed, M failed"
+        const alt = output.match(/(\d+)\s*passed,\s*(\d+)\s*failed/);
+        if (alt) {
+            return { file, passed: +alt[1], failed: +alt[2], error: false };
+        }
+        return { file, passed: 0, failed: 0, error: false, note: 'no parseable results' };
+    } catch (err) {
+        const output = (err.stdout || '') + (err.stderr || '');
+        console.log(output);
+        const match = output.match(/Results:\s*(\d+)\s*passed,\s*(\d+)\s*failed/);
+        if (match) {
+            return { file, passed: +match[1], failed: +match[2], error: false };
+        }
+        const alt = output.match(/(\d+)\s*passed,\s*(\d+)\s*failed/);
+        if (alt) {
+            return { file, passed: +alt[1], failed: +alt[2], error: false };
+        }
+        return { file, passed: 0, failed: 1, error: true, note: 'crashed' };
+    }
+}
+
+// =============================================================================
+// MAIN
+// =============================================================================
+
+console.log('╔══════════════════════════════════════════════════╗');
+console.log('║        PortolanCAST — Smart Test Runner         ║');
+console.log('╚══════════════════════════════════════════════════╝');
+console.log();
+
+let suitesToRun;
+let selectionReasons = new Map();
+
+if (flagAll) {
+    // Full regression — same as run_tests.mjs
+    console.log('  Mode: --all (full regression)');
+    suitesToRun = [...ALL_TEST_FILES];
+} else if (flagRetry) {
+    // Re-run only previous failures
+    const prev = loadPreviousFailures();
+    if (prev.length === 0) {
+        console.log('  Mode: --retry');
+        console.log('  No previous failures found. Nothing to re-run.');
+        console.log('  (Run tests first, or use --all for full regression)');
+        process.exit(0);
+    }
+    console.log(`  Mode: --retry (${prev.length} previously-failed suite(s))`);
+    suitesToRun = prev;
+    for (const s of prev) addReason(selectionReasons, s, 'previous failure');
+} else {
+    // Smart selection: git diff → dependency map → suites
+    const modeLabel = flagStaged ? '--staged' : sinceRef ? `--since ${sinceRef}` : 'uncommitted changes';
+    console.log(`  Mode: smart selection (${modeLabel})`);
+    console.log();
+
+    const changedFiles = getChangedFiles();
+    if (changedFiles.length === 0) {
+        console.log('  No changed files detected. Nothing to test.');
+        console.log('  Use --all for full regression, or --retry for previous failures.');
+        process.exit(0);
+    }
+
+    console.log(`  Changed files (${changedFiles.length}):`);
+    for (const f of changedFiles.slice(0, 20)) {
+        console.log(`    ${f}`);
+    }
+    if (changedFiles.length > 20) {
+        console.log(`    ... and ${changedFiles.length - 20} more`);
+    }
+    console.log();
+
+    const { suites, reasons, unmapped } = mapFilesToSuites(changedFiles);
+    selectionReasons = reasons;
+
+    // Add previously-failed suites
+    const prevFailures = loadPreviousFailures();
+    for (const pf of prevFailures) {
+        if (ALL_TEST_FILES.includes(pf)) {
+            suites.add(pf);
+            addReason(selectionReasons, pf, 'previous failure');
+        }
+    }
+
+    if (suites.size === 0) {
+        console.log('  No test suites affected by these changes.');
+        if (unmapped.length > 0) {
+            console.log(`  (${unmapped.length} changed file(s) not in dependency map)`);
+        }
+        console.log('  Use --all for full regression if unsure.');
+        process.exit(0);
+    }
+
+    // Preserve run order from ALL_TEST_FILES
+    suitesToRun = ALL_TEST_FILES.filter(f => suites.has(f));
+
+    if (unmapped.length > 0) {
+        console.log(`  Note: ${unmapped.length} changed file(s) not in dependency map:`);
+        for (const u of unmapped.slice(0, 5)) {
+            console.log(`    ${u}`);
+        }
+        if (unmapped.length > 5) console.log(`    ... and ${unmapped.length - 5} more`);
+        console.log();
+    }
+}
+
+// Print selection summary
+console.log(`  Selected ${suitesToRun.length} of ${ALL_TEST_FILES.length} suites:`);
+for (const s of suitesToRun) {
+    const why = selectionReasons.get(s);
+    const tag = why ? ` (${[...new Set(why)].join(', ')})` : '';
+    console.log(`    ${s}${tag}`);
+}
+console.log();
+
+// =============================================================================
+// RUN SELECTED SUITES
+// =============================================================================
+
+let totalPassed = 0;
+let totalFailed = 0;
+const results = [];
+const failedSuites = [];
+
+for (const file of suitesToRun) {
+    console.log(`\n${'━'.repeat(50)}`);
+    console.log(`  Running: ${file}`);
+    console.log(`${'━'.repeat(50)}`);
+
+    const result = runSuite(file);
+    results.push(result);
+    totalPassed += result.passed;
+    totalFailed += result.failed;
+
+    if (result.failed > 0 || result.error) {
+        failedSuites.push(file);
+    }
+}
+
+// Save failures for --retry
+saveFailures(failedSuites);
+
+// =============================================================================
+// SUMMARY
+// =============================================================================
+
+console.log(`\n${'═'.repeat(50)}`);
+console.log('  SMART TEST RESULTS');
+console.log(`${'═'.repeat(50)}`);
+console.log();
+
+for (const r of results) {
+    const status = r.failed > 0 || r.error ? 'FAIL' : 'PASS';
+    const icon = status === 'PASS' ? '✓' : '✗';
+    const extra = r.note ? ` (${r.note})` : '';
+    console.log(`  ${icon} ${r.file.padEnd(30)} ${r.passed} passed, ${r.failed} failed${extra}`);
+}
+
+console.log();
+console.log(`  Suites: ${suitesToRun.length} selected, ${failedSuites.length} failed`);
+console.log(`  Tests:  ${totalPassed} passed, ${totalFailed} failed, ${totalPassed + totalFailed} total`);
+console.log(`  Skipped: ${ALL_TEST_FILES.length - suitesToRun.length} suites (not affected)`);
+
+if (failedSuites.length > 0) {
+    console.log();
+    console.log(`  Failures saved → run "node run_smart_tests.mjs --retry" to re-run`);
+}
+
+console.log(`${'═'.repeat(50)}`);
+
+process.exit(totalFailed > 0 ? 1 : 0);
