@@ -99,6 +99,7 @@ export class EntityManager {
 
         // Apply active filters (case-insensitive substring match)
         const searchVal = (document.getElementById('equip-search')?.value || '').trim().toLowerCase();
+        const buildingVal = document.getElementById('equip-filter-building')?.value || '';
         const typeVal = document.getElementById('equip-filter-type')?.value || '';
         const locVal = (document.getElementById('equip-filter-loc')?.value || '').trim().toLowerCase();
 
@@ -109,6 +110,9 @@ export class EntityManager {
                 (e.tag_number || '').toLowerCase().includes(searchVal)
             );
         }
+        if (buildingVal) {
+            filtered = filtered.filter(e => e.building === buildingVal);
+        }
         if (typeVal) {
             filtered = filtered.filter(e => e.equip_type === typeVal);
         }
@@ -118,7 +122,8 @@ export class EntityManager {
             );
         }
 
-        // Populate type filter dropdown with unique values from full list
+        // Populate filter dropdowns with unique values from full list
+        this._populateBuildingDropdown();
         this._populateTypeDropdown();
 
         // Clear existing rows
@@ -147,11 +152,14 @@ export class EntityManager {
             row.className = 'equip-row';
             row.dataset.entityId = entity.id;
 
-            // Tag number
+            // Tag number — prefixed with building if set
             const tag = document.createElement('span');
             tag.className = 'equip-tag';
             // SECURITY: textContent only
-            tag.textContent = entity.tag_number || '—';
+            const displayTag = entity.building
+                ? `${entity.building} / ${entity.tag_number}`
+                : entity.tag_number || '—';
+            tag.textContent = displayTag;
             row.appendChild(tag);
 
             // Equipment type
@@ -185,6 +193,42 @@ export class EntityManager {
             });
 
             listEl.appendChild(row);
+        }
+    }
+
+    /**
+     * Populate the building filter dropdown with unique values from all entities.
+     *
+     * Same pattern as _populateTypeDropdown — deduplication via Set,
+     * preserves current selection, avoids unnecessary DOM rebuilds.
+     */
+    _populateBuildingDropdown() {
+        const select = document.getElementById('equip-filter-building');
+        if (!select) return;
+
+        const currentVal = select.value;
+        const buildings = [...new Set(
+            this._entities
+                .map(e => e.building)
+                .filter(b => b) // skip null/empty
+        )].sort();
+
+        const existing = Array.from(select.options).slice(1).map(o => o.value);
+        if (JSON.stringify(existing) === JSON.stringify(buildings)) return;
+
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+
+        for (const b of buildings) {
+            const opt = document.createElement('option');
+            opt.value = b;
+            opt.textContent = b;
+            select.appendChild(opt);
+        }
+
+        if (buildings.includes(currentVal)) {
+            select.value = currentVal;
         }
     }
 
@@ -240,11 +284,15 @@ export class EntityManager {
      */
     _bindFilters() {
         const searchInput = document.getElementById('equip-search');
+        const buildingSelect = document.getElementById('equip-filter-building');
         const typeSelect = document.getElementById('equip-filter-type');
         const locInput = document.getElementById('equip-filter-loc');
 
         if (searchInput) {
             searchInput.addEventListener('input', () => this._renderList());
+        }
+        if (buildingSelect) {
+            buildingSelect.addEventListener('change', () => this._renderList());
         }
         if (typeSelect) {
             typeSelect.addEventListener('change', () => this._renderList());

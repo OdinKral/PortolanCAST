@@ -117,11 +117,14 @@ export class EntityModal {
             const tasks = tasksData.tasks || [];
             const photos = photosData.photos || [];
 
-            // Render header title
+            // Render header title — show building prefix if set
             const titleEl = document.getElementById('entity-modal-title');
             if (titleEl) {
                 // SECURITY: textContent only
-                titleEl.textContent = entity.tag_number || 'Entity';
+                const titleText = entity.building
+                    ? `${entity.building} / ${entity.tag_number}`
+                    : entity.tag_number || 'Entity';
+                titleEl.textContent = titleText;
             }
 
             // Render modal body sections
@@ -182,6 +185,7 @@ export class EntityModal {
         table.className = 'entity-fields-table';
 
         const fields = [
+            { key: 'building', label: 'Building' },
             { key: 'tag_number', label: 'Tag Number' },
             { key: 'equip_type', label: 'Type' },
             { key: 'model', label: 'Model' },
@@ -273,10 +277,13 @@ export class EntityModal {
             statusEl.textContent = 'Saved';
             statusEl.style.color = '#4caf50';
 
-            // Update modal title if tag changed
+            // Update modal title if tag or building changed
             const titleEl = document.getElementById('entity-modal-title');
             if (titleEl && data.entity) {
-                titleEl.textContent = data.entity.tag_number || 'Entity';
+                const titleText = data.entity.building
+                    ? `${data.entity.building} / ${data.entity.tag_number}`
+                    : data.entity.tag_number || 'Entity';
+                titleEl.textContent = titleText;
             }
 
             // Refresh Equipment tab list to reflect changes

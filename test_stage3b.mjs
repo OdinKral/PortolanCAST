@@ -282,11 +282,11 @@ async function run() {
         );
         assert(modalTitle.includes(tag1.substring(0, 3)), `2.2 Header shows tag: "${modalTitle}"`);
 
-        // 2.3 Fields table shows all 5 editable fields
+        // 2.3 Fields table shows all 6 editable fields (building, tag, type, model, serial, location)
         const fieldCount = await page.evaluate(() =>
             document.querySelectorAll('.entity-fields-table .entity-field-input').length
         );
-        assert(fieldCount === 5, `2.3 Fields table shows ${fieldCount} editable fields`);
+        assert(fieldCount === 6, `2.3 Fields table shows ${fieldCount} editable fields`);
 
         // 2.4 Fields have correct values
         const fieldValues = await page.evaluate(() => {

@@ -16,6 +16,7 @@ Date: 2026-02-15
 """
 
 import json
+import shutil
 import sqlite3
 import os
 from datetime import datetime
@@ -116,18 +117,21 @@ CREATE INDEX IF NOT EXISTS idx_markup_photos_markup_id
 -- ==========================================================================
 
 -- Global equipment entity registry.
--- tag_number is the natural key (PRV-201, AHU-3) — UNIQUE constraint enables
--- merge-on-conflict: INSERT raises IntegrityError, server returns 409 with
--- the existing entity so the frontend can prompt "merge or create new?".
+-- (building, tag_number) is the composite natural key — campus-scale use
+-- means many buildings each have their own AHU-1, FCU-1, etc.
+-- INSERT raises IntegrityError on composite collision; server returns 409
+-- with the existing entity so the frontend can prompt "merge or create new?".
 CREATE TABLE IF NOT EXISTS entities (
     id          TEXT PRIMARY KEY,           -- UUID hex (stable across tag renames)
-    tag_number  TEXT NOT NULL UNIQUE,       -- natural key: "PRV-201", "AHU-3"
+    tag_number  TEXT NOT NULL,              -- natural key: "PRV-201", "AHU-3"
+    building    TEXT NOT NULL DEFAULT '',   -- building scope: "Bldg-A", "Main Campus"
     equip_type  TEXT NOT NULL DEFAULT '',   -- "Pressure Valve", "Air Handler", etc.
     model       TEXT NOT NULL DEFAULT '',   -- manufacturer model string
     serial      TEXT NOT NULL DEFAULT '',   -- serial number (plate data)
-    location    TEXT NOT NULL DEFAULT '',   -- "Bldg-A / Floor-2 / HVAC-1"
+    location    TEXT NOT NULL DEFAULT '',   -- "Floor-2 / MER / HVAC-1"
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(building, tag_number)            -- composite: same tag allowed in different buildings
 );
 
 -- Timestamped maintenance and inspection log entries.
@@ -234,7 +238,8 @@ class Database:
 
     def init(self):
         """
-        Initialize the database — create tables if they don't exist.
+        Initialize the database — create tables if they don't exist,
+        then run any pending migrations.
 
         Called once at application startup. Safe to call multiple times
         (uses CREATE TABLE IF NOT EXISTS).
@@ -244,6 +249,9 @@ class Database:
 
         with self._connect() as conn:
             conn.executescript(SCHEMA_SQL)
+
+        # Run schema migrations for existing databases
+        self._migrate_entities_building_column()
 
     @contextmanager
     def _connect(self):
@@ -268,6 +276,162 @@ class Database:
             raise
         finally:
             conn.close()
+
+    # =========================================================================
+    # SCHEMA MIGRATIONS
+    # =========================================================================
+
+    def _migrate_entities_building_column(self):
+        """
+        Migrate entities table to add 'building' column with composite UNIQUE.
+
+        SQLite cannot alter inline UNIQUE constraints, so we must recreate the
+        table. This migration:
+          1. Checks if the 'building' column already exists (skip if so)
+          2. Creates entities_new with composite UNIQUE(building, tag_number)
+          3. Copies all existing data (building defaults to '')
+          4. Drops the old table and renames the new one
+          5. Recreates indexes and re-enables foreign keys on dependent tables
+
+        Safe to run multiple times — the column check makes it idempotent.
+        """
+        with self._connect() as conn:
+            # Check if 'building' column already exists
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(entities)").fetchall()]
+            if 'building' in columns:
+                return  # Already migrated
+
+            print("[DB] Migrating entities table: adding 'building' column with composite UNIQUE...")
+
+            conn.executescript("""
+                -- Create new table with building column and composite UNIQUE
+                CREATE TABLE entities_new (
+                    id          TEXT PRIMARY KEY,
+                    tag_number  TEXT NOT NULL,
+                    building    TEXT NOT NULL DEFAULT '',
+                    equip_type  TEXT NOT NULL DEFAULT '',
+                    model       TEXT NOT NULL DEFAULT '',
+                    serial      TEXT NOT NULL DEFAULT '',
+                    location    TEXT NOT NULL DEFAULT '',
+                    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(building, tag_number)
+                );
+
+                -- Copy existing data — building defaults to '' for all existing entities
+                INSERT INTO entities_new (id, tag_number, building, equip_type, model, serial, location, created_at, updated_at)
+                    SELECT id, tag_number, '', equip_type, model, serial, location, created_at, updated_at
+                    FROM entities;
+
+                -- Drop old table (CASCADE won't auto-migrate FKs in SQLite, but
+                -- entity_log, entity_tasks, entity_photos, markup_entities all
+                -- reference entities(id) which is unchanged — data is preserved)
+                DROP TABLE entities;
+
+                -- Rename new table to entities
+                ALTER TABLE entities_new RENAME TO entities;
+            """)
+
+            print("[DB] Migration complete: entities table now has 'building' column.")
+
+    # =========================================================================
+    # BACKUP OPERATIONS
+    # =========================================================================
+
+    def backup(self, dest_path: Path = None) -> Path:
+        """
+        Create a crash-consistent backup of the database using SQLite's backup API.
+
+        Uses sqlite3.backup() which handles WAL mode correctly — safe to call
+        while the application is running and serving requests.
+
+        Args:
+            dest_path: Where to write the backup. If None, writes to
+                       data/backups/portolancast_backup_YYYY-MM-DD_HHMMSS.db
+
+        Returns:
+            Path to the created backup file.
+        """
+        if dest_path is None:
+            backup_dir = self.db_path.parent / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            dest_path = backup_dir / f"portolancast_backup_{timestamp}.db"
+
+        dest_path = Path(dest_path)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Use sqlite3.backup() for a crash-consistent snapshot
+        source_conn = sqlite3.connect(str(self.db_path))
+        dest_conn = sqlite3.connect(str(dest_path))
+        try:
+            source_conn.backup(dest_conn)
+        finally:
+            dest_conn.close()
+            source_conn.close()
+
+        return dest_path
+
+    def auto_backup(self, max_backups: int = 10):
+        """
+        Create an automatic backup on startup, rotating old backups.
+
+        Keeps the most recent max_backups copies. Oldest are deleted first.
+        Called once at application startup to protect against data loss.
+
+        Args:
+            max_backups: Maximum number of backup files to retain.
+        """
+        # Only backup if the database actually exists and has data
+        if not self.db_path.exists():
+            return
+
+        backup_dir = self.db_path.parent / "backups"
+
+        try:
+            backup_path = self.backup()
+            print(f"[DB] Auto-backup created: {backup_path.name}")
+        except Exception as e:
+            # Backup failure should not prevent app startup
+            print(f"[DB] Auto-backup failed (non-fatal): {e}")
+            return
+
+        # Prune old backups — keep only the most recent max_backups files
+        try:
+            backups = sorted(
+                backup_dir.glob("portolancast_backup_*.db"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+            for old_backup in backups[max_backups:]:
+                old_backup.unlink()
+                print(f"[DB] Pruned old backup: {old_backup.name}")
+        except Exception as e:
+            print(f"[DB] Backup pruning failed (non-fatal): {e}")
+
+    def list_backups(self) -> list:
+        """
+        List available backup files with metadata.
+
+        Returns:
+            List of dicts: [{ filename, size_bytes, created_at }, ...]
+            Sorted newest-first.
+        """
+        backup_dir = self.db_path.parent / "backups"
+        if not backup_dir.exists():
+            return []
+
+        backups = []
+        for f in sorted(backup_dir.glob("portolancast_backup_*.db"),
+                        key=lambda p: p.stat().st_mtime, reverse=True):
+            stat = f.stat()
+            backups.append({
+                "filename": f.name,
+                "size_bytes": stat.st_size,
+                "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            })
+
+        return backups
 
     # =========================================================================
     # DOCUMENT OPERATIONS
@@ -644,31 +808,35 @@ class Database:
     # =========================================================================
 
     def create_entity(self, entity_id: str, tag_number: str,
-                      equip_type: str = '', model: str = '',
-                      serial: str = '', location: str = '') -> dict:
+                      building: str = '', equip_type: str = '',
+                      model: str = '', serial: str = '',
+                      location: str = '') -> dict:
         """
         Create a new entity record.
 
         Args:
             entity_id:  Caller-generated UUID hex (stable identity across renames).
-            tag_number: Natural key — "PRV-201". UNIQUE constraint raises
+            tag_number: Natural key — "PRV-201". Combined with building, the
+                        UNIQUE(building, tag_number) constraint raises
                         sqlite3.IntegrityError on collision; caller handles → 409.
+            building:   Building scope — "Bldg-A", "Main Campus". Allows the same
+                        tag_number in different buildings (campus-scale naming).
             equip_type: Equipment category (e.g., "Pressure Valve", "Air Handler").
             model:      Manufacturer model string (e.g., "Watts 174A").
             serial:     Nameplate serial number.
-            location:   Human-readable location string (e.g., "Bldg-A / MER / HVAC-1").
+            location:   Human-readable location within the building (e.g., "Floor-2 / MER").
 
         Returns:
             The created entity as a dict.
 
         Raises:
-            sqlite3.IntegrityError: If tag_number already exists (merge-on-conflict).
+            sqlite3.IntegrityError: If (building, tag_number) already exists.
         """
         with self._connect() as conn:
             conn.execute(
-                """INSERT INTO entities (id, tag_number, equip_type, model, serial, location)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (entity_id, tag_number, equip_type, model, serial, location)
+                """INSERT INTO entities (id, tag_number, building, equip_type, model, serial, location)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (entity_id, tag_number, building, equip_type, model, serial, location)
             )
             row = conn.execute(
                 "SELECT * FROM entities WHERE id = ?", (entity_id,)
@@ -691,38 +859,50 @@ class Database:
             ).fetchone()
             return dict(row) if row else None
 
-    def get_entity_by_tag(self, tag_number: str) -> dict | None:
+    def get_entity_by_tag(self, tag_number: str,
+                          building: str = None) -> dict | None:
         """
-        Look up an entity by its tag number (the natural key).
+        Look up an entity by its tag number and optional building scope.
 
         Used by the merge-on-conflict flow and OCR suggestion matching.
         tag_number comparison is case-sensitive (tags are authoritative as stored).
 
         Args:
             tag_number: Equipment tag string (e.g., "PRV-201").
+            building:   Building scope filter. If None, returns the first match
+                        across all buildings (backward-compatible).
 
         Returns:
             Entity dict or None.
         """
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM entities WHERE tag_number = ?", (tag_number,)
-            ).fetchone()
+            if building is not None:
+                row = conn.execute(
+                    "SELECT * FROM entities WHERE tag_number = ? AND building = ?",
+                    (tag_number, building)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM entities WHERE tag_number = ?", (tag_number,)
+                ).fetchone()
             return dict(row) if row else None
 
     def get_all_entities(self, equip_type: str = None,
-                         location: str = None) -> list:
+                         location: str = None,
+                         building: str = None) -> list:
         """
-        Return all entities, optionally filtered by equip_type or location prefix.
+        Return all entities, optionally filtered by equip_type, location, or building.
 
-        Ordered by tag_number ASC — matches how real equipment schedules are sorted.
+        Ordered by building ASC, then tag_number ASC — groups equipment by building
+        for campus-scale use.
 
         Args:
             equip_type: Exact match filter on equip_type (case-sensitive). None = no filter.
             location:   Prefix match on location (LIKE 'prefix%'). None = no filter.
+            building:   Exact match filter on building. None = no filter.
 
         Returns:
-            List of entity dicts (with markup_count), sorted by tag_number.
+            List of entity dicts (with markup_count), sorted by building then tag_number.
         """
         with self._connect() as conn:
             params = []
@@ -733,9 +913,13 @@ class Database:
                 params.append(equip_type)
 
             if location is not None:
-                # Prefix match so "Bldg-A" also returns "Bldg-A / Floor-2 / HVAC-1"
+                # Prefix match so "Floor-2" also returns "Floor-2 / MER / HVAC-1"
                 conditions.append("e.location LIKE ?")
                 params.append(location + '%')
+
+            if building is not None:
+                conditions.append("e.building = ?")
+                params.append(building)
 
             where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
             # LEFT JOIN subquery for markup_count — avoids N+1 queries in Equipment tab
@@ -747,7 +931,7 @@ class Database:
                         FROM markup_entities GROUP BY entity_id
                     ) mc ON mc.entity_id = e.id
                     {where}
-                    ORDER BY e.tag_number ASC""",
+                    ORDER BY e.building ASC, e.tag_number ASC""",
                 params
             ).fetchall()
             return [dict(row) for row in rows]
@@ -759,7 +943,7 @@ class Database:
         Only keys present in **fields are updated; omitted fields are unchanged.
         Always sets updated_at = datetime('now') to track modification time.
 
-        Allowed field names: tag_number, equip_type, model, serial, location.
+        Allowed field names: tag_number, building, equip_type, model, serial, location.
         Unknown keys are silently ignored — defensive against stale client data.
 
         Args:
@@ -769,7 +953,7 @@ class Database:
         Returns:
             True if a row was updated, False if entity_id not found.
         """
-        allowed = {'tag_number', 'equip_type', 'model', 'serial', 'location'}
+        allowed = {'tag_number', 'building', 'equip_type', 'model', 'serial', 'location'}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return False
@@ -1189,10 +1373,10 @@ class Database:
             Sorted by location ASC, then tag_number ASC.
         """
         with self._connect() as conn:
-            # Get all entities sorted by location, tag
+            # Get all entities sorted by building, location, tag
             entities = conn.execute(
                 """SELECT * FROM entities
-                   ORDER BY location ASC, tag_number ASC"""
+                   ORDER BY building ASC, location ASC, tag_number ASC"""
             ).fetchall()
 
             results = []

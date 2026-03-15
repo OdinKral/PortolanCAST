@@ -215,7 +215,8 @@ export class EquipmentMarkerPanel {
         const filtered = this._entityCache.filter(e => {
             const tag = (e.tag_number || '').toLowerCase();
             const type = (e.equip_type || '').toLowerCase();
-            return tag.includes(q) || type.includes(q);
+            const bldg = (e.building || '').toLowerCase();
+            return tag.includes(q) || type.includes(q) || bldg.includes(q);
         });
 
         this._renderResults(filtered);
@@ -252,7 +253,11 @@ export class EquipmentMarkerPanel {
             const tagSpan = document.createElement('span');
             tagSpan.className = 'em-result-tag';
             // SECURITY: textContent only
-            tagSpan.textContent = entity.tag_number || '(no tag)';
+            // Show building prefix if set, so "Bldg-A / AHU-1" is distinguishable
+            const displayTag = entity.building
+                ? `${entity.building} / ${entity.tag_number}`
+                : entity.tag_number || '(no tag)';
+            tagSpan.textContent = displayTag;
 
             const typeSpan = document.createElement('span');
             typeSpan.className = 'em-result-type';
@@ -358,6 +363,7 @@ export class EquipmentMarkerPanel {
      */
     async _onCreate() {
         const tag = (document.getElementById('em-new-tag')?.value || '').trim();
+        const building = (document.getElementById('em-new-building')?.value || '').trim();
         const equipType = document.getElementById('em-new-type')?.value || '';
         const statusEl = document.getElementById('em-status');
 
@@ -379,6 +385,7 @@ export class EquipmentMarkerPanel {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tag_number: tag,
+                    building: building,
                     equip_type: equipType,
                 }),
             });
@@ -452,6 +459,9 @@ export class EquipmentMarkerPanel {
     _clearFields() {
         const search = document.getElementById('em-search');
         if (search) search.value = '';
+
+        const newBuilding = document.getElementById('em-new-building');
+        if (newBuilding) newBuilding.value = '';
 
         const newTag = document.getElementById('em-new-tag');
         if (newTag) newTag.value = '';

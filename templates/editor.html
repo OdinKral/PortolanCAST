@@ -446,9 +446,14 @@
                             title="Quick Capture (Q)">+ Add</button>
                     <button id="equip-btn-report" class="toolbar-btn equip-toolbar-btn"
                             title="Generate maintenance report">Report</button>
+                    <button id="equip-btn-backup" class="toolbar-btn equip-toolbar-btn"
+                            title="Download database backup">Backup</button>
                 </div>
                 <input type="text" id="equip-search" placeholder="Search tag…"
                        class="panel-search-input" autocomplete="off">
+                <select id="equip-filter-building" class="panel-filter-select">
+                    <option value="">All buildings</option>
+                </select>
                 <select id="equip-filter-type" class="panel-filter-select">
                     <option value="">All types</option>
                 </select>
@@ -983,6 +988,11 @@
         <button id="qc-close" class="toolbar-btn" title="Close (Esc)">✕</button>
     </div>
     <div class="qc-body">
+        <label class="qc-label" for="qc-building">Building</label>
+        <input type="text" id="qc-building" class="qc-input"
+               placeholder="e.g. Bldg-A, Main Campus"
+               autocomplete="off" maxlength="256">
+
         <label class="qc-label" for="qc-tag">Tag Number *</label>
         <input type="text" id="qc-tag" class="qc-input" placeholder="e.g. AHU-3"
                autocomplete="off" maxlength="128">
@@ -1006,7 +1016,7 @@
 
         <label class="qc-label" for="qc-location">Location</label>
         <input type="text" id="qc-location" class="qc-input"
-               placeholder="e.g. Bldg-A / Floor-2 / MER"
+               placeholder="e.g. Floor-2 / MER"
                autocomplete="off" maxlength="256">
 
         <label class="qc-label" for="qc-note">Note</label>
@@ -1048,6 +1058,10 @@
         <div class="em-divider">
             <span class="em-divider-text">or create new</span>
         </div>
+
+        <label class="em-label" for="em-new-building">Building</label>
+        <input type="text" id="em-new-building" class="em-input"
+               placeholder="e.g. Bldg-A" autocomplete="off" maxlength="256">
 
         <label class="em-label" for="em-new-tag">Tag Number *</label>
         <input type="text" id="em-new-tag" class="em-input"

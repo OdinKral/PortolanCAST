@@ -131,10 +131,13 @@ _app_start_time: float = time.time()
 
 @app.on_event("startup")
 async def startup():
-    """Initialize database and ensure required directories exist."""
+    """Initialize database, run auto-backup, and ensure required directories exist."""
     PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     db.init()
+    # Auto-backup protects the growing campus equipment database.
+    # Runs after init() so migrations complete before the backup snapshot.
+    db.auto_backup(max_backups=10)
 
 
 # =============================================================================
@@ -2421,14 +2424,14 @@ async def create_entity(request: Request):
     """
     Create a new equipment entity.
 
-    Returns 409 if tag_number already exists, with the existing entity in
-    the response body so the frontend can show a merge prompt.
+    Returns 409 if (building, tag_number) already exists, with the existing
+    entity in the response body so the frontend can show a merge prompt.
 
     Body:
-        { tag_number, equip_type?, model?, serial?, location? }
+        { tag_number, building?, equip_type?, model?, serial?, location? }
 
     Returns:
-        201: { id, tag_number, equip_type, model, serial, location, created_at }
+        201: { id, tag_number, building, equip_type, model, serial, location, created_at }
         409: { detail: "tag_exists", entity: {...existing entity...} }
     """
     body = await request.json()
@@ -2438,6 +2441,7 @@ async def create_entity(request: Request):
     if not tag_number:
         raise HTTPException(status_code=400, detail="tag_number is required")
 
+    building   = str(body.get("building", "")).strip()[:256]
     equip_type = str(body.get("equip_type", "")).strip()[:256]
     model      = str(body.get("model", "")).strip()[:256]
     serial     = str(body.get("serial", "")).strip()[:256]
@@ -2448,13 +2452,13 @@ async def create_entity(request: Request):
     import sqlite3 as _sqlite3
     try:
         entity = db.create_entity(
-            entity_id, tag_number, equip_type, model, serial, location
+            entity_id, tag_number, building, equip_type, model, serial, location
         )
         return JSONResponse(status_code=201, content=entity)
     except _sqlite3.IntegrityError:
-        # tag_number already exists — return 409 with the existing entity so the
-        # frontend can prompt "merge with existing PRV-201?" instead of silently failing.
-        existing = db.get_entity_by_tag(tag_number)
+        # (building, tag_number) already exists — return 409 with the existing entity
+        # so the frontend can prompt "merge with existing?" instead of silently failing.
+        existing = db.get_entity_by_tag(tag_number, building=building)
         return JSONResponse(
             status_code=409,
             content={"detail": "tag_exists", "entity": existing}
@@ -2462,18 +2466,21 @@ async def create_entity(request: Request):
 
 
 @app.get("/api/entities")
-async def list_entities(equip_type: str = None, location: str = None):
+async def list_entities(equip_type: str = None, location: str = None,
+                        building: str = None):
     """
-    Return all entities, optionally filtered by equip_type or location prefix.
+    Return all entities, optionally filtered by equip_type, location, or building.
 
     Query params:
         equip_type: Exact match filter
-        location:   Prefix match filter (e.g., "Bldg-A" also returns "Bldg-A / MER")
+        location:   Prefix match filter (e.g., "Floor-2" also returns "Floor-2 / MER")
+        building:   Exact match filter (e.g., "Bldg-A")
 
     Returns:
         { entities: [...], total: N }
     """
-    entities = db.get_all_entities(equip_type=equip_type, location=location)
+    entities = db.get_all_entities(equip_type=equip_type, location=location,
+                                   building=building)
     return JSONResponse({"entities": entities, "total": len(entities)})
 
 
@@ -2522,7 +2529,7 @@ async def update_entity(entity_id: str, request: Request):
     tag_number updates go through the same UNIQUE constraint — IntegrityError → 409.
 
     Body:
-        { equip_type?, model?, serial?, location?, tag_number? }  (all optional)
+        { equip_type?, model?, serial?, location?, tag_number?, building? }  (all optional)
 
     Returns:
         { entity: {...updated...} }
@@ -2534,7 +2541,7 @@ async def update_entity(entity_id: str, request: Request):
     body = await request.json()
 
     # SECURITY: sanitize each field; only known fields reach db.update_entity
-    allowed = ['tag_number', 'equip_type', 'model', 'serial', 'location']
+    allowed = ['tag_number', 'building', 'equip_type', 'model', 'serial', 'location']
     updates = {}
     for key in allowed:
         if key in body:
@@ -2986,26 +2993,34 @@ async def get_maintenance_report():
         lines.append("No equipment entities in the database.")
         return JSONResponse({"report": "\n".join(lines)})
 
-    # Group by location
-    locations = {}
+    # Group by building, then by location within each building
+    buildings = {}
     for item in data:
+        bldg = item["entity"].get("building") or "Unspecified Building"
+        if bldg not in buildings:
+            buildings[bldg] = {}
         loc = item["entity"]["location"] or "Unspecified Location"
-        if loc not in locations:
-            locations[loc] = []
-        locations[loc].append(item)
+        if loc not in buildings[bldg]:
+            buildings[bldg][loc] = []
+        buildings[bldg][loc].append(item)
 
-    for loc, items in sorted(locations.items()):
-        lines.append(f"## {loc}")
+    for bldg, locations in sorted(buildings.items()):
+        lines.append(f"## {bldg}")
         lines.append("")
 
-        for item in items:
-            entity = item["entity"]
-            tasks = item["open_tasks"]
-            logs = item["recent_log"]
+        for loc, items in sorted(locations.items()):
+            if loc != bldg:  # avoid redundant header if location == building
+                lines.append(f"### {loc}")
+                lines.append("")
 
-            lines.append(f"### {entity['tag_number']}")
-            if entity["equip_type"]:
-                lines.append(f"**Type:** {entity['equip_type']}")
+            for item in items:
+                entity = item["entity"]
+                tasks = item["open_tasks"]
+                logs = item["recent_log"]
+
+                lines.append(f"#### {entity['tag_number']}")
+                if entity["equip_type"]:
+                    lines.append(f"**Type:** {entity['equip_type']}")
             lines.append("")
 
             # Open tasks
@@ -3033,6 +3048,46 @@ async def get_maintenance_report():
         lines.append("")
 
     return JSONResponse({"report": "\n".join(lines)})
+
+
+# ---- Database Backup ----
+
+@app.get("/api/backup")
+async def download_backup():
+    """
+    Create and download a crash-consistent database backup.
+
+    Uses SQLite's backup API for a safe snapshot even while the app is running.
+    The backup file is streamed as a download with a timestamped filename.
+
+    Returns:
+        Binary .db file download (application/octet-stream)
+    """
+    try:
+        backup_path = db.backup()
+        # Read the backup into memory and stream it — file is small (typically < 50MB)
+        backup_bytes = backup_path.read_bytes()
+        return Response(
+            content=backup_bytes,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f"attachment; filename={backup_path.name}",
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+
+@app.get("/api/backups")
+async def list_backups():
+    """
+    List available auto-backup files with size and timestamp.
+
+    Returns:
+        { backups: [{ filename, size_bytes, created_at }], total: N }
+    """
+    backups = db.list_backups()
+    return JSONResponse({"backups": backups, "total": len(backups)})
 
 
 # =============================================================================

@@ -93,6 +93,12 @@ export class QuickCapture {
             reportBtn.addEventListener('click', () => this._openReport());
         }
 
+        // Bind "Backup" button in Equipment tab — download database snapshot
+        const backupBtn = document.getElementById('equip-btn-backup');
+        if (backupBtn) {
+            backupBtn.addEventListener('click', () => this._downloadBackup());
+        }
+
         // Bind Escape key to close panel (only when panel is visible)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this._isOpen()) {
@@ -117,7 +123,13 @@ export class QuickCapture {
 
         panel.style.display = '';
 
-        // Pre-fill location from last capture (reduces friction for same-area recording)
+        // Pre-fill building and location from last capture (reduces friction for same-area recording)
+        const lastBldg = localStorage.getItem('qc-last-building') || '';
+        const bldgInput = document.getElementById('qc-building');
+        if (bldgInput && !bldgInput.value) {
+            bldgInput.value = lastBldg;
+        }
+
         const lastLoc = localStorage.getItem('qc-last-location') || '';
         const locInput = document.getElementById('qc-location');
         if (locInput && !locInput.value) {
@@ -219,6 +231,7 @@ export class QuickCapture {
      */
     async _onSave() {
         const tag = (document.getElementById('qc-tag')?.value || '').trim();
+        const building = (document.getElementById('qc-building')?.value || '').trim();
         const equipType = document.getElementById('qc-type')?.value || '';
         const location = (document.getElementById('qc-location')?.value || '').trim();
         const note = (document.getElementById('qc-note')?.value || '').trim();
@@ -249,6 +262,7 @@ export class QuickCapture {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     tag_number: tag,
+                    building: building,
                     equip_type: equipType,
                     location: location,
                 }),
@@ -288,7 +302,10 @@ export class QuickCapture {
                 });
             }
 
-            // 4. Save location for next capture
+            // 4. Save building and location for next capture
+            if (building) {
+                localStorage.setItem('qc-last-building', building);
+            }
             if (location) {
                 localStorage.setItem('qc-last-location', location);
             }
@@ -405,6 +422,58 @@ hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
             }
         } catch (err) {
             console.error('[QuickCapture] Report generation failed:', err);
+        }
+    }
+
+    // =========================================================================
+    // BACKUP
+    // =========================================================================
+
+    /**
+     * Download a crash-consistent database backup via the API.
+     *
+     * Uses the Fetch API to get the binary .db file, creates a temporary
+     * download link, and triggers the browser's save dialog.
+     */
+    async _downloadBackup() {
+        const backupBtn = document.getElementById('equip-btn-backup');
+        if (backupBtn) {
+            backupBtn.disabled = true;
+            backupBtn.textContent = 'Backing up…';
+        }
+
+        try {
+            const resp = await fetch('/api/backup');
+            if (!resp.ok) throw new Error('Backup failed');
+
+            const blob = await resp.blob();
+
+            // Extract filename from Content-Disposition header, or use fallback
+            const disposition = resp.headers.get('Content-Disposition') || '';
+            const filenameMatch = disposition.match(/filename=(.+)/);
+            const filename = filenameMatch
+                ? filenameMatch[1]
+                : `portolancast_backup_${new Date().toISOString().slice(0, 10)}.db`;
+
+            // Trigger browser download via temporary link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            this._showToast('Backup downloaded');
+        } catch (err) {
+            console.error('[QuickCapture] Backup failed:', err);
+            this._showToast('Backup failed');
+        } finally {
+            if (backupBtn) {
+                backupBtn.disabled = false;
+                backupBtn.textContent = 'Backup';
+            }
         }
     }
 
