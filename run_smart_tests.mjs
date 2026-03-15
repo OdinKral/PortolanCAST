@@ -52,6 +52,7 @@ const DEPENDENCY_MAP = {
         'test_photos.mjs', 'test_brief_tags.mjs', 'test_search.mjs',
         'test_stage3a.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs',
         'test_nodecast.mjs', 'test_obsidian_export.mjs',
+        'test_parts_inventory.mjs',
     ],
     'main.py': [
         // API routes — broad blast radius. Run core + feature suites.
@@ -66,6 +67,7 @@ const DEPENDENCY_MAP = {
         'test_ocr_text.mjs', 'test_image_overlay.mjs',
         'test_nodecast.mjs', 'test_obsidian_export.mjs',
         'test_sprint1_capture.mjs', 'test_equipment_marker.mjs',
+        'test_parts_inventory.mjs',
     ],
     'pdf_engine.py': [
         'test_ocr_text.mjs', 'test_phase2.mjs', 'test_l1_rotation.mjs',
@@ -134,10 +136,10 @@ const DEPENDENCY_MAP = {
         'test_sprint1_capture.mjs',
     ],
     'static/js/entity-manager.js': [
-        'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+        'test_stage3b.mjs', 'test_sprint1_capture.mjs', 'test_parts_inventory.mjs',
     ],
     'static/js/entity-modal.js': [
-        'test_stage3b.mjs', 'test_sprint1_capture.mjs',
+        'test_stage3b.mjs', 'test_sprint1_capture.mjs', 'test_parts_inventory.mjs',
     ],
     'static/js/equipment-marker.js': [
         'test_equipment_marker.mjs',

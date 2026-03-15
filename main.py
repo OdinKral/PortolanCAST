@@ -3035,6 +3035,202 @@ async def delete_entity_photo(photo_id: int):
     return JSONResponse({"deleted": True})
 
 
+# =============================================================================
+# API ROUTES — ENTITY PARTS (Parts Inventory)
+# =============================================================================
+
+@app.post("/api/entities/{entity_id}/parts")
+async def add_entity_part(entity_id: str, request: Request):
+    """
+    Create a new part record for an entity.
+
+    Request body JSON:
+        part_number:  SKU or part code (required, max 128 chars)
+        description:  Part name/description (required, max 500 chars)
+        quantity:     Integer count (default 1, min 0)
+        unit:         Unit of measure (optional, max 32 chars)
+        location:     Storage location (optional, max 256 chars)
+        notes:        Compatibility/vendor notes (optional, max 2000 chars)
+
+    Returns:
+        201: { status: "created", part: { id, part_number, ... } }
+        400: part_number or description missing
+        404: entity not found
+    """
+    entity = db.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    body = await request.json()
+
+    # SECURITY: validate and sanitize inputs — trim + length-limit
+    part_number = str(body.get("part_number", "")).strip()[:128]
+    if not part_number:
+        raise HTTPException(status_code=400, detail="part_number is required")
+
+    description = str(body.get("description", "")).strip()[:500]
+    if not description:
+        raise HTTPException(status_code=400, detail="description is required")
+
+    # Quantity: default 1, floor at 0
+    try:
+        quantity = max(0, int(body.get("quantity", 1)))
+    except (ValueError, TypeError):
+        quantity = 1
+
+    unit = str(body.get("unit", "")).strip()[:32]
+    location = str(body.get("location", "")).strip()[:256]
+    notes = str(body.get("notes", "")).strip()[:2000]
+
+    part = db.add_entity_part(
+        entity_id, part_number, description, quantity, unit, location, notes
+    )
+
+    return JSONResponse({
+        "status": "created",
+        "part": {
+            "id": part["id"],
+            "entity_id": part["entity_id"],
+            "part_number": part["part_number"],
+            "description": part["description"],
+            "quantity": part["quantity"],
+            "unit": part["unit"],
+            "location": part["location"],
+            "notes": part["notes"],
+            "created_at": part["created_at"],
+            "updated_at": part["updated_at"],
+        }
+    }, status_code=201)
+
+
+@app.get("/api/entities/{entity_id}/parts")
+async def get_entity_parts(entity_id: str):
+    """
+    List all parts for an entity.
+
+    Returns:
+        { parts: [{ id, part_number, description, quantity, unit, location, notes, ... }] }
+    """
+    entity = db.get_entity(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    parts = db.get_entity_parts(entity_id)
+
+    return JSONResponse({
+        "parts": [
+            {
+                "id": p["id"],
+                "part_number": p["part_number"],
+                "description": p["description"],
+                "quantity": p["quantity"],
+                "unit": p["unit"],
+                "location": p["location"],
+                "notes": p["notes"],
+                "created_at": p["created_at"],
+                "updated_at": p["updated_at"],
+            }
+            for p in parts
+        ]
+    })
+
+
+@app.put("/api/entity-parts/{part_id}")
+async def update_entity_part(part_id: int, request: Request):
+    """
+    Update a part record.
+
+    Request body JSON — any subset of:
+        part_number, description, quantity, unit, location, notes
+
+    Returns:
+        200: { status: "updated", part_id: int }
+        404: part not found
+    """
+    body = await request.json()
+
+    # SECURITY: sanitize each field before passing to DB layer
+    updates = {}
+    if "part_number" in body:
+        val = str(body["part_number"]).strip()[:128]
+        if val:
+            updates["part_number"] = val
+    if "description" in body:
+        val = str(body["description"]).strip()[:500]
+        if val:
+            updates["description"] = val
+    if "quantity" in body:
+        try:
+            updates["quantity"] = max(0, int(body["quantity"]))
+        except (ValueError, TypeError):
+            pass
+    if "unit" in body:
+        updates["unit"] = str(body["unit"]).strip()[:32]
+    if "location" in body:
+        updates["location"] = str(body["location"]).strip()[:256]
+    if "notes" in body:
+        updates["notes"] = str(body["notes"]).strip()[:2000]
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+
+    success = db.update_entity_part(part_id, **updates)
+    if not success:
+        raise HTTPException(status_code=404, detail="Part not found")
+
+    return JSONResponse({"status": "updated", "part_id": part_id})
+
+
+@app.delete("/api/entity-parts/{part_id}")
+async def delete_entity_part(part_id: int):
+    """
+    Delete a part record.
+
+    Returns:
+        200: { status: "deleted", part_id: int }
+        404: part not found
+    """
+    success = db.delete_entity_part(part_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Part not found")
+
+    return JSONResponse({"status": "deleted", "part_id": part_id})
+
+
+@app.get("/api/parts")
+async def list_all_parts(entity_id: str = None):
+    """
+    Cross-entity parts inventory list — used by reports and inventory views.
+
+    Query params:
+        entity_id: Optional filter to one entity.
+
+    Returns:
+        { parts: [...], total: int }
+    """
+    parts = db.get_all_parts(entity_id)
+
+    return JSONResponse({
+        "parts": [
+            {
+                "id": p["id"],
+                "entity_id": p["entity_id"],
+                "tag_number": p["tag_number"],
+                "building": p.get("building", ""),
+                "entity_location": p.get("entity_location", ""),
+                "part_number": p["part_number"],
+                "description": p["description"],
+                "quantity": p["quantity"],
+                "unit": p["unit"],
+                "location": p["location"],
+                "notes": p["notes"],
+            }
+            for p in parts
+        ],
+        "total": len(parts),
+    })
+
+
 # ---- Maintenance Report ----
 
 @app.get("/api/maintenance-report")
