@@ -7,7 +7,8 @@
  *   maps them to test suites via a static dependency graph.
  *
  * Usage:
- *   node run_smart_tests.mjs              # changed files since last commit
+ *   node run_smart_tests.mjs              # quick canary (5 suites, ~60s daily smoke test)
+ *   node run_smart_tests.mjs --smart      # changed files since last commit (git-diff based)
  *   node run_smart_tests.mjs --staged     # only staged changes
  *   node run_smart_tests.mjs --all        # run everything (same as run_tests.mjs)
  *   node run_smart_tests.mjs --retry      # re-run only previously failed suites
@@ -245,6 +246,17 @@ const ALL_TEST_FILES = [
     'test_image_overlay.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs',
 ];
 
+// Quick canary suites — 5 broad integration tests that verify every layer of
+// the stack in ~60 seconds. Default mode for daily development. If any of these
+// break, something fundamental changed and you should run --smart or --all.
+const QUICK_CANARY_SUITES = [
+    'test_shapes.mjs',          // core drawing + DB + markup save/load
+    'test_bundle.mjs',          // PDF + photos + ZIP export/import round-trip
+    'test_health_monitor.mjs',  // server health + startup + API connectivity
+    'test_stage3a.mjs',         // entity system CRUD + linking
+    'test_phase2.mjs',          // scale + measure + settings persistence
+];
+
 const FAILURES_FILE = '.test_failures.json';
 
 // =============================================================================
@@ -253,6 +265,7 @@ const FAILURES_FILE = '.test_failures.json';
 
 const args = process.argv.slice(2);
 const flagAll    = args.includes('--all');
+const flagSmart  = args.includes('--smart');
 const flagRetry  = args.includes('--retry');
 const flagStaged = args.includes('--staged');
 const flagHelp   = args.includes('--help') || args.includes('-h');
@@ -274,7 +287,8 @@ if (flagHelp) {
 PortolanCAST — Smart Test Runner
 
 Usage:
-  node run_smart_tests.mjs              Run tests affected by uncommitted changes
+  node run_smart_tests.mjs              Quick canary (5 suites, ~60s daily smoke test)
+  node run_smart_tests.mjs --smart      Run tests affected by uncommitted changes (git-diff)
   node run_smart_tests.mjs --staged     Run tests affected by staged changes only
   node run_smart_tests.mjs --since REF  Run tests affected by changes since REF
                                         (e.g. --since HEAD~3, --since main)
@@ -285,7 +299,9 @@ Usage:
                                         Combine with any mode: --all --batch 5
   node run_smart_tests.mjs --help       Show this help
 
-Previously-failed suites are always included automatically.
+Quick canary tests 5 broad suites that touch every layer of the stack.
+If a canary fails, run --smart or --all to identify the specific issue.
+Previously-failed suites are always included automatically (except in quick mode).
 Failures are saved to .test_failures.json for the next --retry run.
 `);
     process.exit(0);
@@ -462,7 +478,7 @@ if (flagAll) {
     console.log(`  Mode: --retry (${prev.length} previously-failed suite(s))`);
     suitesToRun = prev;
     for (const s of prev) addReason(selectionReasons, s, 'previous failure');
-} else {
+} else if (flagSmart || flagStaged || sinceRef) {
     // Smart selection: git diff → dependency map → suites
     const modeLabel = flagStaged ? '--staged' : sinceRef ? `--since ${sinceRef}` : 'uncommitted changes';
     console.log(`  Mode: smart selection (${modeLabel})`);
@@ -516,6 +532,13 @@ if (flagAll) {
         if (unmapped.length > 5) console.log(`    ... and ${unmapped.length - 5} more`);
         console.log();
     }
+} else {
+    // Default: quick canary — 5 broad suites that touch every stack layer
+    console.log('  Mode: quick canary (default)');
+    console.log('  Running 5 broad integration suites for daily smoke testing.');
+    console.log('  Use --smart for git-diff based selection, --all for full regression.');
+    suitesToRun = [...QUICK_CANARY_SUITES];
+    for (const s of suitesToRun) addReason(selectionReasons, s, 'canary');
 }
 
 // Print selection summary
