@@ -96,13 +96,17 @@ async function run() {
         }
 
         // ── Group 5: Fabric canvas resizes to match image ─────────────────────
+        // After rotation, fitToWidth() auto-adjusts zoom so the rotated page
+        // fills the viewport. The Fabric canvas dimensions are DISPLAY size
+        // (natural * zoom/100), so we check aspect ratio matches, not absolute dims.
         const canvasDims = await page.evaluate(() => {
             const fc = window.app.canvas.fabricCanvas;
             return { w: fc.width, h: fc.height };
         });
-        // Fabric canvas should match the rotated image dimensions
+        const imageAspect = dims90.w / dims90.h;
+        const canvasAspect = canvasDims.w / canvasDims.h;
         assert(
-            canvasDims.w === dims90.w && canvasDims.h === dims90.h,
+            Math.abs(imageAspect - canvasAspect) < 0.02,
             `Fabric canvas matches rotated image: canvas ${canvasDims.w}×${canvasDims.h} = image ${dims90.w}×${dims90.h}`
         );
 

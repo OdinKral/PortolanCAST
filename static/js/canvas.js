@@ -262,6 +262,9 @@ export class CanvasOverlay {
             this._bindScrollForwarding(wrapper);
         }
 
+        // Enable shift-click multi-select on the Fabric canvas
+        this._bindShiftClickSelect();
+
         // Set up undo/redo event listeners and save initial baseline
         this._bindUndoEvents();
         this._saveBaselineSnapshot();
@@ -485,6 +488,92 @@ export class CanvasOverlay {
             wrapper.removeEventListener('mousedown', this._panBlockHandler);
             this._panBlockHandler = null;
         }
+    }
+
+    // =========================================================================
+    // SHIFT-CLICK MULTI-SELECT
+    // =========================================================================
+
+    /**
+     * Enable shift-click to add/remove objects from the selection.
+     *
+     * Fabric.js 6 supports drag-to-lasso selection natively (via
+     * `selection: true`), but does NOT handle shift-click to incrementally
+     * build a selection set. This handler fills that gap.
+     *
+     * Behavior:
+     *   - Shift+click on an unselected object → add it to the current selection
+     *   - Shift+click on an already-selected object → remove it from selection
+     *   - Click without Shift → normal single-select (Fabric default)
+     *
+     * Implementation uses Fabric's `mouse:down:before` event which fires
+     * before Fabric's internal selection logic. We set `e.e.__shiftMultiSelect`
+     * as a flag, then handle the actual selection in `mouse:down` after
+     * Fabric has identified the target object.
+     */
+    _bindShiftClickSelect() {
+        if (!this.fabricCanvas) return;
+
+        this.fabricCanvas.on('mouse:down', (opt) => {
+            // Only act on shift-click when selection is enabled (select tool active)
+            if (!opt.e.shiftKey) return;
+            if (!this.fabricCanvas.selection) return;
+
+            const target = opt.target;
+            if (!target) return;
+
+            // Don't interfere with ActiveSelection internal objects
+            // (clicking inside an existing multi-select group)
+            if (target.type === 'activeselection') return;
+
+            const activeObj = this.fabricCanvas.getActiveObject();
+
+            if (!activeObj) {
+                // Nothing selected yet — just let Fabric select normally
+                return;
+            }
+
+            // Prevent Fabric's default selection behavior from replacing our work
+            opt.e.preventDefault();
+
+            if (activeObj.type === 'activeselection') {
+                // Already multi-selected — add or remove the target
+                const group = activeObj;
+                const objects = group.getObjects();
+
+                if (objects.includes(target)) {
+                    // Target is already in the selection — remove it
+                    group.removeWithUpdate(target);
+                    if (group.getObjects().length === 1) {
+                        // Only one left — collapse to single selection
+                        const remaining = group.getObjects()[0];
+                        this.fabricCanvas.discardActiveObject();
+                        this.fabricCanvas.setActiveObject(remaining);
+                    } else if (group.getObjects().length === 0) {
+                        this.fabricCanvas.discardActiveObject();
+                    }
+                } else {
+                    // Add target to existing selection
+                    group.addWithUpdate(target);
+                }
+            } else {
+                // Single object selected — create ActiveSelection with both
+                if (activeObj === target) {
+                    // Shift-clicked the same object — deselect
+                    this.fabricCanvas.discardActiveObject();
+                } else {
+                    // Create a new ActiveSelection with both objects
+                    this.fabricCanvas.discardActiveObject();
+                    const sel = new fabric.ActiveSelection(
+                        [activeObj, target],
+                        { canvas: this.fabricCanvas }
+                    );
+                    this.fabricCanvas.setActiveObject(sel);
+                }
+            }
+
+            this.fabricCanvas.requestRenderAll();
+        });
     }
 
     // =========================================================================

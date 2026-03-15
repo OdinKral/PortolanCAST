@@ -67,12 +67,20 @@ export class PDFViewer {
         // Zoom state
         this.zoom = ZOOM_DEFAULT;
 
-        // Rotation state — clockwise degrees, one of: 0, 90, 180, 270.
+        // Rotation state — per-page clockwise degrees, one of: 0, 90, 180, 270.
         // Applied server-side via the ?rotate= query param so the rendered PNG
         // already has the correct orientation and swapped dimensions.
         // The Fabric canvas overlay resizes automatically via the existing
         // imageNaturalWidth/Height tracking in canvas.js.
         this.rotation = 0;
+
+        /**
+         * Per-page rotation map — persisted to document_settings via API.
+         * Key: page number (int as string), Value: degrees (0/90/180/270).
+         * Pages not in the map default to 0°.
+         * @type {Object<string, number>}
+         */
+        this._pageRotations = {};
 
         // Pan state — tracks mouse drag for panning
         this.isPanning = false;
@@ -176,6 +184,10 @@ export class PDFViewer {
         this.pageCount = this.docInfo.page_count;
         this.currentPage = 0;
 
+        // Load per-page rotation preferences before first render
+        // so the first page displays in its saved orientation.
+        await this.loadRotations();
+
         // Switch from welcome screen to canvas
         this.welcomeScreen.style.display = 'none';
         this.container.style.display = 'block';
@@ -185,7 +197,7 @@ export class PDFViewer {
             this.onDocumentLoad(this.docInfo);
         }
 
-        // Render first page
+        // Render first page (uses saved rotation if any)
         await this.goToPage(0);
     }
 
@@ -205,6 +217,9 @@ export class PDFViewer {
         // Clamp to valid range
         pageNumber = Math.max(0, Math.min(pageNumber, this.pageCount - 1));
         this.currentPage = pageNumber;
+
+        // Restore per-page rotation — each page remembers its orientation
+        this.rotation = this.getPageRotation(pageNumber);
 
         // Show loading state
         this.pdfImage.style.opacity = '0.5';
@@ -319,10 +334,10 @@ export class PDFViewer {
     /**
      * Cycle clockwise through 0 → 90 → 180 → 270 → 0.
      *
-     * Rotation is applied server-side — the rendered PNG already has the
-     * correct dimensions and orientation after this call. The Fabric canvas
-     * overlay resizes automatically because the new PNG's naturalWidth/Height
-     * differ from the previous load, triggering the 'load' listener in canvas.js.
+     * Rotation is per-page and persisted to document_settings so each page
+     * remembers its orientation across sessions. After rotating, the viewer
+     * auto-fits to width so the rotated page fills the viewport (prevents
+     * the "cut off image" problem reported in the 2026-03-10 field test).
      *
      * Note on existing markups: markups are stored in the coordinate space
      * of the rendered image. Rotating after placing markups will cause them
@@ -334,7 +349,11 @@ export class PDFViewer {
     }
 
     /**
-     * Set an explicit rotation and re-render the current page.
+     * Set an explicit rotation for the current page and re-render.
+     *
+     * Persists the rotation to the per-page map and saves to the server.
+     * Auto-fits to width after the rotated image loads so the page
+     * doesn't extend beyond the viewport.
      *
      * Args:
      *   degrees: One of 0, 90, 180, 270. Invalid values snap to 0.
@@ -343,15 +362,85 @@ export class PDFViewer {
         const valid = [0, 90, 180, 270];
         this.rotation = valid.includes(degrees) ? degrees : 0;
 
+        // Store in per-page map
+        const pageKey = String(this.currentPage);
+        if (this.rotation === 0) {
+            delete this._pageRotations[pageKey];
+        } else {
+            this._pageRotations[pageKey] = this.rotation;
+        }
+
+        // Persist to server (fire-and-forget — rotation is best-effort)
+        this._saveRotations();
+
         // Re-render the current page with the new rotation baked in.
         // goToPage() resets scroll to top-left, which is appropriate
         // since the page dimensions may have changed.
         if (this.docId) {
+            // After rotation, auto-fit to width so the page isn't "cut off".
+            // We need to wait for the image to load before fitting because
+            // imageNaturalWidth changes when dimensions swap (portrait↔landscape).
+            const fitAfterLoad = () => {
+                this.fitToWidth();
+                this.pdfImage.removeEventListener('load', fitAfterLoad);
+            };
+            this.pdfImage.addEventListener('load', fitAfterLoad);
+
             this.goToPage(this.currentPage);
         }
 
         if (this.onRotationChange) {
             this.onRotationChange(this.rotation);
         }
+    }
+
+    /**
+     * Load per-page rotations from the server for the current document.
+     *
+     * Called once when a document loads. Populates _pageRotations so that
+     * goToPage() can restore each page's saved orientation.
+     */
+    async loadRotations() {
+        if (!this.docId) return;
+
+        try {
+            const resp = await fetch(`/api/documents/${this.docId}/rotations`);
+            if (resp.ok) {
+                this._pageRotations = await resp.json();
+            }
+        } catch (err) {
+            console.error('[Viewer] Failed to load rotations:', err);
+        }
+    }
+
+    /**
+     * Save per-page rotations to the server.
+     * Fire-and-forget — rotation persistence is best-effort.
+     */
+    async _saveRotations() {
+        if (!this.docId) return;
+
+        try {
+            await fetch(`/api/documents/${this.docId}/rotations`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this._pageRotations),
+            });
+        } catch (err) {
+            console.error('[Viewer] Failed to save rotations:', err);
+        }
+    }
+
+    /**
+     * Get the saved rotation for a specific page.
+     *
+     * Args:
+     *   pageNumber: Zero-indexed page number.
+     *
+     * Returns:
+     *   Degrees (0, 90, 180, or 270). Defaults to 0 if not set.
+     */
+    getPageRotation(pageNumber) {
+        return this._pageRotations[String(pageNumber)] || 0;
     }
 }

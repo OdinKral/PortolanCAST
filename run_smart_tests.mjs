@@ -12,6 +12,7 @@
  *   node run_smart_tests.mjs --all        # run everything (same as run_tests.mjs)
  *   node run_smart_tests.mjs --retry      # re-run only previously failed suites
  *   node run_smart_tests.mjs --since HEAD~3  # changes in last 3 commits
+ *   node run_smart_tests.mjs --batch 5    # run 5 suites at a time (WSL2 memory relief)
  *
  * How it works:
  *   1. Reads git diff to find changed source files
@@ -64,7 +65,7 @@ const DEPENDENCY_MAP = {
         'test_stage3a.mjs', 'test_stage3b.mjs',
         'test_ocr_text.mjs', 'test_image_overlay.mjs',
         'test_nodecast.mjs', 'test_obsidian_export.mjs',
-        'test_sprint1_capture.mjs',
+        'test_sprint1_capture.mjs', 'test_equipment_marker.mjs',
     ],
     'pdf_engine.py': [
         'test_ocr_text.mjs', 'test_phase2.mjs', 'test_l1_rotation.mjs',
@@ -231,6 +232,14 @@ const flagHelp   = args.includes('--help') || args.includes('-h');
 const sinceIdx = args.indexOf('--since');
 const sinceRef = sinceIdx !== -1 ? args[sinceIdx + 1] : null;
 
+// --batch N: run N suites at a time with a pause between batches.
+// WSL2 without dedicated GPU leaks Chromium memory across sequential
+// Playwright launches. Running in batches lets the OS reclaim memory
+// between groups, preventing resource exhaustion on long regression runs.
+const batchIdx = args.indexOf('--batch');
+const batchSize = batchIdx !== -1 ? parseInt(args[batchIdx + 1], 10) : 0;
+const BATCH_PAUSE_MS = 5000; // 5 seconds between batches
+
 if (flagHelp) {
     console.log(`
 PortolanCAST — Smart Test Runner
@@ -242,6 +251,9 @@ Usage:
                                         (e.g. --since HEAD~3, --since main)
   node run_smart_tests.mjs --retry      Re-run only previously failed suites
   node run_smart_tests.mjs --all        Run all suites (full regression)
+  node run_smart_tests.mjs --batch N    Run N suites at a time with ${BATCH_PAUSE_MS/1000}s pause
+                                        between batches (WSL2 memory relief).
+                                        Combine with any mode: --all --batch 5
   node run_smart_tests.mjs --help       Show this help
 
 Previously-failed suites are always included automatically.
@@ -490,14 +502,44 @@ console.log();
 // RUN SELECTED SUITES
 // =============================================================================
 
+/**
+ * Sleep helper for batch pauses.
+ * Uses a blocking loop (not async) because the runner is synchronous.
+ */
+function sleepSync(ms) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+        // Busy-wait — acceptable for short pauses between test batches
+    }
+}
+
 let totalPassed = 0;
 let totalFailed = 0;
 const results = [];
 const failedSuites = [];
 
-for (const file of suitesToRun) {
+// Show batch info if applicable
+if (batchSize > 0 && suitesToRun.length > batchSize) {
+    const batchCount = Math.ceil(suitesToRun.length / batchSize);
+    console.log(`  Batch mode: ${batchSize} suites per batch, ${batchCount} batches, ${BATCH_PAUSE_MS / 1000}s pause`);
+    console.log();
+}
+
+for (let i = 0; i < suitesToRun.length; i++) {
+    const file = suitesToRun[i];
+
+    // Batch boundary pause — let WSL2 reclaim Chromium memory
+    if (batchSize > 0 && i > 0 && i % batchSize === 0) {
+        const batchNum = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(suitesToRun.length / batchSize);
+        console.log();
+        console.log(`  ── Batch ${batchNum}/${totalBatches} ── pausing ${BATCH_PAUSE_MS / 1000}s for memory recovery ──`);
+        console.log();
+        sleepSync(BATCH_PAUSE_MS);
+    }
+
     console.log(`\n${'━'.repeat(50)}`);
-    console.log(`  Running: ${file}`);
+    console.log(`  Running: ${file} (${i + 1}/${suitesToRun.length})`);
     console.log(`${'━'.repeat(50)}`);
 
     const result = runSuite(file);

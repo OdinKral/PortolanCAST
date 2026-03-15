@@ -842,6 +842,73 @@ def _default_scale() -> dict:
 
 
 # =============================================================================
+# API ROUTES — PAGE ROTATION PERSISTENCE
+# =============================================================================
+
+@app.get("/api/documents/{doc_id}/rotations")
+async def get_document_rotations(doc_id: int):
+    """
+    Get per-page rotation settings for a document.
+
+    Returns a JSON map of {pageNumber: degrees} for pages with non-zero
+    rotation. Missing pages default to 0°. This lets the viewer restore
+    each page's orientation on load without requiring the user to re-rotate.
+
+    Returns:
+        JSON object with page numbers as keys and degrees (0/90/180/270) as values.
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    raw = db.get_document_setting(doc_id, "rotations")
+    if raw:
+        import json as _json
+        try:
+            rotations = _json.loads(raw)
+        except Exception:
+            rotations = {}
+    else:
+        rotations = {}
+
+    return JSONResponse(rotations)
+
+
+@app.put("/api/documents/{doc_id}/rotations")
+async def set_document_rotations(doc_id: int, request: Request):
+    """
+    Save per-page rotation settings for a document.
+
+    Request body: JSON object mapping page numbers (as strings) to degrees.
+    Example: {"0": 90, "2": 270}
+
+    Pages with rotation 0 may be omitted. Invalid degree values are discarded.
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    body = await request.json()
+
+    # SECURITY: validate — only accept {string_page: valid_degree} pairs
+    valid_degrees = {0, 90, 180, 270}
+    sanitized = {}
+    for page_str, degrees in body.items():
+        try:
+            page_num = int(page_str)
+            deg = int(degrees)
+        except (TypeError, ValueError):
+            continue
+        if deg in valid_degrees and deg != 0 and page_num >= 0:
+            sanitized[str(page_num)] = deg
+
+    import json as _json
+    db.set_document_setting(doc_id, "rotations", _json.dumps(sanitized))
+
+    return JSONResponse(sanitized)
+
+
+# =============================================================================
 # API ROUTES — AI SUMMARY (ExtendedCognition Plugin backend)
 # =============================================================================
 
