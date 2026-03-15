@@ -97,6 +97,8 @@ const TEST_FILES = [
     'test_stage3b.mjs',
     // Sprint 1: Quick Capture (entity tasks, entity photos, capture panel, maintenance report)
     'test_sprint1_capture.mjs',
+    // Parts Inventory: entity parts CRUD API + EntityModal parts section
+    'test_parts_inventory.mjs',
 ];
 
 // =============================================================================

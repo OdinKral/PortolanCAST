@@ -3718,3 +3718,104 @@ html, body {
 .entity-photo-item:hover .entity-photo-delete {
     opacity: 1;
 }
+
+/* ========================================================================= */
+/* ENTITY MODAL — PARTS INVENTORY                                           */
+/* ========================================================================= */
+
+.entity-parts-table {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 12px;
+}
+
+/* Column grid shared by header and data rows */
+.parts-header-row,
+.entity-part-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 45px 50px 90px 50px;
+    gap: 6px;
+    padding: 6px 8px;
+    align-items: center;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.parts-header-row {
+    background: #1a1a2e;
+    font-weight: 600;
+    color: #888;
+    font-size: 11px;
+}
+
+.entity-part-row {
+    background: #0e0e1a;
+}
+
+.entity-part-row:hover {
+    background: #14142a;
+}
+
+.entity-part-row:last-child {
+    border-bottom: none;
+}
+
+/* Column overflow handling */
+.part-col-number,
+.part-col-desc,
+.part-col-qty,
+.part-col-unit,
+.part-col-location {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.part-col-number {
+    font-family: monospace;
+    color: #a0a0d0;
+}
+
+.part-col-qty {
+    text-align: center;
+}
+
+.part-col-actions {
+    display: flex;
+    gap: 3px;
+    justify-content: flex-end;
+}
+
+.part-edit-btn:hover {
+    color: #4caf50 !important;
+}
+
+/* Inline add-part form */
+.entity-part-add-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    align-items: center;
+}
+
+.entity-part-add-row input {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+
+.entity-part-add-row input::placeholder {
+    color: #555;
+}
+
+/* Proportional widths matching the table grid */
+.part-add-number { width: 80px; flex-shrink: 0; }
+.part-add-desc { flex: 1; }
+.part-add-qty { width: 45px; flex-shrink: 0; }
+.part-add-unit { width: 50px; flex-shrink: 0; }

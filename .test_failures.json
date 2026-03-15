@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-03-15T03:05:12.109Z",
+  "failed": [
+    "test_shapes.mjs",
+    "test_properties.mjs",
+    "test_markup_list.mjs",
+    "test_bundle.mjs",
+    "test_stage3a.mjs",
+    "test_image_overlay.mjs",
+    "test_stage3b.mjs"
+  ]
+}
