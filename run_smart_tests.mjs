@@ -54,8 +54,10 @@ const DEPENDENCY_MAP = {
         'test_nodecast.mjs', 'test_obsidian_export.mjs',
         'test_parts_inventory.mjs',
     ],
-    'main.py': [
-        // API routes — broad blast radius. Run core + feature suites.
+    // config.py holds singletons (db, pdf_engine, templates, paths) shared
+    // by all routes — changes here have the same broad blast radius as the
+    // old monolithic main.py entry.
+    'config.py': [
         'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
         'test_phase1_tools.mjs', 'test_phase2.mjs',
         'test_phase3a.mjs', 'test_phase3b.mjs',
@@ -69,9 +71,34 @@ const DEPENDENCY_MAP = {
         'test_sprint1_capture.mjs', 'test_equipment_marker.mjs',
         'test_parts_inventory.mjs',
     ],
+    // main.py is now a thin shell — only app creation, static mounts,
+    // router includes, and startup. Much smaller blast radius.
+    'main.py': [
+        'test_shapes.mjs', 'test_health_monitor.mjs',
+    ],
     'pdf_engine.py': [
         'test_ocr_text.mjs', 'test_phase2.mjs', 'test_l1_rotation.mjs',
     ],
+
+    // ── Backend: Route modules (granular blast radius) ───────────────────
+    // Each route file maps to only the test suites that exercise its endpoints.
+    // Editing routes/backup.py now triggers 1 suite instead of 26.
+    'routes/backup.py':        ['test_bundle.mjs'],
+    'routes/parts.py':         ['test_parts_inventory.mjs'],
+    'routes/entity_photos.py': ['test_sprint1_capture.mjs'],
+    'routes/entity_tasks.py':  ['test_stage3b.mjs', 'test_sprint1_capture.mjs'],
+    'routes/entities.py':      ['test_stage3a.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs', 'test_equipment_marker.mjs'],
+    'routes/text.py':          ['test_ocr_text.mjs'],
+    'routes/photos.py':        ['test_photos.mjs'],
+    'routes/search.py':        ['test_search.mjs', 'test_brief_tags.mjs', 'test_rfi_generator.mjs', 'test_obsidian_export.mjs'],
+    'routes/reports.py':       ['test_brief_tags.mjs', 'test_rfi_generator.mjs', 'test_obsidian_export.mjs'],
+    'routes/ai.py':            ['test_phase4c.mjs'],
+    'routes/bundles.py':       ['test_bundle.mjs', 'test_q1_bundle_naming.mjs'],
+    'routes/settings.py':      ['test_phase2.mjs', 'test_phase5_layers.mjs', 'test_l1_rotation.mjs'],
+    'routes/markups.py':       ['test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs'],
+    'routes/documents.py':     ['test_shapes.mjs', 'test_properties.mjs', 'test_phase2.mjs', 'test_bundle.mjs', 'test_image_overlay.mjs', 'test_phase1_tools.mjs'],
+    'routes/pages.py':         ['test_shapes.mjs', 'test_properties.mjs'],
+    'routes/health.py':        ['test_health_monitor.mjs'],
 
     // ── Frontend: Core modules ──────────────────────────────────────────
     'static/js/app.js': [
