@@ -339,10 +339,11 @@ export class PDFViewer {
      * auto-fits to width so the rotated page fills the viewport (prevents
      * the "cut off image" problem reported in the 2026-03-10 field test).
      *
-     * Note on existing markups: markups are stored in the coordinate space
-     * of the rendered image. Rotating after placing markups will cause them
-     * to appear in incorrect positions because the coordinate space changes
-     * with the rotation. Best practice: set rotation before starting markup work.
+     * Coordinate handling: When rotation changes, onRotationChange fires
+     * BEFORE the image reloads. App.js uses this to transform all markup
+     * coordinates through the rotation matrix so objects maintain their
+     * physical position on the drawing. See canvas.js
+     * transformObjectsForRotation() for the affine math.
      */
     rotate() {
         this.setRotation((this.rotation + 90) % 360);
@@ -360,7 +361,11 @@ export class PDFViewer {
      */
     setRotation(degrees) {
         const valid = [0, 90, 180, 270];
+        const oldRotation = this.rotation;
         this.rotation = valid.includes(degrees) ? degrees : 0;
+
+        // No change — skip re-render and callbacks
+        if (this.rotation === oldRotation) return;
 
         // Store in per-page map
         const pageKey = String(this.currentPage);
@@ -372,6 +377,18 @@ export class PDFViewer {
 
         // Persist to server (fire-and-forget — rotation is best-effort)
         this._saveRotations();
+
+        // Fire rotation change BEFORE re-rendering so listeners can transform
+        // markup coordinates while imageNaturalWidth/Height still hold the
+        // pre-rotation values. This is critical: goToPage() triggers an image
+        // load that will swap dimensions, but markups need the OLD dimensions
+        // to compute the correct coordinate transformation.
+        if (this.onRotationChange) {
+            this.onRotationChange(
+                this.rotation, oldRotation,
+                this.imageNaturalWidth, this.imageNaturalHeight
+            );
+        }
 
         // Re-render the current page with the new rotation baked in.
         // goToPage() resets scroll to top-left, which is appropriate
@@ -387,10 +404,6 @@ export class PDFViewer {
             this.pdfImage.addEventListener('load', fitAfterLoad);
 
             this.goToPage(this.currentPage);
-        }
-
-        if (this.onRotationChange) {
-            this.onRotationChange(this.rotation);
         }
     }
 

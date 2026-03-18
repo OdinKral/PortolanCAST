@@ -206,6 +206,31 @@ CREATE TABLE IF NOT EXISTS entity_photos (
 
 CREATE INDEX IF NOT EXISTS idx_entity_photos_entity
     ON entity_photos(entity_id);
+
+-- ==========================================================================
+-- PARTS INVENTORY — Equipment Parts & Spares Tracking
+-- ==========================================================================
+
+-- Parts/spares associated with equipment entities.
+-- Tracks what parts are installed, spare inventory, and replacement info.
+-- Each part belongs to one entity — campus-scale parts lists are generated
+-- by querying across entities.
+-- Quantity is current stock count (or installed count); updated manually.
+CREATE TABLE IF NOT EXISTS entity_parts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    part_number TEXT NOT NULL,              -- SKU, OEM code, or internal part ID
+    description TEXT NOT NULL,              -- "Replacement Belt Assembly", "Air Filter 20x20x2"
+    quantity    INTEGER NOT NULL DEFAULT 1, -- current count (installed or in stock)
+    unit        TEXT NOT NULL DEFAULT '',   -- "each", "feet", "box", "set"
+    location    TEXT NOT NULL DEFAULT '',   -- where stored: "Bin A5", "MER-2 shelf", "on unit"
+    notes       TEXT NOT NULL DEFAULT '',   -- compatibility, vendor, reorder threshold, etc.
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_parts_entity
+    ON entity_parts(entity_id);
 """
 
 
@@ -1361,6 +1386,145 @@ class Database:
             photo = dict(row)
             conn.execute("DELETE FROM entity_photos WHERE id = ?", (photo_id,))
             return photo
+
+    # =========================================================================
+    # ENTITY PARTS OPERATIONS (Parts Inventory)
+    # =========================================================================
+
+    def add_entity_part(self, entity_id: str, part_number: str,
+                        description: str, quantity: int = 1,
+                        unit: str = '', location: str = '',
+                        notes: str = '') -> dict:
+        """
+        Create a new part record for an entity.
+
+        Args:
+            entity_id:   UUID of the parent entity.
+            part_number: SKU or part code (e.g., "BELT-001", "FLT-20x20x2").
+            description: Human-readable part name/description.
+            quantity:    Count in stock or installed (default 1).
+            unit:        Unit of measure (e.g., "each", "feet", "box").
+            location:    Where the part is stored (e.g., "Bin A5", "on unit").
+            notes:       Compatibility info, vendor, reorder notes, etc.
+
+        Returns:
+            The created part record as a dict.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO entity_parts
+                   (entity_id, part_number, description, quantity, unit, location, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (entity_id, part_number, description, quantity, unit, location, notes)
+            )
+            row = conn.execute(
+                "SELECT * FROM entity_parts WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+            return dict(row)
+
+    def get_entity_parts(self, entity_id: str) -> list:
+        """
+        List all parts for an entity, ordered by creation time.
+
+        Args:
+            entity_id: UUID of the entity.
+
+        Returns:
+            List of part record dicts.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM entity_parts
+                   WHERE entity_id = ?
+                   ORDER BY created_at ASC, id ASC""",
+                (entity_id,)
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_entity_part(self, part_id: int, **fields) -> bool:
+        """
+        Update one or more part fields.
+
+        Allowed fields: part_number, description, quantity, unit, location, notes.
+        Always bumps updated_at on change.
+
+        Args:
+            part_id:  Integer PK of the part.
+            **fields: Keyword arguments matching allowed column names.
+
+        Returns:
+            True if a row was updated, False if part_id not found.
+        """
+        allowed = {'part_number', 'description', 'quantity', 'unit', 'location', 'notes'}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+
+        # SECURITY: validate quantity is non-negative if provided
+        if 'quantity' in updates:
+            try:
+                updates['quantity'] = max(0, int(updates['quantity']))
+            except (ValueError, TypeError):
+                return False
+
+        set_clauses = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [part_id]
+
+        with self._connect() as conn:
+            cursor = conn.execute(
+                f"""UPDATE entity_parts SET {set_clauses}, updated_at = datetime('now')
+                    WHERE id = ?""",
+                values
+            )
+            return cursor.rowcount > 0
+
+    def delete_entity_part(self, part_id: int) -> bool:
+        """
+        Delete a part record by ID.
+
+        Args:
+            part_id: Integer PK of the part.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM entity_parts WHERE id = ?", (part_id,)
+            )
+            return cursor.rowcount > 0
+
+    def get_all_parts(self, entity_id: str = None) -> list:
+        """
+        Get all parts across entities (for inventory reports), optionally filtered.
+
+        Joins entities to include tag_number, building, and location for grouping
+        in cross-entity inventory views and maintenance reports.
+
+        Args:
+            entity_id: Optional filter to one entity. If None, returns all parts.
+
+        Returns:
+            List of part dicts with entity tag_number, building, and location.
+        """
+        with self._connect() as conn:
+            if entity_id:
+                rows = conn.execute(
+                    """SELECT p.*, e.tag_number, e.building, e.location AS entity_location
+                       FROM entity_parts p
+                       JOIN entities e ON e.id = p.entity_id
+                       WHERE p.entity_id = ?
+                       ORDER BY p.created_at DESC, p.id DESC""",
+                    (entity_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT p.*, e.tag_number, e.building, e.location AS entity_location
+                       FROM entity_parts p
+                       JOIN entities e ON e.id = p.entity_id
+                       ORDER BY e.building ASC, e.tag_number ASC, p.part_number ASC"""
+                ).fetchall()
+            return [dict(row) for row in rows]
 
     def get_maintenance_report_data(self) -> list:
         """

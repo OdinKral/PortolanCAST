@@ -915,6 +915,15 @@ export class PropertiesPanel {
 
         section.style.display = '';
 
+        // Reset all inner states before the async fetch — prevents stale UI
+        // from a previous selection leaking through during the network round-trip
+        const unlinked = document.getElementById('entity-unlinked');
+        const linked = document.getElementById('entity-linked-view');
+        const merge = document.getElementById('entity-merge-prompt');
+        if (unlinked) unlinked.style.display = 'none';
+        if (linked) linked.style.display = 'none';
+        if (merge) merge.style.display = 'none';
+
         // Store context for event handlers — captured in closures below
         this._entityMarkupId = markupId;
         this._entityPageNumber = pageNumber;
