@@ -491,7 +491,12 @@ async function run() {
 
         // Click Apply Scale
         await page.click('#calib-apply');
-        await page.waitForTimeout(500);
+
+        // Wait for modal to close and scale state to update
+        await page.waitForFunction(() => {
+            const modal = document.getElementById('modal-calibrate');
+            return modal && modal.style.display === 'none';
+        }, { timeout: 5000 });
 
         // Modal should close
         const modalClosed = await page.$eval(
@@ -499,6 +504,12 @@ async function run() {
             el => el.style.display === 'none'
         );
         assert(modalClosed, 'Calibration modal closes after Apply');
+
+        // Wait for scale preset to propagate to JS state and DOM
+        await page.waitForFunction(() => {
+            return window.app?.scale?.preset === 'custom'
+                && document.getElementById('scale-label')?.textContent === 'Custom';
+        }, { timeout: 5000 }).catch(() => {});
 
         // Scale preset should be 'custom'
         const scalePreset = await page.evaluate(() => window.app.scale.preset);

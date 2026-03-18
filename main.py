@@ -133,5 +133,12 @@ if __name__ == "__main__":
             host="127.0.0.1",
             port=args.port,
             reload=True,
+            # Restrict reload watching to Python source files only.
+            # WSL2 can't use inotify on /mnt/c/ — uvicorn falls back to polling,
+            # which burns CPU proportional to the number of watched files.
+            # Without this, the watcher scans data/, static/, photos/, node_modules/
+            # and grows to GB of virtual memory over multi-day uptime.
+            reload_dirs=[".", "routes"],
+            reload_includes=["*.py"],
             log_level="info"
         )

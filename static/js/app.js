@@ -159,6 +159,16 @@ class App {
             }
         };
 
+        // When page rotation changes, transform markup coordinates so
+        // objects stay at the same physical location on the drawing.
+        // Fired BEFORE the image reloads, while old dimensions are current.
+        this.viewer.onRotationChange = (newRotation, oldRotation, oldWidth, oldHeight) => {
+            const delta = (newRotation - oldRotation + 360) % 360;
+            this.canvas.transformObjectsForRotation(delta, oldWidth, oldHeight);
+            // Mark dirty so transformed coordinates are auto-saved
+            this.markDirty();
+        };
+
         // When zoom changes, update status bar and sync canvas overlay
         this.viewer.onZoomChange = (zoom) => {
             this._updateZoomDisplay(zoom);
