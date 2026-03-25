@@ -75,7 +75,18 @@ async function injectAndSelectMarkup(page, overrides = {}) {
         fc.fire('selection:created', { selected: [rect] });
         fc.renderAll();
     }, { overrides });
-    await page.waitForTimeout(600);  // allow _loadEntitySection() async fetch to complete
+    // Wait for _loadEntitySection() async fetch to resolve and render a state.
+    // The entity section shows one of: entity-unlinked, entity-linked-view, or
+    // entity-merge-prompt.  Poll until any of these is visible (display !== 'none'),
+    // which means the fetch completed and a state was rendered.
+    await page.waitForFunction(() => {
+        const u = document.getElementById('entity-unlinked');
+        const l = document.getElementById('entity-linked-view');
+        const m = document.getElementById('entity-merge-prompt');
+        return (u && u.style.display !== 'none')
+            || (l && l.style.display !== 'none')
+            || (m && m.style.display !== 'none');
+    }, { timeout: 5000 });
 }
 
 // =============================================================================
@@ -325,7 +336,11 @@ async function run() {
         }, { tag: tag3 });
         // Click Promote via JS to avoid scroll side-effects
         await page.evaluate(() => document.getElementById('entity-promote-btn').click());
-        await page.waitForTimeout(800);  // allow async Promote + link chain to settle
+        // Wait for async Promote + link chain to settle — entity-linked-view becomes visible
+        await page.waitForFunction(() => {
+            const v = document.getElementById('entity-linked-view');
+            return v && v.style.display !== 'none';
+        }, { timeout: 5000 }).catch(() => {});
 
         const linkedViewVisible = await page.evaluate(() => {
             const v = document.getElementById('entity-linked-view');
@@ -358,28 +373,33 @@ async function run() {
 
         await injectAndSelectMarkup(page, { markupType: 'issue' });
 
-        // Type the SAME tag (already exists) into the input and click Promote
-        await page.evaluate(({ tag }) => {
+        // Type the SAME tag (already exists) into the input and invoke _promoteMarkup
+        // directly so we can await the full async chain (POST → 409 → render).
+        // Clicking the button fires the async handler but returns immediately,
+        // creating a race between the fetch and our assertions on WSL2.
+        // Invoke _promoteMarkup directly and capture state in the same browser
+        // context to avoid Playwright↔browser round-trip race conditions.
+        const promoteResult = await page.evaluate(async ({ tag }) => {
             document.getElementById('entity-tag-input').value = tag;
-        }, { tag: tag3 });
-        await page.evaluate(() => document.getElementById('entity-promote-btn').click());
-        await page.waitForTimeout(600);
-
-        const mergePromptVisible = await page.evaluate(() => {
+            await window.app.properties._promoteMarkup(tag);
             const m = document.getElementById('entity-merge-prompt');
-            return m && m.style.display !== 'none';
-        });
-        assert(mergePromptVisible, '#entity-merge-prompt is shown on duplicate tag (409)');
+            return {
+                visible: m && m.style.display !== 'none',
+                msg: document.getElementById('entity-merge-msg')?.textContent || '',
+            };
+        }, { tag: tag3 });
 
-        const mergeMsg = await page.evaluate(() =>
-            document.getElementById('entity-merge-msg')?.textContent || ''
-        );
-        assert(mergeMsg.includes(tag3),
-            `Merge prompt message mentions the conflicting tag "${tag3}" (got "${mergeMsg}")`);
+        assert(promoteResult.visible, '#entity-merge-prompt is shown on duplicate tag (409)');
+        assert(promoteResult.msg.includes(tag3),
+            `Merge prompt message mentions the conflicting tag "${tag3}" (got "${promoteResult.msg}")`);
 
         // 3.7 — "Link to existing" button resolves merge prompt and shows linked state
         await page.evaluate(() => document.getElementById('entity-link-existing-btn').click());
-        await page.waitForTimeout(600);
+        // Wait for link API call to complete and entity-linked-view to appear
+        await page.waitForFunction(() => {
+            const v = document.getElementById('entity-linked-view');
+            return v && v.style.display !== 'none';
+        }, { timeout: 5000 }).catch(() => {});
 
         const linkedAfterMerge = await page.evaluate(() => {
             const v = document.getElementById('entity-linked-view');
@@ -390,7 +410,11 @@ async function run() {
 
         // 3.8 — "✕ Unlink" button returns panel to unlinked state
         await page.evaluate(() => document.getElementById('entity-unlink-btn').click());
-        await page.waitForTimeout(600);
+        // Wait for unlink API call to complete and entity-unlinked to reappear
+        await page.waitForFunction(() => {
+            const u = document.getElementById('entity-unlinked');
+            return u && u.style.display !== 'none';
+        }, { timeout: 5000 }).catch(() => {});
 
         const unlinkedAfterUnlink = await page.evaluate(() => {
             const u = document.getElementById('entity-unlinked');

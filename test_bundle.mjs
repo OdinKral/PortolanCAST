@@ -127,6 +127,22 @@ async function run() {
         // =====================================================================
         console.log('\n  -- Group 1b: Photo Attachment Setup --');
 
+        // Cleanup orphan photos from previous test runs that crashed before cleanup
+        const priorPhotos = await fetch(
+            `${BASE_URL}/api/documents/${DOC_ID}/markup-photos/${TEST_MARKUP_ID}`
+        );
+        if (priorPhotos.ok) {
+            const priorData = await priorPhotos.json();
+            for (const p of (priorData.photos || [])) {
+                if (p.photo_id) {
+                    await fetch(
+                        `${BASE_URL}/api/documents/${DOC_ID}/markup-photos/${p.photo_id}`,
+                        { method: 'DELETE' }
+                    );
+                }
+            }
+        }
+
         const photoForm = new FormData();
         // Minimal PNG signature bytes — valid extension, no full decode needed
         const fakeImage = new Blob(

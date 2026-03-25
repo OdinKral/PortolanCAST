@@ -69,6 +69,8 @@ html, body {
 .toolbar-row-primary {
     height: 42px;
     flex-shrink: 0;
+    overflow: hidden;     /* Clip anything still overflowing after shrink */
+    min-width: 0;         /* Allow the row itself to be narrower than content */
 }
 
 .toolbar-row-tools {
@@ -263,7 +265,10 @@ html, body {
 .filename-display {
     color: #8888a0;
     font-size: 12px;
-    max-width: 300px;
+    /* flex: 0 1 220px lets the filename be up to 220px but shrink further if the
+     * toolbar is too wide — long filenames were the primary source of overflow */
+    flex: 0 1 220px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -306,9 +311,18 @@ html, body {
     background: #aaaaaa;
 }
 
-/* Push zoom controls to the right */
+/* Push zoom controls to the right; flex-shrink: 0 keeps zoom always visible */
 .toolbar-zoom {
     margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* Export group can shrink — filename group already shrinks via flex: 0 1 220px.
+ * Together these two absorb most toolbar overflow before zoom gets clipped. */
+.toolbar-export {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* =========================================================================
@@ -324,12 +338,90 @@ html, body {
     flex-direction: column;
     flex-shrink: 0;
     overflow: hidden;
+    transition: width 0.2s ease, min-width 0.2s ease;
 }
 
 /* Properties panel has left border instead of right */
 #panel-properties {
     border-right: none;
     border-left: 1px solid #3a3a50;
+}
+
+/* =========================================================================
+ * PANEL COLLAPSE / EXPAND
+ * ========================================================================= */
+
+/* Narrow strip when collapsed — just enough for the expand button */
+.side-panel.panel-collapsed {
+    width: 28px;
+    min-width: 28px;
+}
+
+/* Hide tabs and content when collapsed */
+.side-panel.panel-collapsed .panel-tabs,
+.side-panel.panel-collapsed .tab-content,
+.side-panel.panel-collapsed .pages-panel-footer {
+    display: none;
+}
+
+/* Thin header bar holding the collapse/expand toggle.
+ * width: 100% + box-sizing: border-box ensures the bar stretches to the full
+ * panel width so justify-content has space to work. Without this, the bar
+ * collapses to content-width and flex-end becomes a no-op. */
+.panel-collapse-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;  /* left panel default: button at right/canvas edge */
+    padding: 2px 4px;
+    border-bottom: 1px solid #2a2a40;
+    flex-shrink: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Right panel: button must be at the LEFT/canvas-adjacent edge */
+#panel-properties .panel-collapse-bar {
+    justify-content: flex-start;
+}
+
+/* When collapsed the bar becomes a full-height column */
+.side-panel.panel-collapsed .panel-collapse-bar {
+    flex-direction: column;
+    justify-content: flex-start;
+    border-bottom: none;
+    padding: 4px 0;
+    flex: 1;
+}
+
+.panel-collapse-btn {
+    background: transparent;
+    border: none;
+    color: #8888a0;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.panel-collapse-btn:hover {
+    color: #c0c0d0;
+}
+
+/* Vertical label visible only when panel is collapsed */
+.panel-collapsed-label {
+    display: none;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8888a0;
+    margin-top: 8px;
+    user-select: none;
+}
+.side-panel.panel-collapsed .panel-collapsed-label {
+    display: block;
 }
 
 .panel-header {
@@ -492,6 +584,17 @@ html, body {
     font-size: 10px;
     text-align: center;
     color: #c0c0d0;
+}
+
+/* Viewport position indicator — red rectangle drawn by _updateThumbnailViewport().
+ * Sits above the thumbnail image and label but never intercepts mouse events. */
+.thumbnail-viewport-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
 /* =========================================================================
@@ -1481,6 +1584,36 @@ html, body {
     margin-bottom: 4px;
 }
 
+/* Scroll sensitivity row */
+.settings-scroll-row {
+    padding-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-scroll-label {
+    font-size: 13px;
+    color: #ccc;
+}
+
+.settings-scroll-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-scroll-hint {
+    font-size: 11px;
+    color: #888;
+    white-space: nowrap;
+}
+
+#settings-scroll-sensitivity {
+    flex: 1;
+    accent-color: #4a90e2;
+}
+
 /* =========================================================================
  * L2: COMPACT TOOLBAR MODE
  *
@@ -1739,6 +1872,79 @@ html, body {
 
 /* Locked layer: amber lock icon */
 .layer-row.layer-locked .layer-lock-btn { color: #ffaa00; }
+
+/* =============================================================================
+ * PDF OCG LAYER PANEL
+ * Section that appears in the Layers tab when a PDF has embedded CAD layers.
+ * ============================================================================= */
+
+.pdf-layers-section {
+    margin-bottom: 4px;
+}
+
+.pdf-layers-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px 4px;
+    border-bottom: 1px solid #3a3a55;
+}
+
+.pdf-layers-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #7788aa;
+    text-transform: uppercase;
+    flex: 1;
+}
+
+.pdf-layers-showall-btn {
+    font-size: 10px;
+    padding: 1px 6px;
+    background: #2a2a40;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #9999bb;
+    cursor: pointer;
+}
+.pdf-layers-showall-btn:hover { background: #35355a; color: #ccc; }
+
+/* PDF layer rows: same base as annotation rows but no delete/lock buttons */
+.pdf-layer-row {
+    cursor: default;
+}
+.pdf-layer-row:hover { background: #2a2a3d; }
+
+/* "PDF" badge: small pill on the right of the row */
+.pdf-layer-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    background: #1e3a5f;
+    border: 1px solid #2a5080;
+    border-radius: 3px;
+    color: #5599cc;
+    margin-left: auto;
+    flex-shrink: 0;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+/* Divider between PDF layers and annotation layers */
+.pdf-layers-divider {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px 4px;
+    border-bottom: 1px solid #3a3a55;
+    margin-top: 4px;
+}
+
+.pdf-layers-divider-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #7788aa;
+    text-transform: uppercase;
+}
 
 /* =============================================================================
  * GLOBAL SEARCH PANEL
@@ -3718,3 +3924,104 @@ html, body {
 .entity-photo-item:hover .entity-photo-delete {
     opacity: 1;
 }
+
+/* ========================================================================= */
+/* ENTITY MODAL — PARTS INVENTORY                                           */
+/* ========================================================================= */
+
+.entity-parts-table {
+    display: flex;
+    flex-direction: column;
+    margin-top: 8px;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 12px;
+}
+
+/* Column grid shared by header and data rows */
+.parts-header-row,
+.entity-part-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 45px 50px 90px 50px;
+    gap: 6px;
+    padding: 6px 8px;
+    align-items: center;
+    border-bottom: 1px solid #2a2a4a;
+}
+
+.parts-header-row {
+    background: #1a1a2e;
+    font-weight: 600;
+    color: #888;
+    font-size: 11px;
+}
+
+.entity-part-row {
+    background: #0e0e1a;
+}
+
+.entity-part-row:hover {
+    background: #14142a;
+}
+
+.entity-part-row:last-child {
+    border-bottom: none;
+}
+
+/* Column overflow handling */
+.part-col-number,
+.part-col-desc,
+.part-col-qty,
+.part-col-unit,
+.part-col-location {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.part-col-number {
+    font-family: monospace;
+    color: #a0a0d0;
+}
+
+.part-col-qty {
+    text-align: center;
+}
+
+.part-col-actions {
+    display: flex;
+    gap: 3px;
+    justify-content: flex-end;
+}
+
+.part-edit-btn:hover {
+    color: #4caf50 !important;
+}
+
+/* Inline add-part form */
+.entity-part-add-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    align-items: center;
+}
+
+.entity-part-add-row input {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 3px;
+    color: #c0c0d0;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+
+.entity-part-add-row input::placeholder {
+    color: #555;
+}
+
+/* Proportional widths matching the table grid */
+.part-add-number { width: 80px; flex-shrink: 0; }
+.part-add-desc { flex: 1; }
+.part-add-qty { width: 45px; flex-shrink: 0; }
+.part-add-unit { width: 50px; flex-shrink: 0; }

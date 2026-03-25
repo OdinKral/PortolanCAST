@@ -224,6 +224,10 @@ export class Toolbar {
                 // Reset compact mode as well
                 localStorage.removeItem('portolancast-toolbar-compact');
                 document.getElementById('toolbar').classList.remove('toolbar-compact');
+                // Reset scroll sensitivity to default (Medium = 2)
+                localStorage.removeItem('portolancast-scroll-sensitivity');
+                const scrollSlider = document.getElementById('settings-scroll-sensitivity');
+                if (scrollSlider) scrollSlider.value = '2';
                 // Re-populate the settings list to reflect the reset state
                 this._populateSettingsLists();
             });
@@ -1033,6 +1037,20 @@ export class Toolbar {
                     toolbar.classList.remove('toolbar-compact');
                     localStorage.removeItem('portolancast-toolbar-compact');
                 }
+            });
+        }
+
+        // Wire the scroll sensitivity slider each time the modal opens.
+        // Value 1 = Low (150px threshold), 2 = Medium (80px), 3 = High (30px).
+        // Uses clone-replace pattern to avoid stacking listeners across re-opens.
+        const scrollSlider = document.getElementById('settings-scroll-sensitivity');
+        if (scrollSlider) {
+            const stored = localStorage.getItem('portolancast-scroll-sensitivity');
+            scrollSlider.value = stored ?? '2';
+            const newSlider = scrollSlider.cloneNode(true);
+            scrollSlider.parentNode.replaceChild(newSlider, scrollSlider);
+            newSlider.addEventListener('input', () => {
+                localStorage.setItem('portolancast-scroll-sensitivity', newSlider.value);
             });
         }
 

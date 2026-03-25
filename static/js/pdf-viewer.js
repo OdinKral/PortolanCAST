@@ -36,6 +36,26 @@ const ZOOM_DEFAULT = 100;
 const BASE_DPI = 150;
 
 // =============================================================================
+// SCROLL-BOUNDARY PAGE NAVIGATION
+// =============================================================================
+
+/**
+ * Return the over-scroll threshold (px) from the user's sensitivity preference.
+ *
+ * Level 1 (Low)    = 150px — hard to trigger accidentally
+ * Level 2 (Medium) = 80px  — default
+ * Level 3 (High)   = 30px  — light touch, fast page-flipping
+ *
+ * Read on every wheel event so changes in the settings modal apply instantly.
+ */
+function getOverscrollThreshold() {
+    const level = localStorage.getItem('portolancast-scroll-sensitivity');
+    if (level === '1') return 150;
+    if (level === '3') return 30;
+    return 80;
+}
+
+// =============================================================================
 // PDF VIEWER CLASS
 // =============================================================================
 
@@ -75,6 +95,14 @@ export class PDFViewer {
         this.rotation = 0;
 
         /**
+         * OCG layers currently hidden for this document.
+         * Set of layer name strings (e.g., 'BORDER', 'Text PS').
+         * When non-empty, appended as ?hidden_layers=... on page render requests.
+         * @type {Set<string>}
+         */
+        this.pdfHiddenLayers = new Set();
+
+        /**
          * Per-page rotation map — persisted to document_settings via API.
          * Key: page number (int as string), Value: degrees (0/90/180/270).
          * Pages not in the map default to 0°.
@@ -88,6 +116,18 @@ export class PDFViewer {
         this.panStartY = 0;
         this.scrollStartX = 0;
         this.scrollStartY = 0;
+
+        /**
+         * Scroll-boundary page navigation state.
+         * Accumulates wheel delta past the viewport edge; flips the page when
+         * the total reaches getOverscrollThreshold().
+         *
+         * amount:    accumulated over-scroll pixels in the current direction
+         * direction: 'next' | 'prev' | null
+         * lastFlip:  Date.now() of the last page flip — used to enforce a
+         *            cooldown so rapid wheel events don't skip multiple pages
+         */
+        this._overscroll = { amount: 0, direction: null, lastFlip: 0 };
 
         // Rendered image natural dimensions (at BASE_DPI)
         this.imageNaturalWidth = 0;
@@ -116,7 +156,14 @@ export class PDFViewer {
             if (e.ctrlKey) {
                 e.preventDefault();
                 const delta = e.deltaY > 0 ? -ZOOM_SCROLL_STEP : ZOOM_SCROLL_STEP;
-                this.setZoom(this.zoom + delta);
+                // Capture cursor position relative to viewport so zoom anchors
+                // to the point under the mouse rather than jumping to top-left.
+                const rect = this.viewport.getBoundingClientRect();
+                const focalPoint = {
+                    viewportX: e.clientX - rect.left,
+                    viewportY: e.clientY - rect.top,
+                };
+                this.setZoom(this.zoom + delta, focalPoint);
             }
         }, { passive: false });
 
@@ -158,7 +205,96 @@ export class PDFViewer {
             this.imageNaturalWidth = this.pdfImage.naturalWidth;
             this.imageNaturalHeight = this.pdfImage.naturalHeight;
             this._applyZoom();
+            // Notify minimap and other listeners that a fresh page image is ready
+            if (this.onPageLoad) this.onPageLoad(this.pdfImage);
         });
+
+        // --- Scroll-boundary page navigation ---
+        // Capture phase on #viewport fires BEFORE any child handler (including the
+        // Fabric canvas wrapper's capture listener in canvas.js). This guarantees we
+        // see every wheel event regardless of where in the viewport the mouse is,
+        // and regardless of Fabric's pointer-events state.
+        //
+        // When the threshold is reached we call e.stopPropagation() so canvas.js's
+        // _bindScrollForwarding does NOT apply the remaining delta to the fresh page.
+        this.viewport.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) return; // ctrl+scroll = zoom, handled by the bubble listener
+
+            let dy = e.deltaY;
+            if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) dy *= 24;
+            else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) dy *= this.viewport.clientHeight;
+            if (dy === 0) return;
+
+            const maxScrollTop = this.viewport.scrollHeight - this.viewport.clientHeight;
+            // Only active when the page is taller than the viewport.
+            // Pages that fit fully have maxScrollTop ≈ 0 and no meaningful edge.
+            if (maxScrollTop <= 5) return;
+
+            // Use <= 1 tolerance: fractional scrollTop (0.3px etc.) on high-DPI
+            // displays would break a strict === 0 check.
+            const isTopEdge    = dy < 0 && this.viewport.scrollTop <= 1;
+            const isBottomEdge = dy > 0 && this.viewport.scrollTop >= maxScrollTop - 1;
+
+            if (isTopEdge || isBottomEdge) {
+                const direction = isBottomEdge ? 'next' : 'prev';
+
+                // Cooldown: after a flip, ignore edge events for 1200ms so rapid
+                // trackpad momentum doesn't skip multiple pages in one gesture.
+                if (Date.now() - this._overscroll.lastFlip < 1200) return;
+
+                // Reset accumulator when direction reverses
+                if (direction !== this._overscroll.direction) {
+                    this._overscroll.amount    = 0;
+                    this._overscroll.direction = direction;
+                }
+
+                this._overscroll.amount += Math.abs(dy);
+                const threshold = getOverscrollThreshold();
+                const progress  = Math.min(100, (this._overscroll.amount / threshold) * 100);
+                this._updateOverscrollIndicator(progress, direction);
+
+                if (this._overscroll.amount >= threshold) {
+                    // Record flip time BEFORE navigating so the cooldown starts
+                    // immediately — goToPage() is async and takes time to resolve.
+                    this._overscroll = { amount: 0, direction: null, lastFlip: Date.now() };
+                    this._updateOverscrollIndicator(0, null);
+                    e.stopPropagation();
+                    if (direction === 'next') this.nextPage();
+                    else this.prevPage();
+                }
+            } else {
+                // Scrolled away from edge — discard partial accumulation
+                // (preserve lastFlip so the cooldown remains active)
+                if (this._overscroll.amount > 0) {
+                    this._overscroll.amount    = 0;
+                    this._overscroll.direction = null;
+                    this._updateOverscrollIndicator(0, null);
+                }
+            }
+        }, { passive: false, capture: true });
+    }
+
+    /**
+     * Update the over-scroll progress indicator on #viewport.
+     *
+     * Grows an inset box-shadow at the top or bottom edge as the threshold
+     * is approached. No DOM injection — avoids z-index conflicts with Fabric.
+     *
+     * Args:
+     *   progress:  0–100 (% of threshold reached)
+     *   direction: 'next' (bottom glow) | 'prev' (top glow) | null (clear)
+     */
+    _updateOverscrollIndicator(progress, direction) {
+        if (progress <= 0 || !direction) {
+            this.viewport.style.boxShadow = '';
+            return;
+        }
+        const alpha  = 0.25 + (progress / 100) * 0.5;          // 0.25 → 0.75
+        const height = Math.round(2 + (progress / 100) * 6);    // 2px → 8px
+        const color  = `rgba(74, 144, 226, ${alpha.toFixed(2)})`;
+        this.viewport.style.boxShadow = direction === 'next'
+            ? `inset 0 -${height}px 0 0 ${color}`
+            : `inset 0  ${height}px 0 0 ${color}`;
     }
 
     // =========================================================================
@@ -183,6 +319,9 @@ export class PDFViewer {
         this.docInfo = await resp.json();
         this.pageCount = this.docInfo.page_count;
         this.currentPage = 0;
+
+        // Reset OCG layer state — new document starts with all layers visible
+        this.pdfHiddenLayers = new Set();
 
         // Load per-page rotation preferences before first render
         // so the first page displays in its saved orientation.
@@ -228,7 +367,11 @@ export class PDFViewer {
         // DPI is fixed at BASE_DPI — zoom is handled client-side via CSS.
         // rotate instructs the server to bake the rotation into the PNG so
         // the Fabric canvas overlay coord-space matches the displayed image.
-        const url = `/api/documents/${this.docId}/page/${pageNumber}?dpi=${BASE_DPI}&rotate=${this.rotation}`;
+        // hidden_layers lists OCG layer names to suppress (empty = show all).
+        let url = `/api/documents/${this.docId}/page/${pageNumber}?dpi=${BASE_DPI}&rotate=${this.rotation}`;
+        if (this.pdfHiddenLayers.size > 0) {
+            url += `&hidden_layers=${encodeURIComponent([...this.pdfHiddenLayers].join(','))}`;
+        }
 
         try {
             this.pdfImage.src = url;
@@ -268,6 +411,35 @@ export class PDFViewer {
     }
 
     // =========================================================================
+    // OCG LAYER VISIBILITY
+    // =========================================================================
+
+    /**
+     * Update the set of hidden OCG layers and re-render the current page.
+     *
+     * Called by the PDF layer panel when the user toggles a layer.
+     * The hidden set is passed as ?hidden_layers= to the server render endpoint.
+     *
+     * Args:
+     *   hiddenLayerNames: Array of layer name strings to hide.
+     */
+    setHiddenLayers(hiddenLayerNames) {
+        this.pdfHiddenLayers = new Set(hiddenLayerNames);
+        // Re-render current page with new layer state
+        this.goToPage(this.currentPage);
+    }
+
+    /**
+     * Clear all layer filters and re-render the current page with all layers visible.
+     */
+    resetHiddenLayers() {
+        if (this.pdfHiddenLayers.size > 0) {
+            this.pdfHiddenLayers = new Set();
+            this.goToPage(this.currentPage);
+        }
+    }
+
+    // =========================================================================
     // ZOOM
     // =========================================================================
 
@@ -282,9 +454,33 @@ export class PDFViewer {
      * Args:
      *   zoomPercent: Zoom level as percentage (25-400).
      */
-    setZoom(zoomPercent) {
+    /**
+     * Set zoom and optionally anchor to a focal point so the content under
+     * that point stays stationary after zooming.
+     *
+     * Args:
+     *   zoomPercent: Target zoom level (25-400).
+     *   focalPoint: Optional {viewportX, viewportY} — pixel offset from the
+     *               top-left corner of the viewport element. If omitted, no
+     *               scroll adjustment is made (content jumps to top-left).
+     */
+    setZoom(zoomPercent, focalPoint = null) {
+        const oldZoom = this.zoom;
         this.zoom = Math.max(ZOOM_MIN, Math.min(zoomPercent, ZOOM_MAX));
         this._applyZoom();
+
+        // Anchor zoom to focal point: keep the content coordinate under the
+        // focal pixel stationary. Formula:
+        //   newScroll = (oldScroll + focalOffset) * (newZoom / oldZoom) - focalOffset
+        // This works because the focal point's content coordinate scales by the
+        // zoom ratio, while its position within the viewport stays constant.
+        if (focalPoint && oldZoom !== this.zoom) {
+            const ratio = this.zoom / oldZoom;
+            this.viewport.scrollLeft =
+                (this.viewport.scrollLeft + focalPoint.viewportX) * ratio - focalPoint.viewportX;
+            this.viewport.scrollTop =
+                (this.viewport.scrollTop + focalPoint.viewportY) * ratio - focalPoint.viewportY;
+        }
 
         if (this.onZoomChange) {
             this.onZoomChange(this.zoom);
@@ -303,14 +499,25 @@ export class PDFViewer {
         this.pdfImage.style.height = `${h}px`;
     }
 
-    /** Zoom in by one step. */
+    /** Zoom in by one step, anchored to the center of the visible viewport. */
     zoomIn() {
-        this.setZoom(this.zoom + ZOOM_STEP);
+        this.setZoom(this.zoom + ZOOM_STEP, this._viewportCenter());
     }
 
-    /** Zoom out by one step. */
+    /** Zoom out by one step, anchored to the center of the visible viewport. */
     zoomOut() {
-        this.setZoom(this.zoom - ZOOM_STEP);
+        this.setZoom(this.zoom - ZOOM_STEP, this._viewportCenter());
+    }
+
+    /**
+     * Return the center of the visible viewport as a focal point.
+     * Used by zoom buttons so they don't jump to the top-left corner.
+     */
+    _viewportCenter() {
+        return {
+            viewportX: this.viewport.clientWidth  / 2,
+            viewportY: this.viewport.clientHeight / 2,
+        };
     }
 
     /**
@@ -339,10 +546,11 @@ export class PDFViewer {
      * auto-fits to width so the rotated page fills the viewport (prevents
      * the "cut off image" problem reported in the 2026-03-10 field test).
      *
-     * Note on existing markups: markups are stored in the coordinate space
-     * of the rendered image. Rotating after placing markups will cause them
-     * to appear in incorrect positions because the coordinate space changes
-     * with the rotation. Best practice: set rotation before starting markup work.
+     * Coordinate handling: When rotation changes, onRotationChange fires
+     * BEFORE the image reloads. App.js uses this to transform all markup
+     * coordinates through the rotation matrix so objects maintain their
+     * physical position on the drawing. See canvas.js
+     * transformObjectsForRotation() for the affine math.
      */
     rotate() {
         this.setRotation((this.rotation + 90) % 360);
@@ -360,7 +568,11 @@ export class PDFViewer {
      */
     setRotation(degrees) {
         const valid = [0, 90, 180, 270];
+        const oldRotation = this.rotation;
         this.rotation = valid.includes(degrees) ? degrees : 0;
+
+        // No change — skip re-render and callbacks
+        if (this.rotation === oldRotation) return;
 
         // Store in per-page map
         const pageKey = String(this.currentPage);
@@ -372,6 +584,18 @@ export class PDFViewer {
 
         // Persist to server (fire-and-forget — rotation is best-effort)
         this._saveRotations();
+
+        // Fire rotation change BEFORE re-rendering so listeners can transform
+        // markup coordinates while imageNaturalWidth/Height still hold the
+        // pre-rotation values. This is critical: goToPage() triggers an image
+        // load that will swap dimensions, but markups need the OLD dimensions
+        // to compute the correct coordinate transformation.
+        if (this.onRotationChange) {
+            this.onRotationChange(
+                this.rotation, oldRotation,
+                this.imageNaturalWidth, this.imageNaturalHeight
+            );
+        }
 
         // Re-render the current page with the new rotation baked in.
         // goToPage() resets scroll to top-left, which is appropriate
@@ -387,10 +611,6 @@ export class PDFViewer {
             this.pdfImage.addEventListener('load', fitAfterLoad);
 
             this.goToPage(this.currentPage);
-        }
-
-        if (this.onRotationChange) {
-            this.onRotationChange(this.rotation);
         }
     }
 

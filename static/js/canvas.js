@@ -122,6 +122,11 @@ if (typeof fabric !== 'undefined') {
 }
 
 // =============================================================================
+// SCROLL-BOUNDARY PAGE NAVIGATION
+// =============================================================================
+
+
+// =============================================================================
 // CANVAS OVERLAY
 // =============================================================================
 
@@ -173,6 +178,7 @@ export class CanvasOverlay {
          * @type {Function|null}
          */
         this.onContentChange = null;
+
     }
 
     // =========================================================================
@@ -320,9 +326,11 @@ export class CanvasOverlay {
             e.preventDefault();
             e.stopPropagation();
 
-            // Scroll #viewport — identical effect to native browser scroll
+            // Scroll #viewport — identical effect to native browser scroll.
+            // Page-flip threshold logic lives in PDFViewer._bindEvents() (viewport
+            // capture listener) where it fires unconditionally for ALL wheel events.
             this.viewer.viewport.scrollLeft += dx;
-            this.viewer.viewport.scrollTop += dy;
+            this.viewer.viewport.scrollTop  += dy;
         }, { passive: false, capture: true });
     }
 
@@ -718,6 +726,95 @@ export class CanvasOverlay {
 
     /** @returns {boolean} Whether redo is available */
     get canRedo() { return this._redoStack.length > 0; }
+
+    // =========================================================================
+    // ROTATION COORDINATE TRANSFORMATION
+    // =========================================================================
+
+    /**
+     * Transform all objects on the canvas when the page rotates.
+     *
+     * Applies an affine transformation to every Fabric object so its position
+     * corresponds to the same physical location on the rotated page. Without
+     * this, markups placed before rotation appear at incorrect positions
+     * because the coordinate space changes when page dimensions swap.
+     *
+     * Math — for a page of dimensions (W, H), rotating clockwise:
+     *   90°:  (x, y) → (H − y, x),       new page is H × W
+     *   180°: (x, y) → (W − x, H − y),   same W × H
+     *   270°: (x, y) → (y, W − x),        new page is H × W
+     *
+     * The transformation is applied to each object's visual center point.
+     * The object's own angle is also adjusted by the rotation delta so
+     * text, arrows, and shapes maintain their orientation relative to the
+     * page content.
+     *
+     * Args:
+     *   deltaRotation: Degrees of CW rotation to apply (90, 180, or 270).
+     *                  0 is a no-op.
+     *   oldWidth:  Page width in natural coords BEFORE rotation.
+     *   oldHeight: Page height in natural coords BEFORE rotation.
+     */
+    transformObjectsForRotation(deltaRotation, oldWidth, oldHeight) {
+        if (!this.fabricCanvas) return;
+        if (deltaRotation === 0) return;
+
+        const objects = this.fabricCanvas.getObjects();
+        if (objects.length === 0) return;
+
+        for (const obj of objects) {
+            // Get the object's current visual center point.
+            // getCenterPoint() accounts for angle, scale, and origin settings.
+            const center = obj.getCenterPoint();
+
+            // Transform center to the new coordinate space
+            let newCenterX, newCenterY;
+            switch (deltaRotation) {
+                case 90:
+                    newCenterX = oldHeight - center.y;
+                    newCenterY = center.x;
+                    break;
+                case 180:
+                    newCenterX = oldWidth - center.x;
+                    newCenterY = oldHeight - center.y;
+                    break;
+                case 270:
+                    newCenterX = center.y;
+                    newCenterY = oldWidth - center.x;
+                    break;
+                default:
+                    return;
+            }
+
+            // Update object angle to match the page rotation.
+            // Must happen BEFORE repositioning because changing angle
+            // shifts getCenterPoint() relative to left/top.
+            obj.set('angle', ((obj.angle || 0) + deltaRotation) % 360);
+
+            // Reposition: compute offset from current center to desired center,
+            // then shift left/top by the same offset. This works regardless of
+            // originX/originY or the object's own angle because translating
+            // left/top by (dx, dy) always translates the center by (dx, dy).
+            const currentCenter = obj.getCenterPoint();
+            obj.set({
+                left: obj.left + (newCenterX - currentCenter.x),
+                top: obj.top + (newCenterY - currentCenter.y),
+            });
+
+            // Recalculate bounding box for selection and hit detection
+            obj.setCoords();
+        }
+
+        // Render immediately so the user sees transformed positions
+        this.fabricCanvas.renderAll();
+
+        // Reset undo stack — rotation creates a new baseline.
+        // Pre-rotation snapshots would restore coordinates in the old
+        // coordinate space, which would be incorrect after rotation.
+        this._saveBaselineSnapshot();
+
+        console.log(`[Canvas] Transformed ${objects.length} object(s) for ${deltaRotation}° rotation`);
+    }
 
     // =========================================================================
     // SERIALIZATION

@@ -28,18 +28,41 @@ and generate structured review briefs — all in a local web app with no cloud d
 
 ## Starting the Server
 
-From WSL:
+### Option 1 — Windows Desktop Launcher (recommended)
+
+Copy `scripts/PortolanCAST.bat` to your Windows Desktop and double-click it.
+
+The launcher automatically:
+- Resolves the current WSL2 IP (it changes on every reboot)
+- Starts the FastAPI server in WSL
+- Starts a TCP relay so `localhost:8000` works from Windows
+- Opens your browser once the server is ready
+
+A **PortolanCAST Server** terminal window will appear — this is your server log. Keep it open while using the app. Close it to stop the server.
+
+> **First-time setup:** Right-click `PortolanCAST.bat` → Properties → Unblock (if Windows flags it). Then double-click to run.
+
+---
+
+### Option 2 — WSL Terminal
 
 ```bash
 cd /mnt/c/Users/User1/ClaudeProjects/PortolanCAST
-venv/bin/python -c "import uvicorn, os; os.chdir('/mnt/c/Users/User1/ClaudeProjects/PortolanCAST'); uvicorn.run('main:app', host='0.0.0.0', port=8000)"
+venv/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Then open **http://172.22.35.128:8000** in your browser (Windows Firefox).
+Then open your browser to **`http://localhost:8000`**.
 
-> **WSL2 networking note:** Bind to `0.0.0.0` (not `127.0.0.1`) so Windows can reach it.
-> Use the WSL IP `172.22.35.128` if `localhost:8000` doesn't connect.
-> If the old process is still running: `kill $(ss -tlnp 'sport = :8000' | awk 'NR>1{gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}')`
+> **WSL2 networking note:** If `localhost:8000` does not connect, use the WSL IP directly.
+> Get it with: `wsl hostname -I`
+> Then open `http://<that-ip>:8000` in your Windows browser.
+
+> **Stop a stuck server:**
+> ```bash
+> kill $(ss -tlnp 'sport = :8000' | awk 'NR>1{gsub(/.*pid=/,"",$NF); gsub(/,.*/,"",$NF); print $NF}')
+> ```
+
+---
 
 All data is stored locally in `data/portolancast.db`. Nothing leaves your machine.
 
@@ -351,11 +374,29 @@ They survive save/load cycles and are independent of page number.
 | First page | Home |
 | Last page | End |
 | Jump to page | Click thumbnail in Pages tab |
+| Scroll to next/prev page | Scroll past the top or bottom edge of a page |
 | Zoom in | Ctrl + `+` or Ctrl + scroll up |
 | Zoom out | Ctrl + `-` or Ctrl + scroll down |
 | Reset zoom | Ctrl + 0 |
 | Fit to width | Click **Fit** in toolbar |
 | Pan | Scroll normally, or press G for Hand tool |
+
+### Scroll-to-Page Navigation
+
+When you scroll past the top or bottom edge of a page, a blue glow appears at
+the edge and grows as you keep scrolling. Once the threshold is reached, the
+viewer automatically advances to the next (or previous) page.
+
+A 1.2-second cooldown prevents accidentally skipping multiple pages in one gesture.
+
+**Adjusting sensitivity:** Open the gear (⚙) menu in the toolbar → drag the
+**Scroll page sensitivity** slider.
+
+| Setting | Behaviour |
+|---------|-----------|
+| Low | Requires a long deliberate push — hard to trigger accidentally |
+| Medium (default) | Comfortable for most workflows |
+| High | Light touch — good for quickly flipping through many pages |
 
 ---
 

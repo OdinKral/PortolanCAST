@@ -34,6 +34,136 @@ from pathlib import Path
 from typing import Optional
 
 # =============================================================================
+# OPTIONAL CONTENT (OCG) LAYER FILTERING
+# =============================================================================
+
+def _filter_content_stream(stream_bytes: bytes, oc_map: dict, layers_to_show: set) -> bytes:
+    """
+    Remove Optional Content blocks for hidden layers from a PDF content stream.
+
+    PDF optional content syntax:
+        /OC /ocXX BDC   <- start of an optional content block
+        ... content ...
+        EMC             <- end of optional content block
+
+    BDC/EMC blocks can nest. We track nesting depth to find the matching EMC
+    for each hidden-layer BDC. Non-OC BDC/BMC operators (used for text structure,
+    artifacts, etc.) also nest correctly.
+
+    BT/ET balance repair:
+        AutoCAD/Bluebeam PDFs sometimes open a BT (Begin Text) block in
+        untagged preamble content and then close it with ET *inside* an OCG
+        BDC/EMC block. When we remove that OCG block, the ET disappears,
+        leaving subsequent path operators inside a text block — PDF renders
+        them as invisible. After discarding each hidden block we count the
+        net BT/ET deficit it created (more ET than BT) and inject that many
+        `ET` operators at the removal point so path drawing can resume.
+
+    Args:
+        stream_bytes:   Raw (decompressed) PDF content stream bytes.
+        oc_map:         Dict of {'/ocXX': 'LayerName'} for this page's resources.
+        layers_to_show: Set of layer names that should remain visible.
+
+    Returns:
+        Filtered stream bytes. Returns stream_bytes unchanged if nothing is hidden.
+    """
+    # Determine which OC resource names to strip
+    oc_names_to_hide = {
+        oc_name for oc_name, layer_name in oc_map.items()
+        if layer_name not in layers_to_show
+    }
+
+    if not oc_names_to_hide:
+        return stream_bytes  # Nothing to filter
+
+    text = stream_bytes.decode('latin-1')
+
+    # Collect all marked-content events: position + type + OC resource name.
+    # Three categories:
+    #   OC_BDC  — /OC /ocXX BDC (optional content block, may be hidden)
+    #   BDC_ANY — any other BDC or BMC (nested non-OC marked content)
+    #   EMC     — end of any marked content block
+    events = []
+
+    # Find /OC /ocXX BDC patterns first (record their ranges to avoid double-counting)
+    oc_bdc_ranges = []
+    for m in re.finditer(r'/OC\s+(/\w+)\s+BDC', text):
+        events.append(('OC_BDC', m.start(), m.end(), m.group(1)))
+        oc_bdc_ranges.append((m.start(), m.end()))
+
+    # Find standalone BDC/BMC tokens — skip any that fall within an OC_BDC match
+    # (the "BDC" in "/OC /ocXX BDC" is already captured above)
+    for m in re.finditer(r'\bBDC\b|\bBMC\b', text):
+        if not any(start <= m.start() < end for start, end in oc_bdc_ranges):
+            events.append(('BDC_ANY', m.start(), m.end(), None))
+
+    # Find all EMC tokens
+    for m in re.finditer(r'\bEMC\b', text):
+        events.append(('EMC', m.start(), m.end(), None))
+
+    # Sort events by their position in the stream
+    events.sort(key=lambda x: x[1])
+
+    # State machine: walk events, building filtered output.
+    # skip_depth > 0 = currently inside a hidden OC block; suppress output.
+    result = []
+    pos = 0        # Start of next text chunk to include in output
+    skip_depth = 0  # Nesting depth inside hidden blocks
+    bt_depth = 0   # Current BT/ET text-block depth (across kept content)
+
+    # Pre-compile patterns for BT/ET counting inside removed blocks
+    _bt_re = re.compile(r'\bBT\b')
+    _et_re = re.compile(r'\bET\b')
+
+    for ev_type, ev_start, ev_end, oc_name in events:
+        if skip_depth == 0:
+            if ev_type == 'OC_BDC' and oc_name in oc_names_to_hide:
+                # Flush text up to here (track BT/ET in the kept segment)
+                kept_chunk = text[pos:ev_start]
+                bt_depth += len(_bt_re.findall(kept_chunk))
+                bt_depth -= len(_et_re.findall(kept_chunk))
+                result.append(kept_chunk)
+                pos = ev_start  # Will advance to ev_end when depth reaches 0
+                skip_depth = 1
+            # else: visible OC block, generic BDC/BMC, or EMC — output normally
+        else:
+            # Inside a hidden block: track nesting to find the matching EMC
+            if ev_type in ('OC_BDC', 'BDC_ANY'):
+                skip_depth += 1
+            elif ev_type == 'EMC':
+                skip_depth -= 1
+                if skip_depth == 0:
+                    # Count BT/ET deficit inside the block we are discarding.
+                    # A deficit (more ET than BT) means the block was closing
+                    # a BT that was opened in untagged content before the block.
+                    # Without the block's ET, path operators that follow will be
+                    # silently ignored by the PDF interpreter (text mode).
+                    removed_chunk = text[pos:ev_end]
+                    bt_in_removed = len(_bt_re.findall(removed_chunk))
+                    et_in_removed = len(_et_re.findall(removed_chunk))
+                    et_deficit = et_in_removed - bt_in_removed
+                    if et_deficit > 0 and bt_depth > 0:
+                        # Inject the missing ET operators to restore path-drawing mode.
+                        # Clamp to bt_depth so we don't emit more ET than open BT.
+                        inject_count = min(et_deficit, bt_depth)
+                        result.append('\nET\n' * inject_count)
+                        bt_depth -= inject_count
+
+                    # Hidden block complete: skip past this EMC, resume output
+                    pos = ev_end
+
+    # Append any remaining text after the last event
+    result.append(text[pos:])
+
+    filtered = ''.join(result)
+
+    # Only re-encode if something was actually changed (avoid unnecessary allocation)
+    if len(filtered) == len(text):
+        return stream_bytes
+    return filtered.encode('latin-1')
+
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
@@ -217,6 +347,208 @@ class PDFEngine:
 
             pixmap = page.get_pixmap(matrix=matrix, alpha=False)
             return pixmap.tobytes("png")
+        finally:
+            doc.close()
+
+    # =========================================================================
+    # OCG LAYER SUPPORT
+    # =========================================================================
+
+    def get_pdf_layers(self, pdf_path: str) -> list:
+        """
+        Get the Optional Content Group (OCG) layers from a PDF.
+
+        OCGs are the PDF equivalent of CAD layers. Engineering drawings from
+        AutoCAD/Bluebeam typically carry named OCGs for each discipline layer
+        (walls, piping, electrical, text, etc.).
+
+        Args:
+            pdf_path: Absolute path to the PDF file.
+
+        Returns:
+            List of {'name': str, 'on': bool} dicts, sorted by name.
+            Returns [] if the PDF has no OCG layers.
+
+        Raises:
+            FileNotFoundError: If pdf_path doesn't exist.
+            ValueError: If file is not a valid PDF.
+        """
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        try:
+            doc = fitz.open(str(path))
+        except Exception as e:
+            raise ValueError(f"Cannot open PDF: {e}")
+
+        try:
+            ocgs = doc.get_ocgs()
+            if not ocgs:
+                return []
+
+            # Deduplicate by name — some PDFs register the same layer under
+            # multiple xrefs (e.g., one for each page reference).
+            seen: dict = {}
+            for xref, info in ocgs.items():
+                name = info.get('name', f'Layer_{xref}')
+                if name not in seen:
+                    seen[name] = {'name': name, 'on': info.get('on', True)}
+
+            return sorted(seen.values(), key=lambda x: x['name'])
+        finally:
+            doc.close()
+
+    def _build_oc_map_for_page(self, doc, page) -> dict:
+        """
+        Build a mapping from page-local OC resource name to layer name.
+
+        Each PDF page has a /Resources/Properties dict that maps short names
+        (e.g., /oc10) to OCG xrefs. This lets content streams reference layers
+        compactly. We resolve these to human-readable layer names.
+
+        Args:
+            doc:  Open fitz.Document.
+            page: fitz.Page object.
+
+        Returns:
+            Dict like {'/oc10': 'MP-HOTW-SUPP-PIPE', '/oc13': '0', ...}.
+            Returns {} if no OCG properties found on this page.
+        """
+        ocgs = doc.get_ocgs()  # {xref: {'name': ..., 'on': ...}}
+        if not ocgs:
+            return {}
+
+        xref_to_name = {xref: info.get('name', '') for xref, info in ocgs.items()}
+        oc_map: dict = {}
+
+        try:
+            # Read the full page xref object as a string.
+            # Typical form includes: /Properties <</oc10 2859 0 R /oc12 2861 0 R ...>>
+            xref_str = doc.xref_object(page.xref)
+
+            # Find the Properties subdictionary.
+            # It won't contain nested dicts so a simple non-greedy match works.
+            props_match = re.search(r'/Properties\s*<<([^>]*)>>', xref_str)
+            if not props_match:
+                # Resources may be an indirect reference — fall back to xref_get_key
+                try:
+                    props_str = doc.xref_get_key(page.xref, 'Resources/Properties')
+                    props_match_fb = re.search(r'<<([^>]*)>>', props_str)
+                    if props_match_fb:
+                        props_str = props_match_fb.group(1)
+                    else:
+                        props_str = props_str
+                except Exception:
+                    return {}
+            else:
+                props_str = props_match.group(1)
+
+            # Parse entries like: /oc10 2859 0 R
+            # Note: property names in the PDF dict have a leading slash
+            for m in re.finditer(r'(/\w+)\s+(\d+)\s+0\s+R', props_str):
+                oc_local = m.group(1)   # e.g., /oc10
+                ref_xref = int(m.group(2))
+                if ref_xref in xref_to_name:
+                    oc_map[oc_local] = xref_to_name[ref_xref]
+
+        except Exception:
+            pass  # Parse error — return whatever we managed to collect
+
+        return oc_map
+
+    def render_page_with_layers(self, pdf_path: str, page_number: int,
+                                hidden_layers: list,
+                                dpi: int = DEFAULT_DPI,
+                                rotate: int = 0) -> bytes:
+        """
+        Render a PDF page with specified OCG layers hidden.
+
+        Strategy: Native OCG visibility via set_layer() + save-to-buffer-and-reopen.
+
+        PyMuPDF 1.24.9's get_pixmap() ignores set_layer() calls made to an
+        already-open document because MuPDF's C layer caches the page content
+        at open time. The workaround is to:
+          1. Set the OCG visibility state in the document metadata.
+          2. Serialize the whole document to an in-memory bytes buffer.
+          3. Reopen a fresh fitz.Document from that buffer.
+          4. Render — MuPDF now reads the OCG state from the fresh parse.
+
+        Fall-through: if the PDF has no OCG table (no layers) this path is a
+        no-op and the page renders normally.
+
+        Args:
+            pdf_path:      Absolute path to the PDF file.
+            page_number:   Zero-indexed page number.
+            hidden_layers: List of layer names to suppress (e.g. ['BORDER', 'Text PS']).
+                           Pass [] to render all layers (falls back to render_page).
+            dpi:           Rendering resolution (72-300, default 150).
+            rotate:        Clockwise rotation in degrees (0, 90, 180, 270).
+
+        Returns:
+            PNG image as bytes.
+
+        Raises:
+            FileNotFoundError: If pdf_path doesn't exist.
+            IndexError:        If page_number is out of range.
+            ValueError:        If file is not a valid PDF.
+        """
+        if not hidden_layers:
+            # No filtering needed — delegate to the standard renderer
+            return self.render_page(pdf_path, page_number, dpi=dpi, rotate=rotate)
+
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        # SECURITY: Clamp inputs (same as render_page)
+        dpi = min(max(dpi, 72), MAX_DPI)
+        rotate = rotate if rotate in (0, 90, 180, 270) else 0
+
+        try:
+            try:
+                doc = fitz.open(str(path))
+            except Exception as e:
+                raise ValueError(f"Cannot open PDF: {e}")
+
+            if page_number < 0 or page_number >= doc.page_count:
+                raise IndexError(
+                    f"Page {page_number} out of range "
+                    f"(document has {doc.page_count} pages)"
+                )
+
+            page = doc[page_number]
+
+            # Build OC resource map: {'/ocXX': 'LayerName'} for this page.
+            # The map is page-local: each page's /Resources/Properties dict
+            # assigns short names like /oc10 to global OCG xrefs.
+            oc_map = self._build_oc_map_for_page(doc, page)
+
+            if oc_map:
+                hidden_set = set(hidden_layers)
+                layers_to_show = {
+                    name for name in oc_map.values()
+                    if name not in hidden_set
+                }
+
+                # Filter each content stream for this page.
+                # _filter_content_stream removes BDC/EMC blocks for hidden layers
+                # while preserving untagged preamble content (scale transforms,
+                # clip paths, etc.) and repairing BT/ET balance after removals.
+                for xref in page.get_contents():
+                    raw = doc.xref_stream(xref)
+                    filtered = _filter_content_stream(raw, oc_map, layers_to_show)
+                    if filtered is not raw:
+                        doc.update_stream(xref, filtered)
+
+            # Render from the in-memory modified document.
+            # doc.close() (in finally) without doc.save() discards all changes —
+            # the original PDF file on disk is never touched.
+            zoom = dpi / 72.0
+            matrix = fitz.Matrix(zoom, zoom).prerotate(rotate)
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            return pixmap.tobytes("png")
+
         finally:
             doc.close()
 

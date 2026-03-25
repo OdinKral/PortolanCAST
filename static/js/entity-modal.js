@@ -92,12 +92,13 @@ export class EntityModal {
         overlay.style.display = '';
 
         try {
-            // Fetch entity dossier, markups, tasks, and photos in parallel
-            const [dossierResp, markupsResp, tasksResp, photosResp] = await Promise.all([
+            // Fetch entity dossier, markups, tasks, photos, and parts in parallel
+            const [dossierResp, markupsResp, tasksResp, photosResp, partsResp] = await Promise.all([
                 fetch(`/api/entities/${entityId}`),
                 fetch(`/api/entities/${entityId}/markups`),
                 fetch(`/api/entities/${entityId}/tasks`),
                 fetch(`/api/entities/${entityId}/photos`),
+                fetch(`/api/entities/${entityId}/parts`),
             ]);
 
             if (!dossierResp.ok) {
@@ -110,12 +111,14 @@ export class EntityModal {
             const markupsData = markupsResp.ok ? await markupsResp.json() : { markups: [] };
             const tasksData = tasksResp.ok ? await tasksResp.json() : { tasks: [] };
             const photosData = photosResp.ok ? await photosResp.json() : { photos: [] };
+            const partsData = partsResp.ok ? await partsResp.json() : { parts: [] };
 
             const entity = dossier.entity;
             const log = dossier.log || [];
             const markups = markupsData.markups || [];
             const tasks = tasksData.tasks || [];
             const photos = photosData.photos || [];
+            const parts = partsData.parts || [];
 
             // Render header title — show building prefix if set
             const titleEl = document.getElementById('entity-modal-title');
@@ -136,6 +139,7 @@ export class EntityModal {
                 this._renderObservations(body, markups);
                 this._renderLog(body, entity, log);
                 this._renderTasks(body, entity.id, tasks);
+                this._renderParts(body, entity.id, parts);
                 this._renderPhotos(body, entity.id, photos);
                 this._renderDangerZone(body, entity);
             }
@@ -718,6 +722,308 @@ export class EntityModal {
         });
         row.appendChild(deleteBtn);
 
+        return row;
+    }
+
+    // =========================================================================
+    // RENDER — PARTS INVENTORY
+    // =========================================================================
+
+    /**
+     * Render the Parts Inventory section — parts/spares for this entity.
+     *
+     * Shows a grid-table of parts with columns: part number, description,
+     * quantity, unit, location. Includes an inline add form for new parts
+     * and edit/delete actions per row.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entityId:  UUID of the entity.
+     *   parts:     Array of part objects from the API.
+     */
+    _renderParts(container, entityId, parts) {
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = `Parts Inventory (${parts.length})`;
+        section.appendChild(header);
+
+        // Parts table container
+        const table = document.createElement('div');
+        table.className = 'entity-parts-table';
+        table.id = 'entity-parts-table';
+
+        if (parts.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'muted-text';
+            empty.style.padding = '8px 0';
+            empty.textContent = 'No parts in inventory.';
+            empty.id = 'entity-parts-empty';
+            table.appendChild(empty);
+        } else {
+            // Column header row
+            const headerRow = document.createElement('div');
+            headerRow.className = 'parts-header-row';
+
+            const cols = [
+                { cls: 'part-col-number', text: 'Part #' },
+                { cls: 'part-col-desc', text: 'Description' },
+                { cls: 'part-col-qty', text: 'Qty' },
+                { cls: 'part-col-unit', text: 'Unit' },
+                { cls: 'part-col-location', text: 'Location' },
+                { cls: 'part-col-actions', text: '' },
+            ];
+            for (const col of cols) {
+                const span = document.createElement('span');
+                span.className = col.cls;
+                span.textContent = col.text;
+                headerRow.appendChild(span);
+            }
+            table.appendChild(headerRow);
+
+            // Part data rows
+            for (const part of parts) {
+                table.appendChild(this._createPartRow(part, table, header, entityId));
+            }
+        }
+
+        section.appendChild(table);
+
+        // Inline add-part form
+        const addRow = document.createElement('div');
+        addRow.className = 'entity-part-add-row';
+
+        const partNumInput = document.createElement('input');
+        partNumInput.type = 'text';
+        partNumInput.placeholder = 'Part #…';
+        partNumInput.maxLength = 128;
+        partNumInput.className = 'part-add-number';
+        addRow.appendChild(partNumInput);
+
+        const descInput = document.createElement('input');
+        descInput.type = 'text';
+        descInput.placeholder = 'Description…';
+        descInput.maxLength = 500;
+        descInput.className = 'part-add-desc';
+        addRow.appendChild(descInput);
+
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.placeholder = 'Qty';
+        qtyInput.value = '1';
+        qtyInput.min = '0';
+        qtyInput.className = 'part-add-qty';
+        addRow.appendChild(qtyInput);
+
+        const unitInput = document.createElement('input');
+        unitInput.type = 'text';
+        unitInput.placeholder = 'Unit…';
+        unitInput.maxLength = 32;
+        unitInput.className = 'part-add-unit';
+        addRow.appendChild(unitInput);
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'toolbar-btn entity-promote-btn';
+        addBtn.textContent = 'Add';
+        addBtn.addEventListener('click', async () => {
+            const pn = partNumInput.value.trim();
+            const desc = descInput.value.trim();
+            const qty = qtyInput.value || '1';
+
+            // Require part number and description at minimum
+            if (!pn || !desc) return;
+
+            try {
+                const resp = await fetch(`/api/entities/${entityId}/parts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        part_number: pn,
+                        description: desc,
+                        quantity: parseInt(qty, 10),
+                        unit: unitInput.value.trim(),
+                    }),
+                });
+                if (!resp.ok) return;
+
+                const data = await resp.json();
+
+                // Remove empty placeholder if present
+                const emptyEl = document.getElementById('entity-parts-empty');
+                if (emptyEl) emptyEl.remove();
+
+                // If this is the first part, add column header row
+                const tableEl = document.getElementById('entity-parts-table');
+                if (tableEl && !tableEl.querySelector('.parts-header-row')) {
+                    const hr = document.createElement('div');
+                    hr.className = 'parts-header-row';
+                    const colDefs = [
+                        { cls: 'part-col-number', text: 'Part #' },
+                        { cls: 'part-col-desc', text: 'Description' },
+                        { cls: 'part-col-qty', text: 'Qty' },
+                        { cls: 'part-col-unit', text: 'Unit' },
+                        { cls: 'part-col-location', text: 'Location' },
+                        { cls: 'part-col-actions', text: '' },
+                    ];
+                    for (const col of colDefs) {
+                        const s = document.createElement('span');
+                        s.className = col.cls;
+                        s.textContent = col.text;
+                        hr.appendChild(s);
+                    }
+                    tableEl.appendChild(hr);
+                }
+
+                // Append new part row
+                if (tableEl) {
+                    tableEl.appendChild(this._createPartRow(data.part, tableEl, header, entityId));
+                }
+
+                // Update header count
+                const count = tableEl ? tableEl.querySelectorAll('.entity-part-row').length : 0;
+                header.textContent = `Parts Inventory (${count})`;
+
+                // Clear form inputs
+                partNumInput.value = '';
+                descInput.value = '';
+                qtyInput.value = '1';
+                unitInput.value = '';
+            } catch (err) {
+                console.error('[EntityModal] Failed to add part:', err);
+            }
+        });
+        addRow.appendChild(addBtn);
+
+        section.appendChild(addRow);
+        container.appendChild(section);
+    }
+
+    /**
+     * Create a single part row DOM element.
+     *
+     * Shows part_number, description, quantity, unit, location — with
+     * edit (quantity) and delete action buttons.
+     *
+     * Args:
+     *   part:     Part object from the API.
+     *   table:    Table container DOM element (for row count after delete).
+     *   header:   Section header DOM element (for updating count on changes).
+     *   entityId: UUID of the parent entity (unused currently, reserved).
+     *
+     * Returns:
+     *   DOM element for the part row.
+     */
+    _createPartRow(part, table, header, entityId) {
+        const row = document.createElement('div');
+        row.className = 'entity-part-row';
+        row.dataset.partId = part.id;
+
+        // Part number
+        const numSpan = document.createElement('span');
+        numSpan.className = 'part-col-number';
+        // SECURITY: textContent only — part_number is user-entered
+        numSpan.textContent = part.part_number || '—';
+        row.appendChild(numSpan);
+
+        // Description
+        const descSpan = document.createElement('span');
+        descSpan.className = 'part-col-desc';
+        descSpan.textContent = part.description || '—';
+        descSpan.title = part.notes || '';  // show notes on hover
+        row.appendChild(descSpan);
+
+        // Quantity
+        const qtySpan = document.createElement('span');
+        qtySpan.className = 'part-col-qty';
+        qtySpan.textContent = part.quantity ?? 0;
+        row.appendChild(qtySpan);
+
+        // Unit
+        const unitSpan = document.createElement('span');
+        unitSpan.className = 'part-col-unit';
+        unitSpan.textContent = part.unit || '';
+        row.appendChild(unitSpan);
+
+        // Location
+        const locSpan = document.createElement('span');
+        locSpan.className = 'part-col-location';
+        locSpan.textContent = part.location || '';
+        row.appendChild(locSpan);
+
+        // Action buttons
+        const actionsSpan = document.createElement('span');
+        actionsSpan.className = 'part-col-actions';
+
+        // Edit button — updates quantity inline via prompt
+        const editBtn = document.createElement('button');
+        editBtn.className = 'toolbar-btn part-edit-btn';
+        editBtn.style.fontSize = '10px';
+        editBtn.style.padding = '1px 5px';
+        editBtn.textContent = '✎';
+        editBtn.title = 'Edit quantity';
+        editBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newQty = prompt('New quantity:', part.quantity);
+            if (newQty === null) return; // cancelled
+            const parsed = parseInt(newQty, 10);
+            if (isNaN(parsed) || parsed < 0) return;
+            try {
+                const resp = await fetch(`/api/entity-parts/${part.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantity: parsed }),
+                });
+                if (resp.ok) {
+                    qtySpan.textContent = parsed;
+                    part.quantity = parsed;
+                }
+            } catch (err) {
+                console.error('[EntityModal] Failed to update part:', err);
+            }
+        });
+        actionsSpan.appendChild(editBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'toolbar-btn';
+        deleteBtn.style.fontSize = '10px';
+        deleteBtn.style.padding = '1px 5px';
+        deleteBtn.style.color = '#666';
+        deleteBtn.textContent = '✕';
+        deleteBtn.title = 'Delete part';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                const resp = await fetch(`/api/entity-parts/${part.id}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    // Grab header ref BEFORE removing row from DOM
+                    const hdr = row.closest('.entity-modal-section')?.querySelector('.entity-modal-section-header');
+                    row.remove();
+                    const count = table.querySelectorAll('.entity-part-row').length;
+                    if (hdr) hdr.textContent = `Parts Inventory (${count})`;
+                    // Show empty placeholder if no parts remain
+                    if (count === 0) {
+                        // Remove header row too
+                        const hr = table.querySelector('.parts-header-row');
+                        if (hr) hr.remove();
+
+                        const empty = document.createElement('div');
+                        empty.className = 'muted-text';
+                        empty.style.padding = '8px 0';
+                        empty.textContent = 'No parts in inventory.';
+                        empty.id = 'entity-parts-empty';
+                        table.appendChild(empty);
+                    }
+                }
+            } catch (err) {
+                console.error('[EntityModal] Failed to delete part:', err);
+            }
+        });
+        actionsSpan.appendChild(deleteBtn);
+
+        row.appendChild(actionsSpan);
         return row;
     }
 

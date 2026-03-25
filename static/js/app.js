@@ -25,6 +25,7 @@ import { ExtendedCognitionPlugin } from './plugins/extended-cognition.js';
 import { NodeCastPlugin } from './plugins/nodecast.js';
 import { HealthMonitorPlugin } from './plugins/health-monitor.js';
 import { LayerManager } from './layers.js';
+import { PDFLayerPanel } from './pdf-layers.js';
 import { SearchPanel } from './search.js';
 import { ReviewBrief } from './review-brief.js';
 import { RFIGenerator } from './rfi-generator.js';
@@ -53,6 +54,7 @@ class App {
         this.measureSummary = new MeasureSummary();
         this.plugins = new PluginLoader();
         this.layerManager = new LayerManager();
+        this.pdfLayerPanel = new PDFLayerPanel();
         this.search = new SearchPanel();
         this.reviewBrief = new ReviewBrief();
         this.rfiGenerator = new RFIGenerator();
@@ -110,6 +112,7 @@ class App {
 
         this._connectCallbacks();
         this._bindPersistence();
+        this._bindPanelCollapse();
         this._loadThumbnails = null; // debounced thumbnail loader
 
         // Wire intent mode indicator in toolbar
@@ -159,16 +162,40 @@ class App {
             }
         };
 
-        // When zoom changes, update status bar and sync canvas overlay
+        // When page rotation changes, transform markup coordinates so
+        // objects stay at the same physical location on the drawing.
+        // Fired BEFORE the image reloads, while old dimensions are current.
+        this.viewer.onRotationChange = (newRotation, oldRotation, oldWidth, oldHeight) => {
+            const delta = (newRotation - oldRotation + 360) % 360;
+            this.canvas.transformObjectsForRotation(delta, oldWidth, oldHeight);
+            // Mark dirty so transformed coordinates are auto-saved
+            this.markDirty();
+        };
+
+        // When zoom changes, update status bar, sync canvas overlay, and redraw
+        // the thumbnail viewport indicator so the red rect scales correctly.
         this.viewer.onZoomChange = (zoom) => {
             this._updateZoomDisplay(zoom);
             this.canvas.syncToViewer();
+            this._updateThumbnailViewport();
+        };
+
+        // When a page image finishes loading, redraw the indicator against the
+        // new page's dimensions (natural width/height may have changed).
+        this.viewer.onPageLoad = () => {
+            this._updateThumbnailViewport();
         };
 
         // When a document loads, update UI, load thumbnails, show properties
         this.viewer.onDocumentLoad = (info) => {
             this._onDocumentLoaded(info);
         };
+
+        // Scroll → redraw thumbnail viewport indicator in real time
+        // Uses passive:true because we never call preventDefault here
+        this.viewer.viewport.addEventListener('scroll', () => {
+            this._updateThumbnailViewport();
+        }, { passive: true });
     }
 
     // =========================================================================
@@ -256,6 +283,10 @@ class App {
         this.layerManager.init(this.canvas);
         this.layerManager.initForCanvas(this.canvas.fabricCanvas);
         const _layerLoadPromise = this.layerManager.load(info.id); // fire immediately
+
+        // Load PDF OCG layers — shows the PDF Layers section if the document
+        // has embedded CAD layers (e.g., AutoCAD/Bluebeam engineering drawings).
+        this.pdfLayerPanel.load(info.id, this.viewer);
 
         // Initialize NodeEditor — attaches dblclick/selection:cleared listeners
         // to the newly created Fabric canvas. Must run after canvas.init() since
@@ -483,8 +514,16 @@ class App {
             label.className = 'thumbnail-label';
             label.textContent = `${i + 1}`;
 
+            // Viewport indicator canvas — red rectangle drawn over the thumbnail
+            // showing which portion of the page is currently visible. Updated on
+            // scroll and zoom via _updateThumbnailViewport(). pointer-events: none
+            // so the canvas never intercepts thumbnail click events.
+            const vpCanvas = document.createElement('canvas');
+            vpCanvas.className = 'thumbnail-viewport-canvas';
+
             item.appendChild(img);
             item.appendChild(label);
+            item.appendChild(vpCanvas);
 
             // Click thumbnail → navigate to that page
             item.addEventListener('click', () => {
@@ -496,10 +535,82 @@ class App {
     }
 
     /**
+     * Draw a red viewport indicator on the active thumbnail.
+     *
+     * The indicator shows which portion of the full page is currently visible
+     * in the main viewport. Redraws on every scroll and zoom change.
+     */
+    _updateThumbnailViewport() {
+        const vp = this.viewer.viewport;
+        if (!vp || !this.viewer.imageNaturalWidth) return;
+
+        // Find the active thumbnail item and its overlay canvas
+        const activeItem = document.querySelector('.thumbnail-item.active');
+        if (!activeItem) return;
+        const canvas = activeItem.querySelector('.thumbnail-viewport-canvas');
+        if (!canvas) return;
+
+        // Thumbnail image element — drives the displayed dimensions
+        const thumbImg = activeItem.querySelector('img');
+        const thumbW = thumbImg ? thumbImg.offsetWidth  : activeItem.offsetWidth;
+        const thumbH = thumbImg ? thumbImg.offsetHeight : activeItem.offsetHeight;
+        if (!thumbW || !thumbH) return;
+
+        // Match canvas pixel size to thumbnail display size so 1 canvas px = 1 CSS px
+        canvas.width  = thumbW;
+        canvas.height = thumbH;
+
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, thumbW, thumbH);
+
+        // Scale factors: thumbnail px per natural image px, and zoom ratio
+        const natW      = this.viewer.imageNaturalWidth;
+        const natH      = this.viewer.imageNaturalHeight;
+        const thumbScaleX = thumbW / natW;
+        const thumbScaleY = thumbH / natH;
+        const zoomScale   = this.viewer.zoom / 100;
+
+        // Convert display-pixel scroll offsets → natural px → thumbnail px
+        const rx = (vp.scrollLeft / zoomScale) * thumbScaleX;
+        const ry = (vp.scrollTop  / zoomScale) * thumbScaleY;
+        const rw = (vp.clientWidth  / zoomScale) * thumbScaleX;
+        const rh = (vp.clientHeight / zoomScale) * thumbScaleY;
+
+        // Clamp rect to canvas bounds so it doesn't overflow when near edges
+        const x1 = Math.max(0, rx);
+        const y1 = Math.max(0, ry);
+        const x2 = Math.min(thumbW, rx + rw);
+        const y2 = Math.min(thumbH, ry + rh);
+
+        // Fill with semi-transparent red then stroke the border
+        ctx.fillStyle   = 'rgba(220, 50, 50, 0.15)';
+        ctx.strokeStyle = '#e03030';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        ctx.rect(x1, y1, x2 - x1, y2 - y1);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    /**
      * Highlight the active thumbnail in the page panel.
+     * Before switching the .active class, clear the viewport-indicator canvas
+     * on the previously active thumbnail so the red box doesn't linger on old pages.
      */
     _highlightThumbnail(page) {
         const items = document.querySelectorAll('.thumbnail-item');
+
+        // Clear red viewport box from whichever thumbnail is currently active
+        items.forEach(item => {
+            if (item.classList.contains('active')) {
+                const oldCanvas = item.querySelector('.thumbnail-viewport-canvas');
+                if (oldCanvas) {
+                    const ctx = oldCanvas.getContext('2d');
+                    ctx.clearRect(0, 0, oldCanvas.width, oldCanvas.height);
+                }
+            }
+        });
+
         items.forEach((item, idx) => {
             item.classList.toggle('active', idx === page);
         });
@@ -508,6 +619,47 @@ class App {
         const active = document.querySelector('.thumbnail-item.active');
         if (active) {
             active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    // =========================================================================
+    // PANEL COLLAPSE
+    // =========================================================================
+
+    /**
+     * Wire the collapse/expand toggle buttons on the left and right side panels.
+     *
+     * Each panel gets a narrow 28px strip when collapsed. The active tab content
+     * and tab bar are hidden via CSS (.panel-collapsed). Clicking the button
+     * in the strip expands the panel back to its full 200px width.
+     */
+    _bindPanelCollapse() {
+        const leftPanel  = document.getElementById('panel-left');
+        const rightPanel = document.getElementById('panel-properties');
+        const btnLeft    = document.getElementById('btn-collapse-left');
+        const btnRight   = document.getElementById('btn-collapse-right');
+
+        if (btnLeft) {
+            btnLeft.addEventListener('click', () => {
+                leftPanel.classList.toggle('panel-collapsed');
+                // ◀ when expanded (collapse it), ▶ when collapsed (expand it)
+                btnLeft.innerHTML = leftPanel.classList.contains('panel-collapsed')
+                    ? '&#9654;'   // ▶ expand
+                    : '&#9664;';  // ◀ collapse
+                // Redraw thumbnail indicator — panel resize changes viewport geometry
+                this._updateThumbnailViewport();
+            });
+        }
+
+        if (btnRight) {
+            btnRight.addEventListener('click', () => {
+                rightPanel.classList.toggle('panel-collapsed');
+                // ▶ when expanded (collapse it), ◀ when collapsed (expand it)
+                btnRight.innerHTML = rightPanel.classList.contains('panel-collapsed')
+                    ? '&#9664;'   // ◀ expand
+                    : '&#9654;';  // ▶ collapse
+                this._updateThumbnailViewport();
+            });
         }
     }
 
