@@ -44,3 +44,13 @@ build/
 # PyInstaller auto-generated specs (CLI-generated, not our tracked spec)
 # Note: electron/pyinstaller.spec is NOT ignored — it's the build config.
 main.spec
+
+# Secrets — never commit these
+.env
+.env.*
+*.key
+*.pem
+*.secret
+credentials*
+.credentials.json
+**/secrets/

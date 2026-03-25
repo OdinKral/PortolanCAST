@@ -253,12 +253,41 @@ async def get_document_info(doc_id: int):
     })
 
 
+@router.get("/api/documents/{doc_id}/pdf-layers")
+async def get_pdf_layers(doc_id: int):
+    """
+    Get the Optional Content Group (OCG) layers from a PDF document.
+
+    OCGs are the PDF equivalent of CAD layers — engineering drawings from
+    AutoCAD/Bluebeam carry named layers for each discipline (walls, piping,
+    text, borders, etc.).
+
+    Returns:
+        JSON with 'layers' list: [{'name': str, 'on': bool}, ...]
+        Returns {'layers': []} if the document has no OCG layers.
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not Path(doc["filepath"]).exists():
+        raise HTTPException(status_code=404, detail="PDF file missing from disk")
+
+    try:
+        layers = pdf_engine.get_pdf_layers(doc["filepath"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot read PDF layers: {e}")
+
+    return JSONResponse({"layers": layers})
+
+
 @router.get("/api/documents/{doc_id}/page/{page_number}")
 async def get_page_image(
     doc_id: int,
     page_number: int,
     dpi: int = 150,
     rotate: int = 0,
+    hidden_layers: str = "",
 ):
     """
     Render a single PDF page as a PNG image.
@@ -268,6 +297,9 @@ async def get_page_image(
         page_number: Zero-indexed page number.
         dpi: Rendering resolution (72-300, default 150).
         rotate: Clockwise rotation in degrees (0, 90, 180, 270).
+        hidden_layers: Comma-separated OCG layer names to hide (optional).
+                       Example: "BORDER,Text PS,Thermostat"
+                       Pass empty string (default) to show all layers.
 
     Returns:
         PNG image bytes with appropriate content-type.
@@ -279,22 +311,34 @@ async def get_page_image(
     if not Path(doc["filepath"]).exists():
         raise HTTPException(status_code=404, detail="PDF file missing from disk")
 
+    # Parse hidden_layers query param into a list of layer names
+    # SECURITY: layer names are passed to the content stream filter, not executed
+    hidden_list = [name.strip() for name in hidden_layers.split(",") if name.strip()] \
+                  if hidden_layers else []
+
     try:
-        png_bytes = pdf_engine.render_page(
-            doc["filepath"], page_number, dpi=dpi, rotate=rotate
-        )
+        if hidden_list:
+            png_bytes = pdf_engine.render_page_with_layers(
+                doc["filepath"], page_number,
+                hidden_layers=hidden_list, dpi=dpi, rotate=rotate
+            )
+        else:
+            png_bytes = pdf_engine.render_page(
+                doc["filepath"], page_number, dpi=dpi, rotate=rotate
+            )
     except IndexError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Render error: {e}")
 
+    # When layers are being filtered the response is unique per layer state,
+    # so we shorten the cache window to avoid stale renders after layer toggles.
+    cache_ttl = 60 if hidden_list else 300
+
     return Response(
         content=png_bytes,
         media_type="image/png",
-        headers={
-            # Cache rendered pages for 5 minutes — same page/DPI won't change
-            "Cache-Control": "private, max-age=300"
-        }
+        headers={"Cache-Control": f"private, max-age={cache_ttl}"}
     )
 
 

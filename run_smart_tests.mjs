@@ -110,7 +110,7 @@ const DEPENDENCY_MAP = {
         'test_phase4a.mjs', 'test_phase4b.mjs', 'test_phase4c.mjs',
         'test_phase5_layers.mjs', 'test_toolchest.mjs',
         'test_health_monitor.mjs', 'test_stage3b.mjs',
-        'test_sprint1_capture.mjs',
+        'test_sprint1_capture.mjs', 'test_panel_collapse.mjs',
     ],
     'static/js/canvas.js': [
         'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
@@ -221,7 +221,7 @@ const DEPENDENCY_MAP = {
     'static/css/style.css': [
         'test_l1_rotation.mjs', 'test_l2_toolbar_custom.mjs',
         'test_l3_mode_bar.mjs', 'test_highlight_color.mjs',
-        'test_b3_scroll.mjs',
+        'test_b3_scroll.mjs', 'test_panel_collapse.mjs',
     ],
     'templates/base.html': [
         'test_shapes.mjs', 'test_properties.mjs',
