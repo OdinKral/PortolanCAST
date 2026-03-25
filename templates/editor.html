@@ -174,6 +174,10 @@
 
     <!-- LEFT PANEL: Pages + Markups (tabbed) -->
     <div id="panel-left" class="side-panel">
+        <div class="panel-collapse-bar">
+            <span class="panel-collapsed-label">Pages</span>
+            <button class="panel-collapse-btn" id="btn-collapse-left" title="Collapse panel">&#9664;</button>
+        </div>
         <div class="panel-tabs">
             <button class="panel-tab active" data-panel="pages">Pages</button>
             <button class="panel-tab" data-panel="markups">Markups</button>
@@ -507,6 +511,10 @@
 
     <!-- RIGHT PANEL: Properties / Plugin space -->
     <div id="panel-properties" class="side-panel">
+        <div class="panel-collapse-bar">
+            <button class="panel-collapse-btn" id="btn-collapse-right" title="Collapse panel">&#9654;</button>
+            <span class="panel-collapsed-label">Info</span>
+        </div>
         <!-- Tab bar — Properties always present; plugin tabs injected by PluginLoader.register() -->
         <div class="panel-tabs" id="right-panel-tabs">
             <button class="panel-tab active" data-panel="properties">Info</button>
@@ -888,6 +896,19 @@
                 <input type="checkbox" id="settings-cb-compact">
                 <label for="settings-cb-compact">Compact mode (icons only)</label>
             </label>
+        </div>
+
+        <!-- Scroll sensitivity: controls how far you must over-scroll at a page
+             edge before the viewer advances to the next/previous page. -->
+        <div class="settings-display-row settings-scroll-row">
+            <span class="settings-scroll-label">Scroll page sensitivity</span>
+            <div class="settings-scroll-control">
+                <span class="settings-scroll-hint">Low</span>
+                <input type="range" id="settings-scroll-sensitivity"
+                       min="1" max="3" step="1" value="2"
+                       aria-label="Scroll page sensitivity">
+                <span class="settings-scroll-hint">High</span>
+            </div>
         </div>
 
         <div class="settings-tab-sections">

@@ -374,11 +374,29 @@ They survive save/load cycles and are independent of page number.
 | First page | Home |
 | Last page | End |
 | Jump to page | Click thumbnail in Pages tab |
+| Scroll to next/prev page | Scroll past the top or bottom edge of a page |
 | Zoom in | Ctrl + `+` or Ctrl + scroll up |
 | Zoom out | Ctrl + `-` or Ctrl + scroll down |
 | Reset zoom | Ctrl + 0 |
 | Fit to width | Click **Fit** in toolbar |
 | Pan | Scroll normally, or press G for Hand tool |
+
+### Scroll-to-Page Navigation
+
+When you scroll past the top or bottom edge of a page, a blue glow appears at
+the edge and grows as you keep scrolling. Once the threshold is reached, the
+viewer automatically advances to the next (or previous) page.
+
+A 1.2-second cooldown prevents accidentally skipping multiple pages in one gesture.
+
+**Adjusting sensitivity:** Open the gear (⚙) menu in the toolbar → drag the
+**Scroll page sensitivity** slider.
+
+| Setting | Behaviour |
+|---------|-----------|
+| Low | Requires a long deliberate push — hard to trigger accidentally |
+| Medium (default) | Comfortable for most workflows |
+| High | Light touch — good for quickly flipping through many pages |
 
 ---
 

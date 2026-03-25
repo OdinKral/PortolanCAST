@@ -122,6 +122,11 @@ if (typeof fabric !== 'undefined') {
 }
 
 // =============================================================================
+// SCROLL-BOUNDARY PAGE NAVIGATION
+// =============================================================================
+
+
+// =============================================================================
 // CANVAS OVERLAY
 // =============================================================================
 
@@ -173,6 +178,7 @@ export class CanvasOverlay {
          * @type {Function|null}
          */
         this.onContentChange = null;
+
     }
 
     // =========================================================================
@@ -320,9 +326,11 @@ export class CanvasOverlay {
             e.preventDefault();
             e.stopPropagation();
 
-            // Scroll #viewport — identical effect to native browser scroll
+            // Scroll #viewport — identical effect to native browser scroll.
+            // Page-flip threshold logic lives in PDFViewer._bindEvents() (viewport
+            // capture listener) where it fires unconditionally for ALL wheel events.
             this.viewer.viewport.scrollLeft += dx;
-            this.viewer.viewport.scrollTop += dy;
+            this.viewer.viewport.scrollTop  += dy;
         }, { passive: false, capture: true });
     }
 
