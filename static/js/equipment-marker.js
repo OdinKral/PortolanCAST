@@ -51,6 +51,12 @@ export class EquipmentMarkerPanel {
 
         /** @type {Array} Cached entity list from GET /api/entities */
         this._entityCache = [];
+
+        /** @type {Array} Cached pattern list from GET /api/patterns?type=component */
+        this._patternCache = [];
+
+        /** @type {Object|null} Currently selected pattern for new entity creation */
+        this._selectedPattern = null;
     }
 
     // =========================================================================
@@ -93,6 +99,12 @@ export class EquipmentMarkerPanel {
             createBtn.addEventListener('click', () => this._onCreate());
         }
 
+        // Bind pattern picker — auto-fills fields when a pattern is selected
+        const patternSelect = document.getElementById('em-pattern');
+        if (patternSelect) {
+            patternSelect.addEventListener('change', () => this._onPatternSelect(patternSelect.value));
+        }
+
         // Bind Escape key to close panel (only when panel is visible).
         // capture: true so we intercept before other Escape handlers.
         document.addEventListener('keydown', (e) => {
@@ -126,7 +138,8 @@ export class EquipmentMarkerPanel {
         // Clear previous state
         this._clearFields();
 
-        // Fetch entity list (cached per open — cheap enough for small entity counts)
+        // Fetch patterns (once, then cached) and entity list
+        await this._fetchPatterns();
         await this._fetchEntities();
 
         // Render full list initially
@@ -194,6 +207,155 @@ export class EquipmentMarkerPanel {
         } catch (err) {
             console.error('[EquipmentMarker] Failed to fetch entities:', err);
             this._entityCache = [];
+        }
+    }
+
+    /**
+     * Fetch component patterns from the API and populate the pattern picker.
+     *
+     * Only fetches once — patterns are static seed data that rarely changes.
+     * Populates the <select> with grouped options by category.
+     */
+    async _fetchPatterns() {
+        // Only fetch once per session — patterns are seed data
+        if (this._patternCache.length > 0) {
+            this._populatePatternSelect();
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/patterns?type=component');
+            if (!resp.ok) throw new Error(resp.statusText);
+            this._patternCache = await resp.json();
+        } catch (err) {
+            console.error('[EquipmentMarker] Failed to fetch patterns:', err);
+            this._patternCache = [];
+        }
+
+        this._populatePatternSelect();
+    }
+
+    /**
+     * Populate the pattern picker <select> with options grouped by category.
+     *
+     * Groups: sensor, controller, actuator, setpoint (matching ISA categories).
+     * Each option shows the pattern name and ISA symbol for quick recognition.
+     */
+    _populatePatternSelect() {
+        const select = document.getElementById('em-pattern');
+        if (!select) return;
+
+        // Preserve the "No pattern" default option
+        select.innerHTML = '<option value="">No pattern — manual entry</option>';
+
+        // Group patterns by category for organized display
+        const groups = {};
+        for (const p of this._patternCache) {
+            const cat = p.category || 'other';
+            if (!groups[cat]) groups[cat] = [];
+            groups[cat].push(p);
+        }
+
+        // Display order for categories
+        const categoryOrder = ['sensor', 'controller', 'actuator', 'setpoint'];
+        for (const cat of categoryOrder) {
+            const patterns = groups[cat];
+            if (!patterns || patterns.length === 0) continue;
+
+            const optgroup = document.createElement('optgroup');
+            // Capitalize category label for display
+            optgroup.label = cat.charAt(0).toUpperCase() + cat.slice(1) + 's';
+
+            for (const p of patterns) {
+                const option = document.createElement('option');
+                option.value = p.id;
+                // Show ISA symbol in parentheses for quick recognition
+                const isaLabel = p.isa_symbol ? ` (${p.isa_symbol})` : '';
+                option.textContent = `${p.name}${isaLabel}`;
+                optgroup.appendChild(option);
+            }
+
+            select.appendChild(optgroup);
+        }
+    }
+
+    /**
+     * Handle pattern selection — auto-fill equip_type and show ISA tag hint.
+     *
+     * When a pattern is selected:
+     *   1. Sets equip_type to the pattern name
+     *   2. Shows the ISA symbol and tags in the info panel
+     *   3. Fetches the next ISA sequence number for the tag hint
+     *   4. If no pattern selected, clears auto-fill and hides info
+     *
+     * Args:
+     *   patternId: The selected pattern ID, or '' for no pattern.
+     */
+    async _onPatternSelect(patternId) {
+        const infoEl = document.getElementById('em-pattern-info');
+        const tagHint = document.getElementById('em-tag-hint');
+        const tagInput = document.getElementById('em-new-tag');
+        const typeSelect = document.getElementById('em-new-type');
+
+        if (!patternId) {
+            // No pattern selected — clear auto-fill
+            this._selectedPattern = null;
+            if (infoEl) infoEl.style.display = 'none';
+            if (tagHint) tagHint.style.display = 'none';
+            if (tagInput) tagInput.placeholder = 'Auto-generated from pattern, or type manually';
+            return;
+        }
+
+        // Find the selected pattern in the cache
+        const pattern = this._patternCache.find(p => p.id === patternId);
+        if (!pattern) return;
+
+        this._selectedPattern = pattern;
+
+        // Show pattern info: ISA symbol + tags
+        if (infoEl) {
+            const tags = Array.isArray(pattern.tags) ? pattern.tags : [];
+            const tagPills = tags.map(t => `<span class="em-tag-pill">${t}</span>`).join(' ');
+            const isaLabel = pattern.isa_symbol ? `ISA: <strong>${pattern.isa_symbol}</strong>` : '';
+            infoEl.innerHTML = `${isaLabel} ${tagPills}`;
+            infoEl.style.display = '';
+        }
+
+        // Auto-fill equip_type from pattern name
+        // Try to match an existing option, otherwise set to the pattern name via a dynamic option
+        if (typeSelect) {
+            const matchOption = Array.from(typeSelect.options).find(
+                o => o.value.toLowerCase() === pattern.name.toLowerCase()
+            );
+            if (matchOption) {
+                typeSelect.value = matchOption.value;
+            } else {
+                // Add a temporary option for the pattern name
+                const dynamicOpt = document.createElement('option');
+                dynamicOpt.value = pattern.name;
+                dynamicOpt.textContent = pattern.name;
+                dynamicOpt.dataset.dynamic = 'true';
+                typeSelect.appendChild(dynamicOpt);
+                typeSelect.value = pattern.name;
+            }
+        }
+
+        // Fetch next ISA number for the tag hint
+        if (pattern.isa_prefix && tagHint && tagInput) {
+            const building = (document.getElementById('em-new-building')?.value || '').trim();
+            try {
+                const resp = await fetch(
+                    `/api/patterns/${patternId}/next-isa?building=${encodeURIComponent(building)}`
+                );
+                if (resp.ok) {
+                    const data = await resp.json();
+                    tagHint.textContent = `Suggested: ${data.suggested_tag}`;
+                    tagHint.style.display = '';
+                    tagInput.placeholder = data.suggested_tag;
+                }
+            } catch (err) {
+                console.error('[EquipmentMarker] ISA number fetch failed:', err);
+            }
         }
     }
 
@@ -326,8 +488,11 @@ export class EquipmentMarkerPanel {
                 label.set('text', entity.tag_number || '?');
             }
 
-            // 3. Set entityId on the Group for serialization persistence
+            // 3. Set entityId and patternId on the Group for serialization persistence
             marker.set('entityId', entity.id);
+            if (entity.pattern_id) {
+                marker.set('patternId', entity.pattern_id);
+            }
 
             // 4. Trigger canvas re-render and auto-save
             this._canvas.fabricCanvas.renderAll();
@@ -367,10 +532,11 @@ export class EquipmentMarkerPanel {
         const equipType = document.getElementById('em-new-type')?.value || '';
         const statusEl = document.getElementById('em-status');
 
-        // SECURITY: validate required field
-        if (!tag) {
+        // When a pattern is selected, tag_number is optional (auto-generated from ISA prefix).
+        // Without a pattern, tag_number is still required.
+        if (!tag && !this._selectedPattern) {
             if (statusEl) {
-                statusEl.textContent = 'Tag number is required';
+                statusEl.textContent = 'Tag number is required (or select a pattern)';
                 statusEl.style.color = '#ff6b6b';
             }
             return;
@@ -380,14 +546,18 @@ export class EquipmentMarkerPanel {
         if (createBtn) createBtn.disabled = true;
 
         try {
+            // Build the request body — include pattern_id if a pattern is selected
+            const body = {
+                building: building,
+                equip_type: equipType,
+            };
+            if (tag) body.tag_number = tag;
+            if (this._selectedPattern) body.pattern_id = this._selectedPattern.id;
+
             const resp = await fetch('/api/entities', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tag_number: tag,
-                    building: building,
-                    equip_type: equipType,
-                }),
+                body: JSON.stringify(body),
             });
 
             if (resp.status === 409) {
@@ -464,10 +634,28 @@ export class EquipmentMarkerPanel {
         if (newBuilding) newBuilding.value = '';
 
         const newTag = document.getElementById('em-new-tag');
-        if (newTag) newTag.value = '';
+        if (newTag) {
+            newTag.value = '';
+            newTag.placeholder = 'Auto-generated from pattern, or type manually';
+        }
 
         const newType = document.getElementById('em-new-type');
-        if (newType) newType.selectedIndex = 0;
+        if (newType) {
+            // Remove any dynamically-added pattern options before resetting
+            newType.querySelectorAll('option[data-dynamic]').forEach(o => o.remove());
+            newType.selectedIndex = 0;
+        }
+
+        // Reset pattern picker and info display
+        const patternSelect = document.getElementById('em-pattern');
+        if (patternSelect) patternSelect.value = '';
+        this._selectedPattern = null;
+
+        const patternInfo = document.getElementById('em-pattern-info');
+        if (patternInfo) patternInfo.style.display = 'none';
+
+        const tagHint = document.getElementById('em-tag-hint');
+        if (tagHint) tagHint.style.display = 'none';
 
         const status = document.getElementById('em-status');
         if (status) {

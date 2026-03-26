@@ -50,6 +50,9 @@ export class PDFLayerPanel {
 
         /** @type {number|null} Current document ID */
         this._docId = null;
+
+        /** @type {boolean} Whether the layer list is expanded (default collapsed) */
+        this._expanded = false;
     }
 
     // =========================================================================
@@ -132,6 +135,21 @@ export class PDFLayerPanel {
         this.refresh();
     }
 
+    /**
+     * Toggle the expanded/collapsed state of the layer row list.
+     *
+     * Collapsing only hides the UI rows — it does NOT change which layers
+     * are visible on the canvas. The header count badge keeps the user
+     * informed of hidden-layer state even when collapsed.
+     */
+    toggleExpanded() {
+        this._expanded = !this._expanded;
+        const body = document.getElementById('pdf-layers-body');
+        const chevron = document.getElementById('pdf-layers-chevron');
+        if (body) body.style.display = this._expanded ? '' : 'none';
+        if (chevron) chevron.textContent = this._expanded ? '▼' : '▶';
+    }
+
     // =========================================================================
     // PANEL RENDERING
     // =========================================================================
@@ -157,13 +175,31 @@ export class PDFLayerPanel {
         section.id = 'pdf-layers-section';
         section.className = 'pdf-layers-section';
 
-        // Section header
+        // --- Section header (always visible) ---
         const header = document.createElement('div');
         header.className = 'pdf-layers-header';
+
+        // Chevron — clickable disclosure triangle to expand/collapse rows
+        const chevron = document.createElement('span');
+        chevron.id = 'pdf-layers-chevron';
+        chevron.className = 'pdf-layers-chevron';
+        chevron.textContent = this._expanded ? '▼' : '▶';
 
         const title = document.createElement('span');
         title.className = 'pdf-layers-title';
         title.textContent = 'PDF Layers';
+
+        // Hidden count badge — shows "3/8 hidden" so user knows state at a glance
+        const hiddenCount = this._hidden.size;
+        const totalCount = this._layers.length;
+        const countBadge = document.createElement('span');
+        countBadge.className = 'pdf-layers-count';
+        if (hiddenCount > 0) {
+            countBadge.textContent = `${hiddenCount}/${totalCount} hidden`;
+            countBadge.classList.add('has-hidden');
+        } else {
+            countBadge.textContent = `${totalCount}`;
+        }
 
         const showAllBtn = document.createElement('button');
         showAllBtn.className = 'pdf-layers-showall-btn';
@@ -171,14 +207,34 @@ export class PDFLayerPanel {
         showAllBtn.textContent = 'Show all';
         showAllBtn.addEventListener('click', () => this.showAll());
 
+        header.appendChild(chevron);
         header.appendChild(title);
+        header.appendChild(countBadge);
+        header.appendChild(showAllBtn);
+
+        // Clicking header (chevron, title, or count) toggles expand/collapse
+        const clickArea = document.createElement('div');
+        clickArea.className = 'pdf-layers-header-click';
+        clickArea.appendChild(chevron);
+        clickArea.appendChild(title);
+        clickArea.appendChild(countBadge);
+        clickArea.addEventListener('click', () => this.toggleExpanded());
+
+        header.textContent = '';  // clear previous appends
+        header.appendChild(clickArea);
         header.appendChild(showAllBtn);
         section.appendChild(header);
 
-        // One row per OCG layer
+        // --- Collapsible body (layer rows) ---
+        const body = document.createElement('div');
+        body.id = 'pdf-layers-body';
+        body.style.display = this._expanded ? '' : 'none';
+
         for (const layer of this._layers) {
-            section.appendChild(this._buildRow(layer.name));
+            body.appendChild(this._buildRow(layer.name));
         }
+
+        section.appendChild(body);
 
         // Divider between PDF layers and annotation layers
         const divider = document.createElement('div');
@@ -255,5 +311,31 @@ export class PDFLayerPanel {
 
         const visBtn = row.querySelector('.layer-vis-btn');
         if (visBtn) visBtn.style.opacity = isHidden ? '0.3' : '1';
+
+        // Keep the count badge in sync after individual toggles
+        this._updateCountBadge();
+    }
+
+    /**
+     * Update the header count badge without a full DOM rebuild.
+     *
+     * Shows "N/total hidden" when layers are hidden, or just the total
+     * count when all layers are visible. Provides at-a-glance state even
+     * when the section is collapsed.
+     */
+    _updateCountBadge() {
+        const badge = document.querySelector('.pdf-layers-count');
+        if (!badge) return;
+
+        const hiddenCount = this._hidden.size;
+        const totalCount = this._layers.length;
+
+        if (hiddenCount > 0) {
+            badge.textContent = `${hiddenCount}/${totalCount} hidden`;
+            badge.classList.add('has-hidden');
+        } else {
+            badge.textContent = `${totalCount}`;
+            badge.classList.remove('has-hidden');
+        }
     }
 }

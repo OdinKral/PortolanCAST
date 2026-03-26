@@ -38,30 +38,60 @@ _TAG_PATTERN = re.compile(r'\b([A-Z]{2,5}-\d{1,4}[A-Z]?)\b')
 @router.post("/api/entities")
 async def create_entity(request: Request):
     """
-    Create a new equipment entity.
+    Create a new equipment entity, optionally from a pattern.
+
+    When pattern_id is provided:
+      - equip_type is auto-populated from the pattern name (if not explicitly set)
+      - tag_number is auto-generated from ISA prefix + next sequence (if not set)
+      - Haystack tags are auto-assigned from the pattern definition
+      - pattern_id is stored on the entity for future lookups
 
     Returns 409 if (building, tag_number) already exists, with the existing
     entity in the response body so the frontend can show a merge prompt.
 
     Body:
-        { tag_number, building?, equip_type?, model?, serial?, location? }
+        { tag_number?, building?, equip_type?, model?, serial?, location?, pattern_id? }
 
     Returns:
-        201: { id, tag_number, building, equip_type, model, serial, location, created_at }
+        201: { id, tag_number, building, equip_type, model, serial, location, pattern_id,
+               created_at, tags: [...] }
         409: { detail: "tag_exists", entity: {...existing entity...} }
     """
     body = await request.json()
-
-    # SECURITY: validate required field
-    tag_number = str(body.get("tag_number", "")).strip()[:128]
-    if not tag_number:
-        raise HTTPException(status_code=400, detail="tag_number is required")
 
     building   = str(body.get("building", "")).strip()[:256]
     equip_type = str(body.get("equip_type", "")).strip()[:256]
     model      = str(body.get("model", "")).strip()[:256]
     serial     = str(body.get("serial", "")).strip()[:256]
     location   = str(body.get("location", "")).strip()[:512]
+    pattern_id = str(body.get("pattern_id", "")).strip() or None
+
+    # Pattern-aware entity creation: auto-fill fields from pattern definition
+    pattern = None
+    pattern_tags = []
+    if pattern_id:
+        pattern = db.get_pattern(pattern_id)
+        if not pattern:
+            raise HTTPException(status_code=400, detail="Invalid pattern_id")
+
+        # Auto-fill equip_type from pattern name if not explicitly provided
+        if not equip_type:
+            equip_type = pattern["name"]
+
+        # Extract tags from pattern for auto-assignment after entity creation
+        pattern_tags = pattern.get("tags", [])
+        if isinstance(pattern_tags, str):
+            pattern_tags = json.loads(pattern_tags)
+
+    # tag_number: required unless pattern can auto-generate it
+    tag_number = str(body.get("tag_number", "")).strip()[:128]
+    if not tag_number:
+        if pattern and pattern.get("isa_prefix"):
+            # Auto-generate ISA tag: e.g., "TT-1", "TT-2"
+            next_num = db.get_next_isa_number(pattern["isa_prefix"], building)
+            tag_number = f"{pattern['isa_prefix']}{next_num}"
+        else:
+            raise HTTPException(status_code=400, detail="tag_number is required")
 
     entity_id = uuid.uuid4().hex
 
@@ -69,6 +99,20 @@ async def create_entity(request: Request):
         entity = db.create_entity(
             entity_id, tag_number, building, equip_type, model, serial, location
         )
+
+        # Store pattern_id on the entity (migration added this nullable column)
+        if pattern_id:
+            db.update_entity(entity_id, pattern_id=pattern_id)
+            entity["pattern_id"] = pattern_id
+
+            # Auto-assign structured tags from the pattern definition
+            if pattern_tags:
+                db.assign_entity_tags(entity_id, pattern_tags, source='pattern')
+
+        # Include tags in the creation response
+        tags = db.get_entity_tags(entity_id)
+        entity["tags"] = tags
+
         return JSONResponse(status_code=201, content=entity)
     except sqlite3.IntegrityError:
         existing = db.get_entity_by_tag(tag_number, building=building)
@@ -109,10 +153,10 @@ async def get_entity_by_tag(tag_number: str):
 @router.get("/api/entities/{entity_id}")
 async def get_entity(entity_id: str):
     """
-    Return a full entity dossier: fields + log entries + markup count.
+    Return a full entity dossier: fields + log entries + markup count + tags + pattern.
 
     Returns:
-        { entity: {...}, log: [...], markup_count: N }
+        { entity: {...}, log: [...], markup_count: N, tags: [...], pattern: {...} | null }
     """
     entity = db.get_entity(entity_id)
     if not entity:
@@ -120,7 +164,17 @@ async def get_entity(entity_id: str):
 
     log = db.get_entity_log(entity_id)
     count = db.get_entity_markup_count(entity_id)
-    return JSONResponse({"entity": entity, "log": log, "markup_count": count})
+    tags = db.get_entity_tags(entity_id)
+
+    # Include pattern info if entity was created from a pattern
+    pattern = None
+    if entity.get("pattern_id"):
+        pattern = db.get_pattern(entity["pattern_id"])
+
+    return JSONResponse({
+        "entity": entity, "log": log, "markup_count": count,
+        "tags": tags, "pattern": pattern
+    })
 
 
 @router.put("/api/entities/{entity_id}")
@@ -141,7 +195,7 @@ async def update_entity(entity_id: str, request: Request):
     body = await request.json()
 
     # SECURITY: sanitize each field; only known fields reach db.update_entity
-    allowed = ['tag_number', 'building', 'equip_type', 'model', 'serial', 'location']
+    allowed = ['tag_number', 'building', 'equip_type', 'model', 'serial', 'location', 'pattern_id']
     updates = {}
     for key in allowed:
         if key in body:

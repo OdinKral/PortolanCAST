@@ -281,9 +281,9 @@ async function run() {
             window.app._dirty = false;
         });
 
-        // Switch to Layers tab
+        // Switch to Layers tab and wait for annotation layer rows to render
         await page.click('.panel-tabs .panel-tab[data-panel="layers"]');
-        await page.waitForTimeout(200);
+        await page.waitForSelector('#layers-list .layer-row[data-layer-id="test-layer"]', { timeout: 10000 });
 
         // 4.1 — Clicking a layer row gives it .active class (removes .active from others)
         await page.click('#layers-list .layer-row[data-layer-id="test-layer"]');

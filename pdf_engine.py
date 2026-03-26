@@ -553,6 +553,79 @@ class PDFEngine:
             doc.close()
 
     # =========================================================================
+    # SVG PAGE EXPORT (vector output with layer filtering)
+    # =========================================================================
+
+    def export_page_svg(self, pdf_path: str, page_number: int,
+                        hidden_layers: list = None,
+                        rotate: int = 0) -> bytes:
+        """
+        Export a single PDF page as SVG with optional OCG layer filtering.
+
+        Uses PyMuPDF's get_svg_image() which preserves vector geometry —
+        ideal for floor plan base layers that will be edited in Inkscape
+        or loaded as scalable backgrounds.
+
+        Args:
+            pdf_path:      Absolute path to the PDF file.
+            page_number:   Zero-indexed page number.
+            hidden_layers: List of OCG layer names to suppress (optional).
+            rotate:        Clockwise rotation in degrees (0, 90, 180, 270).
+
+        Returns:
+            SVG document as UTF-8 bytes.
+
+        Raises:
+            FileNotFoundError: If pdf_path doesn't exist.
+            IndexError:        If page_number is out of range.
+        """
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        rotate = rotate if rotate in (0, 90, 180, 270) else 0
+
+        try:
+            try:
+                doc = fitz.open(str(path))
+            except Exception as e:
+                raise ValueError(f"Cannot open PDF: {e}")
+
+            if page_number < 0 or page_number >= doc.page_count:
+                raise IndexError(
+                    f"Page {page_number} out of range "
+                    f"(document has {doc.page_count} pages)"
+                )
+
+            page = doc[page_number]
+
+            # Apply OCG layer filtering (same pipeline as render_page_with_layers)
+            if hidden_layers:
+                oc_map = self._build_oc_map_for_page(doc, page)
+                if oc_map:
+                    hidden_set = set(hidden_layers)
+                    layers_to_show = {
+                        name for name in oc_map.values()
+                        if name not in hidden_set
+                    }
+                    for xref in page.get_contents():
+                        raw = doc.xref_stream(xref)
+                        filtered = _filter_content_stream(raw, oc_map, layers_to_show)
+                        if filtered is not raw:
+                            doc.update_stream(xref, filtered)
+
+            # Apply rotation via the page's own rotation attribute
+            if rotate:
+                page.set_rotation(rotate)
+
+            # get_svg_image() returns an SVG string with vector paths preserved
+            svg_text = page.get_svg_image()
+            return svg_text.encode("utf-8")
+
+        finally:
+            doc.close()
+
+    # =========================================================================
     # PDF EXPORT WITH ANNOTATIONS
     # =========================================================================
 

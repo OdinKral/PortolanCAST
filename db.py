@@ -231,6 +231,65 @@ CREATE TABLE IF NOT EXISTS entity_parts (
 
 CREATE INDEX IF NOT EXISTS idx_entity_parts_entity
     ON entity_parts(entity_id);
+
+-- ==========================================================================
+-- HAYSTACK: PATTERN SYSTEM — Structured Equipment Blueprints
+-- ==========================================================================
+
+-- Pattern blueprints — defines "kinds of equipment" with Haystack-inspired
+-- tags, ISA-5.1 symbols, port definitions, and dual-view labels.
+-- Seeded with HVAC patterns; users can add custom patterns later.
+-- JSON columns (tags, ports, views, constraints) use SQLite's json functions.
+CREATE TABLE IF NOT EXISTS patterns (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    type        TEXT NOT NULL DEFAULT 'component',  -- 'component' | 'system'
+    category    TEXT NOT NULL DEFAULT '',            -- 'sensor' | 'controller' | 'actuator' | 'setpoint' | 'system'
+    tags        TEXT NOT NULL DEFAULT '[]',          -- JSON array of Haystack markers
+    isa_symbol  TEXT NOT NULL DEFAULT '',            -- ISA-5.1 code: "TT", "TIC", "TV"
+    isa_prefix  TEXT NOT NULL DEFAULT '',            -- prefix for auto-numbering: "TT-"
+    ports       TEXT NOT NULL DEFAULT '{}',          -- JSON: {"input":{...},"output":{...}}
+    views       TEXT NOT NULL DEFAULT '{}',          -- JSON: {"system":{label,shape,color},"isa":{label,shape}}
+    constraints TEXT NOT NULL DEFAULT '{}',          -- JSON: validation rules for instances
+    is_builtin  INTEGER NOT NULL DEFAULT 1,         -- 1=shipped seed data, 0=user-created
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- System pattern members — which component patterns compose a control loop.
+-- E.g., "Zone Temperature Control Loop" requires sensor + controller + actuator.
+CREATE TABLE IF NOT EXISTS system_pattern_members (
+    id                TEXT PRIMARY KEY,
+    system_pattern_id TEXT NOT NULL REFERENCES patterns(id) ON DELETE CASCADE,
+    member_pattern_id TEXT NOT NULL REFERENCES patterns(id),
+    role              TEXT NOT NULL DEFAULT '',      -- 'sensor', 'controller', 'actuator'
+    required          INTEGER NOT NULL DEFAULT 1,    -- 1=mandatory, 0=optional
+    sort_order        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_spm_parent
+    ON system_pattern_members(system_pattern_id);
+
+-- Controlled tag vocabulary — Haystack-inspired markers.
+-- Only tags listed here can be assigned to entities (no free-form tagging).
+-- This prevents the "tag soup" problem from inconsistent manual tagging.
+CREATE TABLE IF NOT EXISTS tag_vocab (
+    tag         TEXT PRIMARY KEY,                   -- single lowercase marker: "temp", "sensor"
+    category    TEXT NOT NULL DEFAULT '',            -- grouping: "medium", "measurement", "function", "equipment"
+    description TEXT NOT NULL DEFAULT ''             -- human-readable definition
+);
+
+-- Structured tags assigned to entities — the many-to-many join table.
+-- Tags are auto-assigned from patterns on entity creation.
+-- Manual tag addition is constrained to tag_vocab entries only.
+CREATE TABLE IF NOT EXISTS entity_tags (
+    entity_id   TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    tag         TEXT NOT NULL REFERENCES tag_vocab(tag) ON DELETE CASCADE,
+    source      TEXT NOT NULL DEFAULT 'pattern',    -- 'pattern' | 'manual'
+    PRIMARY KEY (entity_id, tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entity_tags_tag
+    ON entity_tags(tag);
 """
 
 
@@ -277,6 +336,10 @@ class Database:
 
         # Run schema migrations for existing databases
         self._migrate_entities_building_column()
+        self._migrate_entities_pattern_id()
+
+        # Seed pattern data if the patterns table is empty
+        self._seed_patterns()
 
     @contextmanager
     def _connect(self):
@@ -358,6 +421,74 @@ class Database:
             """)
 
             print("[DB] Migration complete: entities table now has 'building' column.")
+
+    def _migrate_entities_pattern_id(self):
+        """
+        Add pattern_id column to entities table (Haystack pattern system).
+
+        Nullable column — existing entities get NULL (untyped, same as before).
+        Safe to run multiple times (checks for column existence first).
+        """
+        with self._connect() as conn:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(entities)").fetchall()]
+            if 'pattern_id' in columns:
+                return  # Already migrated
+
+            print("[DB] Migrating entities table: adding 'pattern_id' column...")
+            conn.execute(
+                "ALTER TABLE entities ADD COLUMN pattern_id TEXT DEFAULT NULL"
+            )
+            print("[DB] Migration complete: entities table now has 'pattern_id' column.")
+
+    def _seed_patterns(self):
+        """
+        Populate patterns, tag_vocab, and system_pattern_members if empty.
+
+        Only seeds when the patterns table has zero rows — safe to call on
+        every startup.  Seed data comes from seeds/patterns.py.
+        """
+        with self._connect() as conn:
+            count = conn.execute("SELECT COUNT(*) FROM patterns").fetchone()[0]
+            if count > 0:
+                return  # Already seeded
+
+        # Import here to avoid circular dependency at module level
+        from seeds.patterns import ALL_PATTERNS, TAG_VOCABULARY, SYSTEM_PATTERN_MEMBERS
+
+        print("[DB] Seeding pattern definitions and tag vocabulary...")
+
+        with self._connect() as conn:
+            # Seed tag vocabulary
+            for tv in TAG_VOCABULARY:
+                conn.execute(
+                    "INSERT OR IGNORE INTO tag_vocab (tag, category, description) VALUES (?, ?, ?)",
+                    (tv["tag"], tv["category"], tv["description"])
+                )
+
+            # Seed patterns (component + system)
+            for p in ALL_PATTERNS:
+                conn.execute(
+                    """INSERT OR IGNORE INTO patterns
+                       (id, name, type, category, tags, isa_symbol, isa_prefix,
+                        ports, views, constraints, is_builtin)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (p["id"], p["name"], p["type"], p["category"], p["tags"],
+                     p["isa_symbol"], p["isa_prefix"], p["ports"], p["views"],
+                     p["constraints"], p["is_builtin"])
+                )
+
+            # Seed system pattern members
+            for m in SYSTEM_PATTERN_MEMBERS:
+                conn.execute(
+                    """INSERT OR IGNORE INTO system_pattern_members
+                       (id, system_pattern_id, member_pattern_id, role, required, sort_order)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (m["id"], m["system_pattern_id"], m["member_pattern_id"],
+                     m["role"], m["required"], m["sort_order"])
+                )
+
+        print(f"[DB] Seeded {len(ALL_PATTERNS)} patterns, {len(TAG_VOCABULARY)} tags, "
+              f"{len(SYSTEM_PATTERN_MEMBERS)} system members.")
 
     # =========================================================================
     # BACKUP OPERATIONS
@@ -968,7 +1099,7 @@ class Database:
         Only keys present in **fields are updated; omitted fields are unchanged.
         Always sets updated_at = datetime('now') to track modification time.
 
-        Allowed field names: tag_number, building, equip_type, model, serial, location.
+        Allowed field names: tag_number, building, equip_type, model, serial, location, pattern_id.
         Unknown keys are silently ignored — defensive against stale client data.
 
         Args:
@@ -978,7 +1109,7 @@ class Database:
         Returns:
             True if a row was updated, False if entity_id not found.
         """
-        allowed = {'tag_number', 'building', 'equip_type', 'model', 'serial', 'location'}
+        allowed = {'tag_number', 'building', 'equip_type', 'model', 'serial', 'location', 'pattern_id'}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return False
@@ -1571,6 +1702,283 @@ class Database:
                 })
 
             return results
+
+    # =========================================================================
+    # PATTERN SYSTEM (Haystack-Inspired Semantic Modeling)
+    # =========================================================================
+
+    def get_patterns(self, pattern_type: str = None,
+                     category: str = None) -> list:
+        """
+        Return all pattern definitions, optionally filtered.
+
+        Args:
+            pattern_type: Filter by 'component' or 'system'. None returns all.
+            category:     Filter by category (e.g., 'sensor', 'controller'). None returns all.
+
+        Returns:
+            List of pattern dicts with JSON fields parsed.
+        """
+        with self._connect() as conn:
+            sql = "SELECT * FROM patterns WHERE 1=1"
+            params = []
+            if pattern_type:
+                sql += " AND type = ?"
+                params.append(pattern_type)
+            if category:
+                sql += " AND category = ?"
+                params.append(category)
+            sql += " ORDER BY category, name"
+            rows = conn.execute(sql, params).fetchall()
+
+            results = []
+            for row in rows:
+                d = dict(row)
+                # Parse JSON fields for API consumers
+                for field in ("tags", "ports", "views", "constraints"):
+                    try:
+                        d[field] = json.loads(d[field])
+                    except (json.JSONDecodeError, TypeError):
+                        pass  # keep raw string if malformed
+                results.append(d)
+            return results
+
+    def get_pattern(self, pattern_id: str) -> dict | None:
+        """
+        Return a single pattern by ID, with JSON fields parsed.
+
+        Args:
+            pattern_id: UUID hex of the pattern.
+
+        Returns:
+            Pattern dict or None.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM patterns WHERE id = ?", (pattern_id,)
+            ).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            for field in ("tags", "ports", "views", "constraints"):
+                try:
+                    d[field] = json.loads(d[field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return d
+
+    def get_pattern_by_name(self, name: str) -> dict | None:
+        """
+        Look up a pattern by name (case-insensitive).
+
+        Args:
+            name: Pattern name (e.g., "Zone Air Temperature Sensor").
+
+        Returns:
+            Pattern dict or None.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM patterns WHERE LOWER(name) = LOWER(?)", (name,)
+            ).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            for field in ("tags", "ports", "views", "constraints"):
+                try:
+                    d[field] = json.loads(d[field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return d
+
+    def get_system_pattern_members(self, system_pattern_id: str) -> list:
+        """
+        Return the component patterns that compose a system pattern.
+
+        Args:
+            system_pattern_id: UUID hex of the system pattern.
+
+        Returns:
+            List of dicts with member pattern details and role info.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT spm.*, p.name AS member_name, p.category AS member_category,
+                          p.isa_symbol AS member_isa
+                   FROM system_pattern_members spm
+                   JOIN patterns p ON p.id = spm.member_pattern_id
+                   WHERE spm.system_pattern_id = ?
+                   ORDER BY spm.sort_order""",
+                (system_pattern_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_tag_vocab(self, category: str = None) -> list:
+        """
+        Return all controlled vocabulary tags, optionally filtered by category.
+
+        Args:
+            category: Filter by tag category ('medium', 'measurement', 'function', 'equipment').
+                      None returns all tags.
+
+        Returns:
+            List of tag dicts.
+        """
+        with self._connect() as conn:
+            if category:
+                rows = conn.execute(
+                    "SELECT * FROM tag_vocab WHERE category = ? ORDER BY tag",
+                    (category,)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM tag_vocab ORDER BY category, tag"
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def assign_entity_tags(self, entity_id: str, tags: list,
+                           source: str = 'pattern'):
+        """
+        Assign structured tags to an entity from the controlled vocabulary.
+
+        Tags not in tag_vocab are silently skipped (FK constraint would reject them).
+        Uses INSERT OR IGNORE for idempotent assignment.
+
+        Args:
+            entity_id: UUID hex of the entity.
+            tags:      List of tag strings (e.g., ["zone", "air", "temp", "sensor"]).
+            source:    Origin of the tag: 'pattern' (auto-assigned) or 'manual'.
+        """
+        with self._connect() as conn:
+            for tag in tags:
+                # Validate tag exists in vocabulary before attempting insert
+                exists = conn.execute(
+                    "SELECT 1 FROM tag_vocab WHERE tag = ?", (tag,)
+                ).fetchone()
+                if exists:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO entity_tags (entity_id, tag, source) VALUES (?, ?, ?)",
+                        (entity_id, tag, source)
+                    )
+
+    def get_entity_tags(self, entity_id: str) -> list:
+        """
+        Return all structured tags assigned to an entity.
+
+        Args:
+            entity_id: UUID hex of the entity.
+
+        Returns:
+            List of dicts with tag, category, description, and source.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT et.tag, et.source, tv.category, tv.description
+                   FROM entity_tags et
+                   JOIN tag_vocab tv ON tv.tag = et.tag
+                   WHERE et.entity_id = ?
+                   ORDER BY tv.category, et.tag""",
+                (entity_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def remove_entity_tags(self, entity_id: str, tags: list = None):
+        """
+        Remove tags from an entity. If tags is None, remove all.
+
+        Args:
+            entity_id: UUID hex of the entity.
+            tags:      List of tag strings to remove, or None for all.
+        """
+        with self._connect() as conn:
+            if tags is None:
+                conn.execute(
+                    "DELETE FROM entity_tags WHERE entity_id = ?",
+                    (entity_id,)
+                )
+            else:
+                for tag in tags:
+                    conn.execute(
+                        "DELETE FROM entity_tags WHERE entity_id = ? AND tag = ?",
+                        (entity_id, tag)
+                    )
+
+    def get_next_isa_number(self, isa_prefix: str, building: str = '') -> int:
+        """
+        Get the next available ISA sequence number for auto-numbering.
+
+        Scans existing entities with the given ISA prefix in the specified building
+        to find the highest number, then returns n+1.
+
+        Args:
+            isa_prefix: ISA prefix string (e.g., "TT-").
+            building:   Building scope for numbering (same building gets sequential numbers).
+
+        Returns:
+            Next available integer (1-based). Returns 1 if no existing entities match.
+        """
+        with self._connect() as conn:
+            # Find all tag_numbers that start with this ISA prefix in this building
+            rows = conn.execute(
+                "SELECT tag_number FROM entities WHERE tag_number LIKE ? AND building = ?",
+                (f"{isa_prefix}%", building)
+            ).fetchall()
+
+            max_num = 0
+            prefix_len = len(isa_prefix)
+            for row in rows:
+                suffix = row["tag_number"][prefix_len:]
+                try:
+                    num = int(suffix)
+                    if num > max_num:
+                        max_num = num
+                except ValueError:
+                    continue  # skip non-numeric suffixes (e.g., "TT-1A")
+            return max_num + 1
+
+    def find_entities_by_tags(self, tags: list,
+                              match_all: bool = True) -> list:
+        """
+        Find entities that have specific tags assigned.
+
+        Args:
+            tags:      List of tag strings to search for.
+            match_all: If True, entity must have ALL tags (intersection).
+                       If False, entity must have ANY tag (union).
+
+        Returns:
+            List of entity dicts.
+        """
+        if not tags:
+            return []
+
+        with self._connect() as conn:
+            if match_all:
+                # Intersection: entity must appear in entity_tags for EVERY tag
+                placeholders = ",".join("?" * len(tags))
+                sql = f"""
+                    SELECT e.* FROM entities e
+                    WHERE e.id IN (
+                        SELECT entity_id FROM entity_tags
+                        WHERE tag IN ({placeholders})
+                        GROUP BY entity_id
+                        HAVING COUNT(DISTINCT tag) = ?
+                    )
+                    ORDER BY e.building, e.tag_number
+                """
+                rows = conn.execute(sql, (*tags, len(tags))).fetchall()
+            else:
+                # Union: entity must have at least one of the tags
+                placeholders = ",".join("?" * len(tags))
+                sql = f"""
+                    SELECT DISTINCT e.* FROM entities e
+                    JOIN entity_tags et ON et.entity_id = e.id
+                    WHERE et.tag IN ({placeholders})
+                    ORDER BY e.building, e.tag_number
+                """
+                rows = conn.execute(sql, tags).fetchall()
+
+            return [dict(r) for r in rows]
 
     # =========================================================================
     # GLOBAL SEARCH

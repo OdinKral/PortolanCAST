@@ -74,6 +74,9 @@ const CUSTOM_PROPERTIES = [
     // Equipment marker: links a visual pin on the drawing to a DB entity ID.
     // Set when the user picks/creates an entity in the Equipment Marker panel.
     'entityId',
+    // Haystack pattern: links the marker to a pattern blueprint for ISA view switching
+    // and structured tag assignment. Set when entity is created from a pattern.
+    'patternId',
 ];
 
 /**

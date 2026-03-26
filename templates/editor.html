@@ -38,9 +38,6 @@
             <button class="toolbar-tab" data-tab="measure">Measure</button>
         </div>
 
-        <!-- Settings gear — always visible -->
-        <button id="btn-toolbar-settings" class="toolbar-btn toolbar-settings-btn" title="Toolbar settings — show/hide tools">&#9881;</button>
-
         <!-- Intent mode indicator — shows active markup type (1–5 to change) -->
         <div class="toolbar-group toolbar-intent">
             <span id="intent-indicator" class="intent-indicator" title="Active markup type (1-5 to change)">
@@ -49,19 +46,68 @@
             </span>
         </div>
 
-        <div class="toolbar-group toolbar-export">
-            <button id="btn-export" class="toolbar-btn"
-                    title="Export annotated PDF — markups become permanent (not editable after export)">
-                <span class="icon">&#128190;</span> Export PDF
-            </button>
-            <button id="btn-save-bundle" class="toolbar-btn"
-                    title="Save editable bundle (.portolan) — preserves markups and layers for re-editing on any PortolanCAST installation">
-                <span class="icon">&#128230;</span> Save Bundle
-            </button>
-            <button id="btn-export-obsidian" class="toolbar-btn"
-                    title="Export markup notes as Obsidian Markdown files (.zip) — one .md file per markup with YAML frontmatter and wikilinks">
-                <span class="icon">&#128196;</span> Obsidian
-            </button>
+        <!-- ── Menu bar: File, Settings, Help ── -->
+        <div class="toolbar-group toolbar-menus">
+            <!-- File dropdown -->
+            <div class="toolbar-dropdown" id="file-menu">
+                <button class="toolbar-btn toolbar-dropdown-trigger"
+                        title="File menu — export, save, and download options">
+                    <span class="icon">&#128196;</span> File <span class="dropdown-arrow">&#9662;</span>
+                </button>
+                <div class="toolbar-dropdown-menu">
+                    <button id="btn-export" class="dropdown-item"
+                            title="Export annotated PDF — markups become permanent (not editable after export)">
+                        <span class="dropdown-icon">&#128190;</span> Export PDF
+                    </button>
+                    <button id="btn-export-page" class="dropdown-item"
+                            title="Export current page as PNG or SVG with current layer visibility">
+                        <span class="dropdown-icon">&#128444;</span> Export Page as Image...
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-save-bundle" class="dropdown-item"
+                            title="Save editable bundle (.portolan) — preserves markups and layers for re-editing">
+                        <span class="dropdown-icon">&#128230;</span> Save Bundle (.portolan)
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-export-obsidian" class="dropdown-item"
+                            title="Export markup notes as Obsidian Markdown files (.zip)">
+                        <span class="dropdown-icon">&#128221;</span> Export to Obsidian
+                    </button>
+                </div>
+            </div>
+
+            <!-- Settings dropdown -->
+            <div class="toolbar-dropdown" id="settings-menu">
+                <button class="toolbar-btn toolbar-dropdown-trigger"
+                        title="Settings">
+                    &#9881; Settings <span class="dropdown-arrow">&#9662;</span>
+                </button>
+                <div class="toolbar-dropdown-menu">
+                    <button id="btn-toolbar-settings" class="dropdown-item"
+                            title="Show/hide toolbar tools and adjust display settings">
+                        <span class="dropdown-icon">&#128295;</span> Toolbar Settings...
+                    </button>
+                </div>
+            </div>
+
+            <!-- Help dropdown -->
+            <div class="toolbar-dropdown" id="help-menu">
+                <button class="toolbar-btn toolbar-dropdown-trigger"
+                        title="Help and keyboard shortcuts">
+                    &#63; Help <span class="dropdown-arrow">&#9662;</span>
+                </button>
+                <div class="toolbar-dropdown-menu">
+                    <button id="btn-help-shortcuts" class="dropdown-item"
+                            title="View all keyboard shortcuts">
+                        <span class="dropdown-icon">&#9000;</span> Keyboard Shortcuts
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-help-about" class="dropdown-item"
+                            title="About PortolanCAST">
+                        <span class="dropdown-icon">&#9432;</span> About PortolanCAST
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- margin-left: auto on .toolbar-zoom pushes it flush to the right edge -->
@@ -1080,13 +1126,25 @@
             <span class="em-divider-text">or create new</span>
         </div>
 
+        <!-- Pattern picker: select a pattern to auto-fill type, tags, and ISA tag -->
+        <label class="em-label" for="em-pattern">Pattern (optional)</label>
+        <select id="em-pattern" class="em-select">
+            <option value="">No pattern — manual entry</option>
+            <!-- Populated dynamically from GET /api/patterns -->
+        </select>
+        <div id="em-pattern-info" class="em-pattern-info" style="display:none;">
+            <!-- Shows selected pattern's ISA symbol and tags -->
+        </div>
+
         <label class="em-label" for="em-new-building">Building</label>
         <input type="text" id="em-new-building" class="em-input"
                placeholder="e.g. Bldg-A" autocomplete="off" maxlength="256">
 
-        <label class="em-label" for="em-new-tag">Tag Number *</label>
+        <label class="em-label" for="em-new-tag">Tag Number</label>
         <input type="text" id="em-new-tag" class="em-input"
-               placeholder="e.g. AHU-3" autocomplete="off" maxlength="128">
+               placeholder="Auto-generated from pattern, or type manually"
+               autocomplete="off" maxlength="128">
+        <div id="em-tag-hint" class="em-tag-hint" style="display:none;"></div>
 
         <label class="em-label" for="em-new-type">Equipment Type</label>
         <select id="em-new-type" class="em-select">

@@ -39,7 +39,7 @@ from config import BASE_DIR, PHOTOS_DIR, PROJECTS_DIR, TEMP_DIR, db
 from routes import (
     health, pages, documents, markups, settings, ai,
     bundles, photos, search, reports, text, entities,
-    entity_tasks, entity_photos, parts, backup,
+    entity_tasks, entity_photos, parts, backup, patterns,
 )
 
 # =============================================================================
@@ -79,6 +79,7 @@ app.include_router(entity_tasks.router)
 app.include_router(entity_photos.router)
 app.include_router(parts.router)
 app.include_router(backup.router)
+app.include_router(patterns.router)
 
 
 # =============================================================================

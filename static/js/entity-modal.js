@@ -115,6 +115,8 @@ export class EntityModal {
 
             const entity = dossier.entity;
             const log = dossier.log || [];
+            const tags = dossier.tags || [];
+            const pattern = dossier.pattern || null;
             const markups = markupsData.markups || [];
             const tasks = tasksData.tasks || [];
             const photos = photosData.photos || [];
@@ -136,6 +138,7 @@ export class EntityModal {
                 // Clear previous content
                 body.innerHTML = '';
                 this._renderFields(body, entity);
+                this._renderPatternAndTags(body, pattern, tags);
                 this._renderObservations(body, markups);
                 this._renderLog(body, entity, log);
                 this._renderTasks(body, entity.id, tasks);
@@ -302,6 +305,87 @@ export class EntityModal {
             statusEl.style.color = '#ff6b6b';
             console.error('[EntityModal] Save failed:', err);
         }
+    }
+
+    // =========================================================================
+    // RENDER — PATTERN & TAGS (Haystack Semantic Layer)
+    // =========================================================================
+
+    /**
+     * Render the Pattern and Tags section.
+     *
+     * Shows the pattern name (if entity was created from a pattern) and
+     * all structured tags as colored pills grouped by category.
+     * Only rendered if the entity has tags or a pattern — untyped entities
+     * (created before the pattern system) skip this section.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   pattern:   Pattern dict or null.
+     *   tags:      Array of { tag, category, source, description }.
+     */
+    _renderPatternAndTags(container, pattern, tags) {
+        // Skip section entirely if no pattern and no tags
+        if (!pattern && (!tags || tags.length === 0)) return;
+
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        header.textContent = 'Pattern & Tags';
+        section.appendChild(header);
+
+        // Pattern info row
+        if (pattern) {
+            const patternRow = document.createElement('div');
+            patternRow.className = 'entity-pattern-row';
+
+            const label = document.createElement('span');
+            label.className = 'entity-pattern-label';
+            label.textContent = 'Pattern: ';
+
+            const name = document.createElement('strong');
+            // SECURITY: textContent only
+            name.textContent = pattern.name || 'Unknown';
+
+            const isa = document.createElement('span');
+            isa.className = 'entity-pattern-isa';
+            isa.textContent = pattern.isa_symbol ? ` (${pattern.isa_symbol})` : '';
+
+            patternRow.appendChild(label);
+            patternRow.appendChild(name);
+            patternRow.appendChild(isa);
+            section.appendChild(patternRow);
+        }
+
+        // Tags as colored pills
+        if (tags && tags.length > 0) {
+            const tagContainer = document.createElement('div');
+            tagContainer.className = 'entity-tags-container';
+
+            // Category color mapping for tag pill backgrounds
+            const categoryColors = {
+                medium:      '#2a3a4a',  // dark blue-gray
+                measurement: '#2a3a2a',  // dark green
+                function:    '#3a2a3a',  // dark purple
+                equipment:   '#3a3a2a',  // dark olive
+            };
+
+            for (const tagObj of tags) {
+                const pill = document.createElement('span');
+                pill.className = 'entity-tag-pill';
+                pill.style.backgroundColor = categoryColors[tagObj.category] || '#333';
+                // SECURITY: textContent only
+                pill.textContent = tagObj.tag;
+                pill.title = `${tagObj.description || tagObj.tag} (${tagObj.category}, ${tagObj.source})`;
+                tagContainer.appendChild(pill);
+            }
+
+            section.appendChild(tagContainer);
+        }
+
+        container.appendChild(section);
     }
 
     // =========================================================================

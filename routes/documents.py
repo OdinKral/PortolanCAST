@@ -408,6 +408,100 @@ async def delete_document(doc_id: int):
     return JSONResponse({"status": "deleted", "id": doc_id})
 
 
+@router.get("/api/documents/{doc_id}/page/{page_number}/export")
+async def export_page_image(
+    doc_id: int,
+    page_number: int,
+    dpi: int = 300,
+    rotate: int = 0,
+    hidden_layers: str = "",
+    format: str = "png",
+):
+    """
+    Export a single PDF page as a downloadable image with layer filtering.
+
+    Renders the page at the requested DPI with the specified OCG layers hidden.
+    Designed for producing clean floor plan base layers — hide plumbing, text,
+    annotations, etc. and export just the walls.
+
+    Args:
+        doc_id:        Document database ID.
+        page_number:   Zero-indexed page number.
+        dpi:           Export resolution (72-600, default 300 for print quality).
+        rotate:        Clockwise rotation in degrees (0, 90, 180, 270).
+        hidden_layers: Comma-separated OCG layer names to hide.
+        format:        Output format — "png" (default) or "svg".
+
+    Returns:
+        Downloadable image file with Content-Disposition attachment header.
+
+    Security:
+        - DPI clamped to 72-600 to prevent memory exhaustion
+        - Layer names are string-matched, never executed
+        - Read-only operation on the original PDF
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not Path(doc["filepath"]).exists():
+        raise HTTPException(status_code=404, detail="PDF file missing from disk")
+
+    # SECURITY: Clamp DPI — 600 is generous for architectural prints
+    dpi = min(max(dpi, 72), 600)
+
+    # Validate format
+    if format not in ("png", "svg"):
+        raise HTTPException(status_code=400, detail="Format must be 'png' or 'svg'")
+
+    # Parse hidden_layers query param into a list of layer names
+    # SECURITY: layer names are passed to the content stream filter, not executed
+    hidden_list = [name.strip() for name in hidden_layers.split(",") if name.strip()] \
+                  if hidden_layers else []
+
+    try:
+        if format == "svg":
+            svg_bytes = pdf_engine.export_page_svg(
+                doc["filepath"], page_number,
+                hidden_layers=hidden_list, rotate=rotate
+            )
+            media_type = "image/svg+xml"
+            ext = "svg"
+            content = svg_bytes
+        else:
+            # PNG export — reuses the same layer-aware render pipeline
+            if hidden_list:
+                png_bytes = pdf_engine.render_page_with_layers(
+                    doc["filepath"], page_number,
+                    hidden_layers=hidden_list, dpi=dpi, rotate=rotate
+                )
+            else:
+                png_bytes = pdf_engine.render_page(
+                    doc["filepath"], page_number, dpi=dpi, rotate=rotate
+                )
+            media_type = "image/png"
+            ext = "png"
+            content = png_bytes
+    except IndexError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Export error: {e}")
+
+    # Build download filename: docname_page_N.ext
+    original_name = doc["filename"]
+    stem = original_name[:-4] if original_name.lower().endswith('.pdf') else original_name
+    download_name = f"{stem}_page_{page_number + 1}.{ext}"
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"',
+            "Cache-Control": "no-cache",
+        }
+    )
+
+
 @router.get("/api/documents/{doc_id}/export")
 async def export_pdf(doc_id: int):
     """

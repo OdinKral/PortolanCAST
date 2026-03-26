@@ -69,7 +69,7 @@ html, body {
 .toolbar-row-primary {
     height: 42px;
     flex-shrink: 0;
-    overflow: hidden;     /* Clip anything still overflowing after shrink */
+    overflow: visible;    /* Must be visible for dropdown menus to escape the row */
     min-width: 0;         /* Allow the row itself to be narrower than content */
 }
 
@@ -317,12 +317,92 @@ html, body {
     flex-shrink: 0;
 }
 
-/* Export group can shrink — filename group already shrinks via flex: 0 1 220px.
- * Together these two absorb most toolbar overflow before zoom gets clipped. */
+/* Export/File menu group — overflow must be visible for dropdown menus.
+ * flex-shrink lets it compress when toolbar is tight. */
 .toolbar-export {
     flex-shrink: 1;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
+}
+
+/* =============================================================================
+ * FILE DROPDOWN MENU
+ * Replaces individual export buttons with a single "File" dropdown.
+ * ============================================================================= */
+
+/* Menu bar container — holds File, Settings, Help dropdowns in a row */
+.toolbar-menus {
+    display: flex;
+    gap: 2px;
+}
+
+.toolbar-dropdown {
+    position: relative;
+}
+
+.toolbar-dropdown-trigger {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.dropdown-arrow {
+    font-size: 8px;
+    opacity: 0.7;
+}
+
+/* Menu panel — positioned below the trigger button */
+.toolbar-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 220px;
+    background: #1e1e2e;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    padding: 4px 0;
+    margin-top: 2px;
+}
+
+/* Show when parent has .open class (toggled by JS) */
+.toolbar-dropdown.open .toolbar-dropdown-menu {
+    display: block;
+}
+
+/* Individual menu items */
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 12px;
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    white-space: nowrap;
+}
+.dropdown-item:hover {
+    background: #2a2a45;
+    color: #fff;
+}
+
+.dropdown-icon {
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* Horizontal separator between menu sections */
+.dropdown-divider {
+    height: 1px;
+    background: #3a3a55;
+    margin: 4px 8px;
 }
 
 /* =========================================================================
@@ -1898,6 +1978,40 @@ html, body {
     flex: 1;
 }
 
+/* Clickable area: chevron + title + count — expands/collapses layer rows */
+.pdf-layers-header-click {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    cursor: pointer;
+    gap: 4px;
+    min-width: 0;
+}
+.pdf-layers-header-click:hover .pdf-layers-chevron,
+.pdf-layers-header-click:hover .pdf-layers-title { color: #aabbcc; }
+
+/* Disclosure chevron — rotates between collapsed (▶) and expanded (▼) */
+.pdf-layers-chevron {
+    font-size: 8px;
+    color: #7788aa;
+    flex-shrink: 0;
+    width: 10px;
+    text-align: center;
+    transition: color 0.15s;
+}
+
+/* Hidden-layer count badge — always visible in header for at-a-glance state */
+.pdf-layers-count {
+    font-size: 9px;
+    color: #667788;
+    margin-left: 2px;
+    flex-shrink: 0;
+}
+/* Highlight when layers are hidden — draws attention to non-default state */
+.pdf-layers-count.has-hidden {
+    color: #cc8844;
+}
+
 .pdf-layers-showall-btn {
     font-size: 10px;
     padding: 1px 6px;
@@ -1906,6 +2020,7 @@ html, body {
     border-radius: 3px;
     color: #9999bb;
     cursor: pointer;
+    flex-shrink: 0;
 }
 .pdf-layers-showall-btn:hover { background: #35355a; color: #ccc; }
 
@@ -3787,6 +3902,69 @@ html, body {
 .em-status {
     font-size: 12px;
     color: #888;
+}
+
+/* Pattern picker info panel — shows ISA symbol and tags after pattern selection */
+.em-pattern-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    margin: 4px 0 8px 0;
+    background: #1a1a2e;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #aab;
+}
+
+.em-tag-pill {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #2a3a4a;
+    color: #8cf;
+    font-size: 10px;
+    font-family: monospace;
+}
+
+.em-tag-hint {
+    font-size: 11px;
+    color: #6a8;
+    margin: 2px 0 6px 0;
+}
+
+/* Entity modal — Pattern & Tags section */
+.entity-pattern-row {
+    padding: 4px 0 8px 0;
+    font-size: 13px;
+    color: #c0c0d0;
+}
+
+.entity-pattern-label {
+    color: #888;
+}
+
+.entity-pattern-isa {
+    color: #8cf;
+    margin-left: 4px;
+}
+
+.entity-tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.entity-tag-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #c0d0e0;
+    cursor: default;
 }
 
 /* Entity modal — Tasks section */

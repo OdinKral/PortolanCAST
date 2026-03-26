@@ -47,7 +47,7 @@ async function run() {
 
     try {
         // ── Initial load ──────────────────────────────────────────────────────
-        await page.goto(`${BASE_URL}/edit/${DOC_ID}`, { waitUntil: 'networkidle' });
+        await page.goto(`${BASE_URL}/edit/${DOC_ID}`, { waitUntil: 'networkidle', timeout: 60000 });
         await page.waitForTimeout(1500);
 
         // ══════════════════════════════════════════════════════════════════════

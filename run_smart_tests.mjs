@@ -251,10 +251,12 @@ const ALL_TEST_FILES = [
 // break, something fundamental changed and you should run --smart or --all.
 const QUICK_CANARY_SUITES = [
     'test_shapes.mjs',          // core drawing + DB + markup save/load
-    'test_bundle.mjs',          // PDF + photos + ZIP export/import round-trip
+    'test_phase5_layers.mjs',   // layer panel + PDF OCG visibility
     'test_health_monitor.mjs',  // server health + startup + API connectivity
     'test_stage3a.mjs',         // entity system CRUD + linking
     'test_phase2.mjs',          // scale + measure + settings persistence
+    // NOTE: test_bundle.mjs removed from canary — verbose photo output
+    // swamps the console. Still runs via --smart / --all.
 ];
 
 const FAILURES_FILE = '.test_failures.json';

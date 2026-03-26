@@ -287,6 +287,12 @@ export class Toolbar {
             btnExport.addEventListener('click', () => this._handleExport());
         }
 
+        // Export Page as Image — layer-aware PNG/SVG page export
+        const btnExportPage = document.getElementById('btn-export-page');
+        if (btnExportPage) {
+            btnExportPage.addEventListener('click', () => this._handleExportPage());
+        }
+
         // Save Bundle button — export .portolan ZIP (preserves markups for re-editing)
         const btnSaveBundle = document.getElementById('btn-save-bundle');
         if (btnSaveBundle) {
@@ -298,6 +304,25 @@ export class Toolbar {
         if (btnObsidian) {
             btnObsidian.addEventListener('click', () => this._handleObsidianExport());
         }
+
+        // Toolbar settings (now inside Settings dropdown — reuses existing _openSettings)
+        // NOTE: The old gear-button binding at line ~191 also targets btn-toolbar-settings.
+        // Both fire _openSettings() — safe to have two listeners on the same element.
+
+        // Help: Keyboard Shortcuts
+        const btnShortcuts = document.getElementById('btn-help-shortcuts');
+        if (btnShortcuts) {
+            btnShortcuts.addEventListener('click', () => this._showKeyboardShortcuts());
+        }
+
+        // Help: About
+        const btnAbout = document.getElementById('btn-help-about');
+        if (btnAbout) {
+            btnAbout.addEventListener('click', () => this._showAbout());
+        }
+
+        // Dropdown menu toggle — click trigger to open, click outside to close
+        this._initDropdowns();
     }
 
     // =========================================================================
@@ -2277,6 +2302,309 @@ export class Toolbar {
 
     // =========================================================================
     // PDF EXPORT
+    // =========================================================================
+
+    // =========================================================================
+    // DROPDOWN MENUS
+    // =========================================================================
+
+    /**
+     * Initialize all toolbar dropdown menus.
+     *
+     * Click the trigger button to toggle .open on the parent .toolbar-dropdown.
+     * Click any menu item or click outside to close all open dropdowns.
+     * Only one dropdown can be open at a time.
+     */
+    _initDropdowns() {
+        const dropdowns = document.querySelectorAll('.toolbar-dropdown');
+
+        // Toggle dropdown on trigger click
+        dropdowns.forEach(dd => {
+            const trigger = dd.querySelector('.toolbar-dropdown-trigger');
+            if (!trigger) return;
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const wasOpen = dd.classList.contains('open');
+                // Close all dropdowns first
+                dropdowns.forEach(d => d.classList.remove('open'));
+                // Toggle the clicked one
+                if (!wasOpen) dd.classList.add('open');
+            });
+        });
+
+        // Close dropdown after any menu item is clicked
+        document.querySelectorAll('.dropdown-item').forEach(item => {
+            item.addEventListener('click', () => {
+                dropdowns.forEach(d => d.classList.remove('open'));
+            });
+        });
+
+        // Close all dropdowns on click outside
+        document.addEventListener('click', () => {
+            dropdowns.forEach(d => d.classList.remove('open'));
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                dropdowns.forEach(d => d.classList.remove('open'));
+            }
+        });
+    }
+
+    // =========================================================================
+    // EXPORT PAGE AS IMAGE (layer-aware PNG/SVG)
+    // =========================================================================
+
+    /**
+     * Export the current page as a PNG or SVG, respecting hidden OCG layers.
+     *
+     * Opens a small modal where the user picks format and DPI, then downloads
+     * the rendered image. Hidden layers from the PDF Layers panel are
+     * automatically applied — what you see on the canvas is what you get.
+     */
+    async _handleExportPage() {
+        if (!this.viewer || !this.viewer.docId) {
+            alert('No document open to export.');
+            return;
+        }
+
+        // Show format/DPI picker modal
+        const opts = await this._showExportPageModal();
+        if (!opts) return;  // user cancelled
+
+        const statusMsg = document.getElementById('status-message');
+        statusMsg.textContent = `Exporting page as ${opts.format.toUpperCase()}...`;
+
+        try {
+            // Build query string with current layer visibility state
+            const params = new URLSearchParams({
+                format: opts.format,
+                dpi: opts.dpi,
+                rotate: this.viewer.rotation || 0,
+            });
+
+            // Pass currently hidden OCG layers so the export matches the canvas
+            if (this.viewer.pdfHiddenLayers && this.viewer.pdfHiddenLayers.size > 0) {
+                params.set('hidden_layers', [...this.viewer.pdfHiddenLayers].join(','));
+            }
+
+            const pageNum = this.viewer.currentPage;
+            const url = `/api/documents/${this.viewer.docId}/page/${pageNum}/export?${params}`;
+
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: 'Export failed' }));
+                throw new Error(err.detail || 'Page export failed');
+            }
+
+            const blob = await resp.blob();
+
+            // Extract filename from Content-Disposition header
+            const cd = resp.headers.get('Content-Disposition') || '';
+            const match = cd.match(/filename="([^"]+)"/);
+            const filename = match ? match[1] : `page_${pageNum + 1}.${opts.format}`;
+
+            // Trigger browser download
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+
+            const hiddenCount = this.viewer.pdfHiddenLayers?.size || 0;
+            const layerNote = hiddenCount > 0 ? ` (${hiddenCount} layers hidden)` : '';
+            statusMsg.textContent = `Page exported: ${filename}${layerNote}`;
+        } catch (err) {
+            statusMsg.textContent = `Export error: ${err.message}`;
+            console.error('[Toolbar] Page export failed:', err);
+        }
+    }
+
+    /**
+     * Show a small modal for picking export format and DPI.
+     *
+     * Returns { format: 'png'|'svg', dpi: number } or null if cancelled.
+     */
+    _showExportPageModal() {
+        return new Promise((resolve) => {
+            // Build modal dynamically — lightweight, no HTML template needed
+            const overlay = document.createElement('div');
+            overlay.className = 'modal';
+            overlay.style.display = 'flex';
+            overlay.style.alignItems = 'center';
+            overlay.style.justifyContent = 'center';
+            overlay.style.position = 'fixed';
+            overlay.style.inset = '0';
+            overlay.style.zIndex = '9999';
+            overlay.style.background = 'rgba(0,0,0,0.5)';
+
+            const box = document.createElement('div');
+            box.className = 'modal-box';
+            box.style.cssText = 'background:#1e1e2e; border:1px solid #3a3a55; border-radius:8px; padding:20px; min-width:280px; color:#ccc;';
+
+            const hiddenCount = this.viewer.pdfHiddenLayers?.size || 0;
+            const layerInfo = hiddenCount > 0
+                ? `<p style="font-size:11px; color:#cc8844; margin:0 0 12px;">
+                     ${hiddenCount} PDF layer(s) hidden — export will match current view</p>`
+                : '';
+
+            box.innerHTML = `
+                <h3 style="margin:0 0 12px; color:#eee; font-size:14px;">Export Page as Image</h3>
+                ${layerInfo}
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px; display:block; margin-bottom:4px;">Format</label>
+                    <select id="export-page-format" style="width:100%; padding:6px; background:#2a2a40; color:#ccc; border:1px solid #3a3a55; border-radius:4px;">
+                        <option value="png">PNG (raster — print quality)</option>
+                        <option value="svg">SVG (vector — editable in Inkscape)</option>
+                    </select>
+                </div>
+                <div id="export-page-dpi-row" style="margin-bottom:16px;">
+                    <label style="font-size:12px; display:block; margin-bottom:4px;">Resolution (DPI)</label>
+                    <select id="export-page-dpi" style="width:100%; padding:6px; background:#2a2a40; color:#ccc; border:1px solid #3a3a55; border-radius:4px;">
+                        <option value="150">150 DPI (screen quality)</option>
+                        <option value="300" selected>300 DPI (print quality)</option>
+                        <option value="600">600 DPI (high detail)</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button id="export-page-cancel" class="toolbar-btn" style="padding:6px 16px;">Cancel</button>
+                    <button id="export-page-ok" class="toolbar-btn modal-btn-primary" style="padding:6px 16px;">Export</button>
+                </div>
+            `;
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+
+            // Hide DPI row when SVG is selected (SVG is resolution-independent)
+            const formatSelect = box.querySelector('#export-page-format');
+            const dpiRow = box.querySelector('#export-page-dpi-row');
+            formatSelect.addEventListener('change', () => {
+                dpiRow.style.display = formatSelect.value === 'svg' ? 'none' : '';
+            });
+
+            const cleanup = () => { overlay.remove(); };
+
+            box.querySelector('#export-page-cancel').addEventListener('click', () => {
+                cleanup();
+                resolve(null);
+            });
+
+            box.querySelector('#export-page-ok').addEventListener('click', () => {
+                const format = formatSelect.value;
+                const dpi = parseInt(box.querySelector('#export-page-dpi').value, 10);
+                cleanup();
+                resolve({ format, dpi });
+            });
+
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) { cleanup(); resolve(null); }
+            });
+
+            document.addEventListener('keydown', function onEsc(e) {
+                if (e.key === 'Escape') {
+                    document.removeEventListener('keydown', onEsc);
+                    cleanup();
+                    resolve(null);
+                }
+            });
+        });
+    }
+
+    // =========================================================================
+    // HELP MENU HANDLERS
+    // =========================================================================
+
+    /**
+     * Show keyboard shortcuts reference.
+     *
+     * Builds a quick-reference overlay from the shortcut registry.
+     */
+    _showKeyboardShortcuts() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.style.cssText = 'display:flex; align-items:center; justify-content:center; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.5);';
+
+        const box = document.createElement('div');
+        box.className = 'modal-box';
+        box.style.cssText = 'background:#1e1e2e; border:1px solid #3a3a55; border-radius:8px; padding:20px; min-width:320px; max-width:480px; max-height:80vh; overflow-y:auto; color:#ccc;';
+
+        // Common shortcuts — kept simple and readable
+        box.innerHTML = `
+            <h3 style="margin:0 0 16px; color:#eee; font-size:14px;">Keyboard Shortcuts</h3>
+            <table style="width:100%; font-size:12px; border-collapse:collapse;">
+                <tr><td style="padding:4px 8px; color:#7788aa;">V</td><td>Select (pointer)</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">H</td><td>Pan (hand tool)</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">R</td><td>Rectangle</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">E</td><td>Ellipse</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">L</td><td>Line</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">P</td><td>Pen / freehand</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">T</td><td>Text</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">M</td><td>Measure distance</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">1-5</td><td>Switch intent (Note/Deficiency/...)</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Delete</td><td>Delete selected</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+Z</td><td>Undo</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+Y</td><td>Redo</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">+/−</td><td>Zoom in/out</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">0</td><td>Fit to width</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">PgUp/PgDn</td><td>Previous/next page</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Esc</td><td>Cancel / close</td></tr>
+            </table>
+            <div style="margin-top:16px; text-align:right;">
+                <button id="shortcuts-close" class="toolbar-btn modal-btn-primary" style="padding:6px 16px;">Close</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cleanup = () => overlay.remove();
+        box.querySelector('#shortcuts-close').addEventListener('click', cleanup);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+        document.addEventListener('keydown', function onEsc(e) {
+            if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); cleanup(); }
+        });
+    }
+
+    /**
+     * Show About dialog with version and project info.
+     */
+    _showAbout() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.style.cssText = 'display:flex; align-items:center; justify-content:center; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.5);';
+
+        const box = document.createElement('div');
+        box.className = 'modal-box';
+        box.style.cssText = 'background:#1e1e2e; border:1px solid #3a3a55; border-radius:8px; padding:20px; min-width:280px; color:#ccc; text-align:center;';
+
+        box.innerHTML = `
+            <h3 style="margin:0 0 8px; color:#eee; font-size:16px;">PortolanCAST</h3>
+            <p style="font-size:12px; color:#7788aa; margin:0 0 8px;">Building Automation Document Markup Tool</p>
+            <p style="font-size:11px; color:#667788; margin:0 0 16px;">
+                Open source &middot; FastAPI + Fabric.js + PyMuPDF
+            </p>
+            <div style="text-align:right;">
+                <button id="about-close" class="toolbar-btn modal-btn-primary" style="padding:6px 16px;">Close</button>
+            </div>
+        `;
+
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const cleanup = () => overlay.remove();
+        box.querySelector('#about-close').addEventListener('click', cleanup);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(); });
+        document.addEventListener('keydown', function onEsc(e) {
+            if (e.key === 'Escape') { document.removeEventListener('keydown', onEsc); cleanup(); }
+        });
+    }
+
+    // =========================================================================
+    // EXPORT PDF (annotated)
     // =========================================================================
 
     /**
