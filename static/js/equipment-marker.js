@@ -482,16 +482,37 @@ export class EquipmentMarkerPanel {
                 }
             }
 
-            // 2. Update marker label to entity tag_number
-            const label = this._getMarkerLabel(marker);
-            if (label) {
-                label.set('text', entity.tag_number || '?');
-            }
-
-            // 3. Set entityId and patternId on the Group for serialization persistence
+            // 2. Set entityId and patternId on the Group for serialization persistence
             marker.set('entityId', entity.id);
             if (entity.pattern_id) {
                 marker.set('patternId', entity.pattern_id);
+            }
+
+            // 3. Cache both view labels for ISA View Toggle (Phase 3).
+            //    isaLabel = tag_number (ISA-5.1 designation, e.g., "TT-101")
+            //    systemLabel = human-readable name from pattern views (e.g., "Zone Temp Sensor")
+            marker.set('isaLabel', entity.tag_number || '?');
+            if (entity.pattern_id) {
+                const pattern = this._patternCache.find(p => p.id === entity.pattern_id);
+                if (pattern && pattern.views) {
+                    const views = typeof pattern.views === 'string'
+                        ? JSON.parse(pattern.views) : pattern.views;
+                    if (views.system && views.system.label) {
+                        marker.set('systemLabel', views.system.label);
+                    }
+                }
+            }
+
+            // 4. Update marker label — respect current view mode
+            const label = this._getMarkerLabel(marker);
+            if (label) {
+                const viewMode = window.app?._viewMode || 'system';
+                const systemLabel = marker.get('systemLabel');
+                if (viewMode === 'system' && systemLabel) {
+                    label.set('text', systemLabel);
+                } else {
+                    label.set('text', entity.tag_number || '?');
+                }
             }
 
             // 4. Trigger canvas re-render and auto-save

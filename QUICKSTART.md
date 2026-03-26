@@ -19,10 +19,18 @@ and generate structured review briefs — all in a local web app with no cloud d
 9. [RFI Generator](#rfi-generator)
 10. [Search](#search)
 11. [Photo Attachments](#photo-attachments)
-12. [Navigating Pages](#navigating-pages)
-13. [Keyboard Shortcuts](#keyboard-shortcuts)
-14. [Save, Export, and Bundles](#save-export-and-bundles)
-15. [Tips and Workflow](#tips-and-workflow)
+12. [Entity Management](#entity-management-equipment-tab)
+13. [Quick Capture](#quick-capture)
+14. [Image Overlays](#image-overlays)
+15. [PDF Layers (OCG)](#pdf-layers-ocg)
+16. [Obsidian Export](#obsidian-export)
+17. [Health Monitor](#health-monitor)
+18. [nodeCAST (Graph View)](#nodecast-graph-view)
+19. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
+20. [Navigating Pages](#navigating-pages)
+21. [Keyboard Shortcuts](#keyboard-shortcuts)
+22. [Save, Export, and Bundles](#save-export-and-bundles)
+23. [Tips and Workflow](#tips-and-workflow)
 
 ---
 
@@ -365,6 +373,200 @@ They survive save/load cycles and are independent of page number.
 
 ---
 
+## Entity Management (Equipment Tab)
+
+The **Equipment tab** in the left panel is your equipment registry — a database of
+every piece of equipment across all your drawings.
+
+### Viewing Entities
+
+Click the **Equipment** tab in the left panel to see all registered entities.
+
+| Column | Description |
+|--------|-------------|
+| **Tag** | ISA tag number (e.g., TT-101, TV-201) |
+| **Type** | Equipment type (e.g., sensor, controller, actuator) |
+| **Building** | Building or zone the equipment belongs to |
+
+Click any row to open the **Entity Modal** with full details.
+
+### Entity Modal
+
+The Entity Modal is the central hub for a single piece of equipment. It shows:
+
+| Section | Description |
+|---------|-------------|
+| **Header** | Tag number, building, equipment type, pattern name + ISA symbol |
+| **Tags** | Colored pills showing structured tags (from pattern assignment) |
+| **Log** | Timestamped activity log — add notes about inspections, issues, changes |
+| **Tasks** | Task list for this entity — track maintenance items with status |
+| **Parts** | Parts and spares inventory — model numbers, quantities, suppliers |
+| **Photos** | Reference photos attached to this entity |
+| **Connections** | Incoming (←) and outgoing (→) connections to other entities |
+
+### Creating Entities
+
+Entities are created two ways:
+
+1. **Equipment Marker tool (M key)**: Place a pin on a drawing → create or link
+   an entity in the panel that opens. Best for spatial mapping.
+2. **Quick Capture**: Rapid field entry mode for bulk equipment registration.
+
+---
+
+## Quick Capture
+
+Quick Capture is designed for fast field work — register multiple pieces of
+equipment in rapid succession without placing markers on drawings.
+
+### How to Use
+
+1. Open **Quick Capture** from the Equipment tab (or the toolbar)
+2. Select a **building** from the dropdown (or type a new one)
+3. Select a **pattern** (e.g., "Zone Air Temperature Sensor")
+4. Click **Create** — the entity is registered with an auto-generated ISA tag
+5. The form resets for the next entry — keep going
+
+Quick Capture is optimized for the workflow: arrive at a building, scan the
+mechanical room, and register every piece of equipment you see. Sort out
+connections and spatial placement later.
+
+---
+
+## Image Overlays
+
+Place reference images directly on the canvas — useful for overlaying site photos,
+manufacturer diagrams, or detail sketches on top of your drawings.
+
+### Placing an Image
+
+1. Click the **Image** button in the markup toolbar (or use the toolbar menu)
+2. Select an image file (JPEG, PNG, GIF, WEBP)
+3. The image appears on the canvas as a resizable, movable object
+4. Drag corners to resize; drag the body to reposition
+
+### Properties
+
+Image overlays are full markups — they appear in:
+- The **Markup List** (type badge shows "Image")
+- The **Properties Panel** (note, tags, status, entity link, photos)
+- The **Review Brief** and **RFI Generator**
+- **nodeCAST** (force graph)
+
+---
+
+## PDF Layers (OCG)
+
+If your PDF contains named layers (common in AutoCAD/Revit exports), PortolanCAST
+can toggle their visibility individually.
+
+### Using PDF Layers
+
+1. Open a PDF that has embedded layers (OCG groups)
+2. The **PDF Layers** panel appears in the left panel
+3. Each layer shows its name with an eye toggle
+4. Click the eye icon to show/hide that layer
+5. The page re-renders with the selected layers visible
+
+### What Are OCG Layers?
+
+OCG (Optional Content Groups) are named layer groups embedded in the PDF by
+the authoring software (AutoCAD, Revit, Bluebeam). Common layers include:
+
+- Walls, doors, windows (architectural)
+- Ductwork, piping, equipment (mechanical)
+- Wiring, panels, fixtures (electrical)
+- Grid lines, dimensions, title block (annotation)
+
+> **Note:** Layer quality depends on how the PDF was authored. Some AutoCAD
+> exports place multiple disciplines on a single layer — this is a source file
+> issue, not a PortolanCAST limitation.
+
+---
+
+## Obsidian Export
+
+Export your markups as a structured folder of Markdown files, ready to import
+into an [Obsidian](https://obsidian.md/) vault.
+
+### How to Export
+
+1. Open a document with markups
+2. Click **File → Export → Obsidian Export** (or use the API)
+3. A `.zip` file downloads containing one `.md` file per markup
+
+### File Structure
+
+```
+DocumentName/
+├── page-1/
+│   ├── issue-abc123.md
+│   ├── question-def456.md
+│   └── note-ghi789.md
+└── page-3/
+    └── change-jkl012.md
+```
+
+Each file contains YAML frontmatter (type, status, author, page, tags) and the
+markup note as the body. Files use `[[wikilinks]]` for cross-referencing.
+
+---
+
+## Health Monitor
+
+The **Health Monitor** panel shows real-time system diagnostics.
+
+### Status Indicator
+
+A colored dot in the bottom-right of the status bar shows overall health:
+
+| Color | Status | Meaning |
+|-------|--------|---------|
+| Green | Healthy | All checks passing |
+| Yellow | Degraded | Non-critical check failing (e.g., AI endpoint offline) |
+| Red | Unhealthy | Critical check failing (e.g., database unreachable) |
+
+### Health Checks
+
+Click the health dot to open the full Health Monitor panel:
+
+| Check | What It Tests |
+|-------|---------------|
+| **Database** | SQLite connection + response time |
+| **PDF Engine** | PyMuPDF version + availability |
+| **Disk Space** | Free disk space on data volume |
+| **Filesystem** | Read/write access to data directory |
+| **AI Endpoint** | ClaudeProxy availability (optional — degraded is OK) |
+
+### Running Tests
+
+The Health Monitor panel includes a **Run Tests** button that streams the output
+of the full test suite directly in the panel — useful for verifying the
+installation is working correctly.
+
+---
+
+## nodeCAST (Graph View)
+
+nodeCAST is a force-directed graph visualization of your markups, showing
+relationships between markups, entities, and tags.
+
+### Opening the Graph
+
+Click the **Graph** tab in the right panel. The graph builds automatically from
+the markups on the current page.
+
+### What the Graph Shows
+
+- **Nodes**: Each markup on the current page becomes a node
+- **Colors**: Nodes are colored by markup type (red = issue, amber = question, etc.)
+- **Edges**: Connections between related markups (shared entities, tags)
+- **Layout**: Force-directed — related items cluster together
+
+Click a node in the graph to select the corresponding markup on the canvas.
+
+---
+
 ## Navigating Pages
 
 | Action | Key / Method |
@@ -400,6 +602,75 @@ A 1.2-second cooldown prevents accidentally skipping multiple pages in one gestu
 
 ---
 
+## Equipment Patterns & ISA View
+
+PortolanCAST includes a Haystack-inspired pattern system for structured equipment
+identification. Instead of free-form text labels, you select a **pattern** when
+placing equipment markers — the system auto-assigns structured tags, ISA-5.1
+symbols, and sequential tag numbers.
+
+### Placing Equipment with Patterns
+
+1. Press **M** to activate the Equipment Marker tool
+2. Click on the drawing to place a marker
+3. In the Equipment Marker panel, select a **pattern** from the dropdown
+   (e.g., "Zone Air Temperature Sensor", "Damper Command")
+4. Enter the **building** name and click **Create**
+5. The entity is created with:
+   - An auto-generated ISA tag number (e.g., TT-101, TV-201)
+   - Structured tags from the pattern (e.g., `zone`, `air`, `temp`, `sensor`)
+   - The correct equipment type pre-filled
+
+### Connecting Equipment
+
+Draw directed connections between equipment markers to model control loops
+(sensor → controller → actuator):
+
+1. Press **Shift+C** to activate the Connect tool
+2. Click a **source** equipment marker (e.g., a temperature sensor)
+3. A rubber-band preview line follows your cursor
+4. Click a **target** equipment marker (e.g., a temperature controller)
+5. A dashed cyan line with an arrowhead appears, saved to the database
+
+Connections are visible in the **Entity Modal** — open any equipment marker to
+see its incoming (←) and outgoing (→) connections with type badges
+(signal / physical / logical).
+
+### ISA View Toggle
+
+The status bar shows a **SYS | ISA** toggle when a document is loaded:
+
+| Mode | Labels show | Example |
+|------|-------------|---------|
+| **SYS** (default) | Human-readable pattern names | "Zone Temp Sensor" |
+| **ISA** | ISA-5.1 engineering notation | "TT-101" |
+
+Click **ISA** to switch all equipment marker labels to engineering notation.
+Click **SYS** to switch back. The preference is saved per document and persists
+across sessions.
+
+> **Tip:** Use ISA view when sharing drawings with engineers who work in
+> ISA-5.1 notation. Use System view when the audience is facility managers
+> or technicians who prefer descriptive names.
+
+### Available Patterns
+
+| Pattern | Category | ISA Symbol | Example Tag |
+|---------|----------|------------|-------------|
+| Zone Air Temperature Sensor | Sensor | TT | TT-101 |
+| Zone Air Temperature Setpoint | Setpoint | TSP | TSP-101 |
+| Temperature Controller | Controller | TIC | TIC-101 |
+| Damper Command | Actuator | TV | TV-101 |
+| Valve Command | Actuator | TV | TV-201 |
+| Fan Command | Actuator | SC | SC-101 |
+| Flow Transmitter | Sensor | FT | FT-101 |
+| Pressure Transmitter | Sensor | PT | PT-101 |
+| Humidity Sensor | Sensor | MT | MT-101 |
+| VFD/Speed Controller | Controller | SIC | SIC-101 |
+| CO₂ Sensor | Sensor | AT | AT-101 |
+
+---
+
 ## Keyboard Shortcuts
 
 ### Intent (Markup Meaning)
@@ -428,6 +699,8 @@ A 1.2-second cooldown prevents accidentally skipping multiple pages in one gestu
 | A | Area measurement |
 | N | Count marker |
 | K | Calibrate scale |
+| M | Equipment Marker |
+| Shift+C | Connect (draw entity connection) |
 
 ### Editing
 | Key | Action |

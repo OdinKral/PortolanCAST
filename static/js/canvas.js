@@ -81,6 +81,10 @@ const CUSTOM_PROPERTIES = [
     // connectionId: UUID linking the Fabric line to entity_connections DB row.
     // sourceEntityId / targetEntityId: the two entities this line connects.
     'connectionId', 'sourceEntityId', 'targetEntityId',
+    // Haystack Phase 3: ISA View Toggle — cached labels for instant view mode swap.
+    // systemLabel: human-readable name from pattern.views.system.label (e.g., "Zone Temp Sensor")
+    // isaLabel: ISA-5.1 tag_number set at entity link time (e.g., "TT-101")
+    'systemLabel', 'isaLabel',
 ];
 
 /**
@@ -460,6 +464,58 @@ export class CanvasOverlay {
         this._undoRedoInProgress = false;
         // Reset undo stack for the new page — loaded state is the baseline
         this._saveBaselineSnapshot();
+    }
+
+    // =========================================================================
+    // ISA VIEW MODE (Haystack Phase 3)
+    // =========================================================================
+
+    /**
+     * Apply view mode labels to all equipment markers on the current canvas.
+     *
+     * Iterates all Fabric objects, finds equipment-marker Groups with a
+     * patternId, and swaps the IText label between systemLabel (human-readable)
+     * and isaLabel (ISA-5.1 tag_number). O(n) where n is objects on the page —
+     * typically 10-50 equipment markers max.
+     *
+     * This is a display-only operation — it does NOT trigger undo snapshots
+     * or dirty flags. View mode is a preference, not a content edit.
+     *
+     * Args:
+     *   mode: 'system' | 'isa' — which label to display.
+     */
+    applyViewMode(mode) {
+        if (!this.fabricCanvas) return;
+
+        const objects = this.fabricCanvas.getObjects();
+        let changed = false;
+
+        for (const obj of objects) {
+            if (obj.markupType !== 'equipment-marker') continue;
+            if (!obj.patternId) continue;
+
+            // Find the IText label child inside the marker Group
+            const labelChild = obj._objects?.find(
+                o => o.type === 'i-text' || o.type === 'text'
+            );
+            if (!labelChild) continue;
+
+            const targetText = mode === 'system'
+                ? (obj.systemLabel || obj.isaLabel || labelChild.text)
+                : (obj.isaLabel || labelChild.text);
+
+            if (labelChild.text !== targetText) {
+                labelChild.set('text', targetText);
+                // Recalculate Group bounding box after label width change
+                obj.setCoords();
+                obj.dirty = true;
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.fabricCanvas.renderAll();
+        }
     }
 
     // =========================================================================

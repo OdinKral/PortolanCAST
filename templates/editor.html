@@ -97,6 +97,11 @@
                     &#63; Help <span class="dropdown-arrow">&#9662;</span>
                 </button>
                 <div class="toolbar-dropdown-menu">
+                    <button id="btn-help-guide" class="dropdown-item"
+                            title="Open the Quick Start Guide"
+                            onclick="window.open('/help', '_blank')">
+                        <span class="dropdown-icon">&#128214;</span> Quick Start Guide
+                    </button>
                     <button id="btn-help-shortcuts" class="dropdown-item"
                             title="View all keyboard shortcuts">
                         <span class="dropdown-icon">&#9000;</span> Keyboard Shortcuts
@@ -819,6 +824,12 @@
                 <option value="eng_1_100">1" = 100'</option>
             </optgroup>
         </select>
+    </span>
+    <!-- ISA View Toggle — switches equipment marker labels between human-readable and ISA-5.1 notation.
+         Hidden until a document is loaded (same pattern as #status-scale/#status-counts). -->
+    <span id="status-view-mode" class="status-view-mode" style="display: none;" title="Toggle label view: System (human-readable) or ISA (engineering notation)">
+        <button id="btn-view-system" class="view-mode-btn active" data-mode="system">SYS</button>
+        <button id="btn-view-isa" class="view-mode-btn" data-mode="isa">ISA</button>
     </span>
     <span id="status-counts" class="status-counts" style="display: none;">
         <span class="status-count-item count-issue" title="Issues">0</span>

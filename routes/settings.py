@@ -271,3 +271,50 @@ async def put_layers(doc_id: int, request: Request):
     )
 
     return JSONResponse({"layers": cleaned, "activeId": active_id})
+
+
+# =============================================================================
+# VIEW MODE (Haystack Phase 3 — ISA View Toggle)
+# =============================================================================
+# Per-document toggle between human-readable labels ("Zone Temp Sensor")
+# and ISA-5.1 notation ("TT-101") on equipment markers.
+# Stored in document_settings with key "view_mode".
+# =============================================================================
+
+@router.get("/api/documents/{doc_id}/view-mode")
+async def get_view_mode(doc_id: int):
+    """
+    Get the label view mode for a document.
+
+    Returns:
+        {"mode": "system"} or {"mode": "isa"}
+
+    The default is "system" (human-readable labels).
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    raw = db.get_document_setting(doc_id, "view_mode")
+    mode = raw if raw in ("system", "isa") else "system"
+    return JSONResponse({"mode": mode})
+
+
+@router.put("/api/documents/{doc_id}/view-mode")
+async def set_view_mode(doc_id: int, request: Request):
+    """
+    Set the label view mode for a document.
+
+    Args:
+        mode: "system" (human-readable) or "isa" (ISA-5.1 notation)
+
+    Invalid values are silently clamped to "system".
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    body = await request.json()
+    mode = str(body.get("mode", "system"))
+    if mode not in ("system", "isa"):
+        mode = "system"
+    db.set_document_setting(doc_id, "view_mode", mode)
+    return JSONResponse({"mode": mode})

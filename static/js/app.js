@@ -98,6 +98,9 @@ class App {
         // Dirty flag — true when markups have changed since last save
         this._dirty = false;
 
+        // Haystack Phase 3: ISA View Toggle — 'system' (human-readable) or 'isa' (ISA-5.1)
+        this._viewMode = 'system';
+
         // Auto-save debounce timer
         this._saveTimer = null;
 
@@ -150,6 +153,10 @@ class App {
                     if (hasPending && pendingIdx >= 0) {
                         this._selectObjectByIndex(pendingIdx);
                     }
+                    // Re-apply ISA view mode after page switch — loaded markups
+                    // need label swap if we're in ISA mode (Phase 3)
+                    this._backfillViewLabels();
+                    this.canvas.applyViewMode(this._viewMode);
                 });
                 // Refresh text panel for the new page (no-op if tab is hidden)
                 this.pageText.refresh(page);
@@ -442,6 +449,34 @@ class App {
         if (sbMode) sbMode.style.display = '';
         this.toolbar._updateModeBar(this.toolbar.activeTool);
         this.scale.load(info.id);
+
+        // Show and load ISA View Toggle (Haystack Phase 3)
+        const viewModeEl = document.getElementById('status-view-mode');
+        if (viewModeEl) viewModeEl.style.display = '';
+        this._loadViewMode(info.id);
+
+        // Wire view mode toggle — only bind once
+        if (!this._viewModeBound) {
+            this._viewModeBound = true;
+            document.querySelectorAll('.view-mode-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const mode = btn.dataset.mode;
+                    if (mode === this._viewMode) return;
+                    this._viewMode = mode;
+                    this._updateViewModeUI();
+                    // Persist to server (fire-and-forget — UI is already updated)
+                    try {
+                        await fetch(`/api/documents/${this.docId}/view-mode`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mode }),
+                        });
+                    } catch (err) {
+                        console.error('[App] Failed to save view mode:', err);
+                    }
+                });
+            });
+        }
 
         // Wire scale dropdown — only bind once
         if (!this._scaleBound) {
@@ -761,6 +796,10 @@ class App {
             const data = await resp.json();
             if (data.pages) {
                 this.canvas.loadAllPageMarkups(data.pages);
+                // Backfill view labels for markers created before Phase 3,
+                // then apply current view mode (Phase 3)
+                this._backfillViewLabels();
+                this.canvas.applyViewMode(this._viewMode);
             }
 
             this._dirty = false;
@@ -787,6 +826,85 @@ class App {
             error: 'Save failed',
         };
         el.textContent = labels[status] || '';
+    }
+
+    // =========================================================================
+    // ISA VIEW MODE (Haystack Phase 3)
+    // =========================================================================
+
+    /**
+     * Load the view mode preference from the server for the current document.
+     * Falls back to 'system' if the endpoint is unreachable or returns no data.
+     *
+     * Args:
+     *   docId: Document database ID.
+     */
+    async _loadViewMode(docId) {
+        try {
+            const resp = await fetch(`/api/documents/${docId}/view-mode`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            this._viewMode = data.mode || 'system';
+            this._updateViewModeUI();
+        } catch (err) {
+            console.error('[App] Failed to load view mode:', err);
+        }
+    }
+
+    /**
+     * Update the SYS|ISA toggle button state and apply labels to canvas.
+     * Called after loading from server or after a user click.
+     */
+    _updateViewModeUI() {
+        document.querySelectorAll('.view-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === this._viewMode);
+        });
+        if (this.canvas) {
+            this.canvas.applyViewMode(this._viewMode);
+        }
+    }
+
+    /**
+     * Backfill systemLabel and isaLabel on equipment markers created before
+     * the ISA View Toggle feature (Phase 3). Markers with patternId but
+     * missing cached labels get them populated from the pattern cache.
+     *
+     * MUST be called after equipmentMarkerPanel._fetchPatterns() has populated
+     * the cache (which happens during init() on first document load).
+     */
+    _backfillViewLabels() {
+        if (!this.canvas?.fabricCanvas) return;
+
+        const patternCache = this.equipmentMarkerPanel?._patternCache || [];
+        if (patternCache.length === 0) return;
+
+        for (const obj of this.canvas.fabricCanvas.getObjects()) {
+            if (obj.markupType !== 'equipment-marker') continue;
+            if (!obj.patternId) continue;
+            // Skip markers that already have both labels cached
+            if (obj.systemLabel && obj.isaLabel) continue;
+
+            const pattern = patternCache.find(p => p.id === obj.patternId);
+            if (!pattern) continue;
+
+            const views = typeof pattern.views === 'string'
+                ? JSON.parse(pattern.views) : pattern.views;
+
+            // Find the IText label child to read the current tag_number
+            const labelChild = obj._objects?.find(
+                o => o.type === 'i-text' || o.type === 'text'
+            );
+            if (!labelChild) continue;
+
+            // isaLabel = the tag_number (ISA designation), which is the default label
+            if (!obj.isaLabel) {
+                obj.set('isaLabel', labelChild.text);
+            }
+            // systemLabel = human-readable name from pattern views
+            if (!obj.systemLabel && views?.system?.label) {
+                obj.set('systemLabel', views.system.label);
+            }
+        }
     }
 
     // =========================================================================

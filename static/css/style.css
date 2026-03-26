@@ -522,6 +522,33 @@ html, body {
 }
 
 /* Ambient markup counts in status bar — visible progress without tab switching */
+/* ISA View Toggle — pill button for System/ISA label mode (Haystack Phase 3) */
+.status-view-mode {
+    display: inline-flex;
+    gap: 0;
+    border: 1px solid #3a3a50;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: 8px;
+}
+.view-mode-btn {
+    background: transparent;
+    color: #888;
+    border: none;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.15s, color 0.15s;
+}
+.view-mode-btn:hover {
+    color: #ccc;
+}
+.view-mode-btn.active {
+    background: #4a9eff;
+    color: #fff;
+}
+
 .status-counts {
     display: inline-flex;
     align-items: center;

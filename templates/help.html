@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<!--
+    PortolanCAST — Help / Quick Start Guide
+
+    Purpose:
+        Renders QUICKSTART.md as a styled HTML page. The markdown content is
+        read server-side by the /help route and injected into the template.
+        No external dependencies — pure CSS styling for a clean reading experience.
+
+    Security:
+        Content is static markdown from the project repo, not user input.
+        Rendered via Jinja2 autoescaping — safe from injection.
+
+    Author: PortolanCAST
+    Date: 2026-03-26
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortolanCAST — Quick Start Guide</title>
+    <style>
+        /* Dark theme matching the main PortolanCAST UI */
+        :root {
+            --bg: #1e1e2e;
+            --bg-surface: #252536;
+            --text: #cdd6f4;
+            --text-muted: #888;
+            --accent: #4a9eff;
+            --border: #3a3a50;
+            --code-bg: #1a1a2a;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 48px 56px;
+        }
+
+        /* Navigation bar */
+        .help-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .help-nav a {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .help-nav a:hover { text-decoration: underline; }
+        .help-nav .brand {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text);
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 28px;
+            margin: 32px 0 16px;
+            color: #fff;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: 8px;
+        }
+        h1:first-child { margin-top: 0; }
+        h2 {
+            font-size: 22px;
+            margin: 28px 0 12px;
+            color: #e0e0ff;
+        }
+        h3 {
+            font-size: 17px;
+            margin: 20px 0 8px;
+            color: #c0c0e0;
+        }
+        p { margin: 10px 0; }
+        hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 24px 0;
+        }
+
+        /* Links */
+        a { color: var(--accent); }
+
+        /* Lists */
+        ul, ol { margin: 10px 0 10px 24px; }
+        li { margin: 4px 0; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 14px;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background: var(--code-bg);
+            font-weight: 600;
+            color: #e0e0ff;
+        }
+        tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+
+        /* Code */
+        code {
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+            font-family: 'Cascadia Code', 'Fira Code', monospace;
+        }
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 12px 0;
+            font-size: 13px;
+        }
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* Blockquotes (tips) */
+        blockquote {
+            border-left: 3px solid var(--accent);
+            padding: 12px 16px;
+            margin: 12px 0;
+            background: rgba(74, 158, 255, 0.05);
+            color: #b0b8d0;
+        }
+        blockquote strong { color: var(--accent); }
+
+        /* Keyboard shortcuts */
+        kbd {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="help-nav">
+            <span class="brand">PortolanCAST</span>
+            <a href="/" title="Back to application">&larr; Back to App</a>
+        </nav>
+        <div id="help-content">
+            {{ content | safe }}
+        </div>
+    </div>
+</body>
+</html>

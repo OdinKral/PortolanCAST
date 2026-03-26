@@ -40,6 +40,7 @@ from routes import (
     health, pages, documents, markups, settings, ai,
     bundles, photos, search, reports, text, entities,
     entity_tasks, entity_photos, parts, backup, patterns, connections,
+    help,
 )
 
 # =============================================================================
@@ -81,6 +82,7 @@ app.include_router(parts.router)
 app.include_router(backup.router)
 app.include_router(patterns.router)
 app.include_router(connections.router)
+app.include_router(help.router)
 
 
 # =============================================================================
