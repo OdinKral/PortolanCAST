@@ -233,6 +233,33 @@ CREATE INDEX IF NOT EXISTS idx_entity_parts_entity
     ON entity_parts(entity_id);
 
 -- ==========================================================================
+-- HAYSTACK: ENTITY CONNECTIONS — Directed Edges Between Equipment
+-- ==========================================================================
+
+-- Directed connections between entities (sensor → controller → actuator).
+-- Stored in DB for graph queries (survives canvas operations, supports
+-- cross-page lookups). Fabric.js visual line stored in fabric_data JSON.
+-- SECURITY: source_id and target_id are FK-validated against entities table.
+CREATE TABLE IF NOT EXISTS entity_connections (
+    id              TEXT PRIMARY KEY,
+    source_id       TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    target_id       TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    source_port     TEXT NOT NULL DEFAULT 'output',   -- port name from pattern definition
+    target_port     TEXT NOT NULL DEFAULT 'input',    -- port name from pattern definition
+    connection_type TEXT NOT NULL DEFAULT 'signal',   -- 'signal' | 'physical' | 'logical'
+    label           TEXT NOT NULL DEFAULT '',          -- optional midpoint label
+    doc_id          INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+    page_number     INTEGER,
+    fabric_data     TEXT NOT NULL DEFAULT '',          -- JSON: Fabric line object for canvas rendering
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(source_id, target_id, source_port, target_port)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conn_source ON entity_connections(source_id);
+CREATE INDEX IF NOT EXISTS idx_conn_target ON entity_connections(target_id);
+CREATE INDEX IF NOT EXISTS idx_conn_doc_page ON entity_connections(doc_id, page_number);
+
+-- ==========================================================================
 -- HAYSTACK: PATTERN SYSTEM — Structured Equipment Blueprints
 -- ==========================================================================
 
@@ -1979,6 +2006,237 @@ class Database:
                 rows = conn.execute(sql, tags).fetchall()
 
             return [dict(r) for r in rows]
+
+    # =========================================================================
+    # ENTITY CONNECTIONS (Haystack Phase 2 — Directed Equipment Edges)
+    # =========================================================================
+    #
+    # Connections model signal/physical/logical edges between entities:
+    #   sensor → controller → actuator (the Haystack control loop pattern).
+    # Each connection is stored in the DB (survives canvas ops, supports
+    # cross-page queries) AND rendered as a Fabric line on the canvas
+    # (fabric_data column stores the visual representation).
+
+    def create_connection(
+        self,
+        connection_id: str,
+        source_id: str,
+        target_id: str,
+        connection_type: str = "signal",
+        source_port: str = "output",
+        target_port: str = "input",
+        label: str = "",
+        doc_id: int = None,
+        page_number: int = None,
+        fabric_data: str = "",
+    ) -> dict:
+        """
+        Create a directed connection between two entities.
+
+        Args:
+            connection_id: Pre-generated UUID for the connection.
+            source_id: UUID of the source entity (e.g., sensor).
+            target_id: UUID of the target entity (e.g., controller).
+            connection_type: 'signal' | 'physical' | 'logical'.
+            source_port: Port name on source (default 'output').
+            target_port: Port name on target (default 'input').
+            label: Optional midpoint label text.
+            doc_id: Document where the visual line lives (nullable).
+            page_number: Page number within the document (nullable).
+            fabric_data: JSON string of the Fabric.js line object.
+
+        Returns:
+            Dict of the created connection row.
+
+        Raises:
+            ValueError: If source_id == target_id (self-loop).
+            sqlite3.IntegrityError: On duplicate (source, target, ports) or
+                missing entity FK.
+        """
+        # SECURITY: prevent self-loops — a sensor cannot feed itself
+        if source_id == target_id:
+            raise ValueError("Cannot connect an entity to itself")
+
+        # Validate connection_type against allowed values
+        allowed_types = ("signal", "physical", "logical")
+        if connection_type not in allowed_types:
+            raise ValueError(
+                f"connection_type must be one of {allowed_types}, got '{connection_type}'"
+            )
+
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO entity_connections
+                   (id, source_id, target_id, connection_type,
+                    source_port, target_port, label,
+                    doc_id, page_number, fabric_data)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    connection_id, source_id, target_id, connection_type,
+                    source_port, target_port, label,
+                    doc_id, page_number, fabric_data,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM entity_connections WHERE id = ?",
+                (connection_id,),
+            ).fetchone()
+            return dict(row)
+
+    def get_connection(self, connection_id: str) -> dict | None:
+        """
+        Fetch a single connection by ID.
+
+        Returns:
+            Connection dict or None if not found.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM entity_connections WHERE id = ?",
+                (connection_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_entity_connections(self, entity_id: str) -> dict:
+        """
+        Fetch all connections where the entity is source OR target.
+
+        Returns:
+            Dict with 'outgoing' and 'incoming' lists, each enriched
+            with the connected entity's tag_number and building.
+
+        Why separate lists: UI needs to show "feeds into" (outgoing) and
+        "receives from" (incoming) differently — directional semantics
+        matter for control loop reasoning.
+        """
+        with self._connect() as conn:
+            # Outgoing: this entity is the source
+            outgoing = conn.execute(
+                """SELECT ec.*, e.tag_number AS target_tag, e.building AS target_building,
+                          e.equip_type AS target_equip_type
+                   FROM entity_connections ec
+                   JOIN entities e ON e.id = ec.target_id
+                   WHERE ec.source_id = ?
+                   ORDER BY ec.created_at""",
+                (entity_id,),
+            ).fetchall()
+
+            # Incoming: this entity is the target
+            incoming = conn.execute(
+                """SELECT ec.*, e.tag_number AS source_tag, e.building AS source_building,
+                          e.equip_type AS source_equip_type
+                   FROM entity_connections ec
+                   JOIN entities e ON e.id = ec.source_id
+                   WHERE ec.target_id = ?
+                   ORDER BY ec.created_at""",
+                (entity_id,),
+            ).fetchall()
+
+            return {
+                "outgoing": [dict(r) for r in outgoing],
+                "incoming": [dict(r) for r in incoming],
+            }
+
+    def get_connections_for_page(
+        self, doc_id: int, page_number: int
+    ) -> list:
+        """
+        Fetch all connections drawn on a specific document page.
+
+        Used to render connection lines when a page loads — the canvas
+        needs to know which Fabric lines to draw and which entities
+        they connect.
+
+        Args:
+            doc_id: Document ID.
+            page_number: 1-based page number.
+
+        Returns:
+            List of connection dicts with source/target entity details.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT ec.*,
+                          s.tag_number AS source_tag, s.building AS source_building,
+                          t.tag_number AS target_tag, t.building AS target_building
+                   FROM entity_connections ec
+                   JOIN entities s ON s.id = ec.source_id
+                   JOIN entities t ON t.id = ec.target_id
+                   WHERE ec.doc_id = ? AND ec.page_number = ?
+                   ORDER BY ec.created_at""",
+                (doc_id, page_number),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_connection(
+        self, connection_id: str, **kwargs
+    ) -> dict | None:
+        """
+        Update mutable fields on a connection.
+
+        Allowed fields: connection_type, label, source_port, target_port,
+        fabric_data, doc_id, page_number.
+
+        Returns:
+            Updated connection dict, or None if not found.
+        """
+        allowed = {
+            "connection_type", "label", "source_port", "target_port",
+            "fabric_data", "doc_id", "page_number",
+        }
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return self.get_connection(connection_id)
+
+        # Validate connection_type if being changed
+        if "connection_type" in updates:
+            allowed_types = ("signal", "physical", "logical")
+            if updates["connection_type"] not in allowed_types:
+                raise ValueError(
+                    f"connection_type must be one of {allowed_types}"
+                )
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [connection_id]
+
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE entity_connections SET {set_clause} WHERE id = ?",
+                values,
+            )
+            return self.get_connection(connection_id)
+
+    def delete_connection(self, connection_id: str) -> bool:
+        """
+        Delete a connection by ID.
+
+        Returns:
+            True if a row was deleted, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM entity_connections WHERE id = ?",
+                (connection_id,),
+            )
+            return cursor.rowcount > 0
+
+    def delete_connections_for_entity(self, entity_id: str) -> int:
+        """
+        Delete all connections involving an entity (both directions).
+
+        Called when an entity is deleted — CASCADE handles this at the
+        DB level, but this method is useful for explicit cleanup.
+
+        Returns:
+            Number of connections deleted.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """DELETE FROM entity_connections
+                   WHERE source_id = ? OR target_id = ?""",
+                (entity_id, entity_id),
+            )
+            return cursor.rowcount
 
     # =========================================================================
     # GLOBAL SEARCH

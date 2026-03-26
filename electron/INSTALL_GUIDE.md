@@ -136,14 +136,14 @@ dir electron\dist\*.exe
 Once prerequisites are installed, the full build is:
 
 ```cmd
-cd C:\Users\User1\ClaudeProjects\PortolanCAST
+cd \\wsl$\Ubuntu\home\odikral\projects\PortolanCAST
 electron\build.bat
 ```
 
 Or step by step if the batch script gives trouble:
 
 ```cmd
-cd C:\Users\User1\ClaudeProjects\PortolanCAST
+cd \\wsl$\Ubuntu\home\odikral\projects\PortolanCAST
 python -m PyInstaller electron\pyinstaller.spec --distpath electron --workpath build\pyinstaller --clean --noconfirm
 cd electron
 npm install

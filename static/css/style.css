@@ -3967,6 +3967,79 @@ html, body {
     cursor: default;
 }
 
+/* Entity modal — Connections section (Haystack Phase 2) */
+.entity-connections-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.entity-connection-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    background: rgba(86, 182, 194, 0.08);
+    font-size: 12px;
+}
+
+.entity-connection-row--incoming {
+    background: rgba(86, 182, 194, 0.04);
+}
+
+.entity-connection-label {
+    flex: 1;
+    color: #c0d0e0;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.entity-connection-type-hint {
+    color: #888;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.entity-connection-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.entity-connection-badge--signal {
+    background: rgba(86, 182, 194, 0.25);
+    color: #56b6c2;
+}
+
+.entity-connection-badge--physical {
+    background: rgba(170, 170, 170, 0.25);
+    color: #aaa;
+}
+
+.entity-connection-badge--logical {
+    background: rgba(198, 120, 221, 0.25);
+    color: #c678dd;
+}
+
+.entity-connection-delete {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.entity-connection-delete:hover {
+    color: #ff4444;
+}
+
 /* Entity modal — Tasks section */
 .entity-task-row {
     display: flex;

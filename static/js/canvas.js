@@ -77,6 +77,10 @@ const CUSTOM_PROPERTIES = [
     // Haystack pattern: links the marker to a pattern blueprint for ISA view switching
     // and structured tag assignment. Set when entity is created from a pattern.
     'patternId',
+    // Haystack Phase 2: connection lines between equipment markers.
+    // connectionId: UUID linking the Fabric line to entity_connections DB row.
+    // sourceEntityId / targetEntityId: the two entities this line connects.
+    'connectionId', 'sourceEntityId', 'targetEntityId',
 ];
 
 /**

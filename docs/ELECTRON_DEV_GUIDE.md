@@ -19,7 +19,7 @@ PortolanCAST Desktop wraps the web app in an Electron shell so you can run it by
 ### First-time setup
 
 ```cmd
-cd C:\Users\User1\ClaudeProjects\PortolanCAST\electron
+cd \\wsl$\Ubuntu\home\odikral\projects\PortolanCAST\electron
 npm install
 ```
 
@@ -28,7 +28,7 @@ npm install
 Open **Command Prompt** (Win+R → `cmd` → Enter):
 
 ```cmd
-cd C:\Users\User1\ClaudeProjects\PortolanCAST\electron
+cd \\wsl$\Ubuntu\home\odikral\projects\PortolanCAST\electron
 set ELECTRON_DEV=1
 npx electron .
 ```
@@ -82,7 +82,7 @@ For distributing to users who don't have the source code. See [electron/INSTALL_
 ### Quick build (Windows)
 
 ```cmd
-cd C:\Users\User1\ClaudeProjects\PortolanCAST
+cd \\wsl$\Ubuntu\home\odikral\projects\PortolanCAST
 
 REM Step 1: Freeze Python backend
 python -m PyInstaller electron\pyinstaller.spec --distpath electron --workpath build\pyinstaller --clean --noconfirm

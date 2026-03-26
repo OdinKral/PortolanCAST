@@ -581,10 +581,17 @@ export class Toolbar {
                     }
                     break;
 
-                // C: Cloud tool
+                // C: Cloud tool (lowercase c)
                 case 'c':
                     if (!e.ctrlKey) {
                         this.setTool('cloud');
+                    }
+                    break;
+
+                // Shift+C: Connect tool (uppercase C — same pattern as Shift+A for Arrow)
+                case 'C':
+                    if (!e.ctrlKey) {
+                        this.setTool('connect');
                     }
                     break;
 
@@ -843,6 +850,17 @@ export class Toolbar {
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 this._initEquipmentMarkerPlacement();
+                break;
+
+            case 'connect':
+                // Two-click connection tool: click source equipment marker → click
+                // target equipment marker → draws a directed line between them and
+                // saves the connection to the DB.
+                // Both clicks must land on equipment markers with entityId set.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initConnectionDrawing();
                 break;
 
             case 'text':
@@ -3318,6 +3336,295 @@ export class Toolbar {
         // Store for cleanup (same _shapeHandlers mechanism as all other tools)
         this._shapeHandlers = {
             'mouse:down': onMouseDown,
+        };
+    }
+
+    // =========================================================================
+    // CONNECTION DRAWING (Haystack Phase 2 — two-click entity wiring)
+    // =========================================================================
+
+    /**
+     * Two-click connection tool: click source equipment marker → rubber-band
+     * preview line → click target equipment marker → draw directed connection
+     * line and save to DB.
+     *
+     * Design decisions:
+     *   - Both clicks MUST land on equipment markers with entityId set.
+     *     Clicking empty canvas or non-entity objects is ignored (with status hint).
+     *   - Connection line is a Fabric Group (shaft + arrowhead), same as Arrow tool,
+     *     but with connection metadata (connectionId, sourceEntityId, targetEntityId).
+     *   - Line is dashed cyan for signal connections (distinguishes from regular arrows).
+     *   - DB POST happens after canvas placement — if POST fails, the line is removed.
+     *   - One-shot: reverts to select after placing one connection.
+     */
+    _initConnectionDrawing() {
+        const fc = this.canvas.fabricCanvas;
+        const CONNECTION_COLOR = '#56b6c2'; // Cyan — distinct from all markup colors
+        const STROKE_WIDTH = 2;
+        const ARROW_SIZE = 12;
+        const WING_ANGLE = Math.PI / 6;
+        const DASH_PATTERN = [8, 4]; // Signal connection visual signature
+
+        /** @type {fabric.Object|null} Source equipment marker Group */
+        let sourceMarker = null;
+        /** @type {string|null} Source entity UUID */
+        let sourceEntityId = null;
+        /** @type {fabric.Line|null} Rubber-band preview line during second click */
+        let previewLine = null;
+
+        // Status hint element — reuse the mode bar if available
+        const showHint = (msg) => {
+            const modeEl = document.getElementById('sb-mode');
+            if (modeEl) modeEl.textContent = msg;
+        };
+
+        showHint('Connect: click source marker');
+
+        // ── Find the equipment marker Group that owns a clicked object ──────
+        // Equipment markers are Groups with entityId. The user might click the
+        // circle child or the label child — we need the parent Group.
+        const findMarkerGroup = (target) => {
+            if (!target) return null;
+
+            // Direct hit on the marker Group itself
+            if (target.entityId) return target;
+
+            // Hit on a child inside a Group — walk up to parent
+            if (target.group && target.group.entityId) return target.group;
+
+            // Check if target is a Group containing objects with entityId
+            // (Fabric sometimes returns the Group directly)
+            if (target._objects && target.entityId) return target;
+
+            return null;
+        };
+
+        // ── Compute center of a marker Group in canvas coordinates ──────────
+        const getMarkerCenter = (marker) => {
+            const center = marker.getCenterPoint();
+            return { x: center.x, y: center.y };
+        };
+
+        // ── Event handlers ──────────────────────────────────────────────────
+
+        const onMouseDown = (opt) => {
+            const target = opt.target;
+            const marker = findMarkerGroup(target);
+
+            if (!sourceMarker) {
+                // --- First click: select source marker ---
+                if (!marker) {
+                    showHint('Connect: click an equipment marker (with entity)');
+                    return;
+                }
+                if (!marker.entityId) {
+                    showHint('Connect: marker has no entity — link it first');
+                    return;
+                }
+
+                sourceMarker = marker;
+                sourceEntityId = marker.entityId;
+
+                // Highlight source with temporary border
+                marker.set({ borderColor: CONNECTION_COLOR, borderScaleFactor: 2 });
+                fc.renderAll();
+
+                // Start rubber-band preview from source center
+                const src = getMarkerCenter(marker);
+                previewLine = new fabric.Line(
+                    [src.x, src.y, src.x, src.y],
+                    {
+                        stroke: CONNECTION_COLOR,
+                        strokeWidth: STROKE_WIDTH,
+                        strokeDashArray: DASH_PATTERN,
+                        strokeUniform: true,
+                        selectable: false,
+                        evented: false,
+                    }
+                );
+                fc.add(previewLine);
+                fc.renderAll();
+
+                showHint('Connect: click target marker');
+
+            } else {
+                // --- Second click: select target marker and create connection ---
+                if (!marker) {
+                    showHint('Connect: click a target equipment marker');
+                    return;
+                }
+                if (!marker.entityId) {
+                    showHint('Connect: target marker has no entity — link it first');
+                    return;
+                }
+                if (marker.entityId === sourceEntityId) {
+                    showHint('Connect: cannot connect entity to itself');
+                    return;
+                }
+
+                const targetEntityId = marker.entityId;
+                const src = getMarkerCenter(sourceMarker);
+                const tgt = getMarkerCenter(marker);
+
+                // Remove preview line
+                if (previewLine) {
+                    fc.remove(previewLine);
+                    previewLine = null;
+                }
+
+                // Reset source highlight
+                sourceMarker.set({ borderColor: '', borderScaleFactor: 1 });
+
+                // ── Build the connection line (shaft + arrowhead) ────────────
+                const dx = tgt.x - src.x;
+                const dy = tgt.y - src.y;
+                const angle = Math.atan2(dy, dx);
+
+                // Arrowhead wing tips
+                const wing1x = tgt.x - ARROW_SIZE * Math.cos(angle - WING_ANGLE);
+                const wing1y = tgt.y - ARROW_SIZE * Math.sin(angle - WING_ANGLE);
+                const wing2x = tgt.x - ARROW_SIZE * Math.cos(angle + WING_ANGLE);
+                const wing2y = tgt.y - ARROW_SIZE * Math.sin(angle + WING_ANGLE);
+
+                // Shorten shaft so it doesn't poke through the arrowhead fill
+                const shaftEndX = tgt.x - ARROW_SIZE * 0.6 * Math.cos(angle);
+                const shaftEndY = tgt.y - ARROW_SIZE * 0.6 * Math.sin(angle);
+
+                const shaft = new fabric.Line(
+                    [src.x, src.y, shaftEndX, shaftEndY],
+                    {
+                        stroke: CONNECTION_COLOR,
+                        strokeWidth: STROKE_WIDTH,
+                        strokeDashArray: DASH_PATTERN,
+                        strokeUniform: true,
+                        selectable: false,
+                        evented: false,
+                    }
+                );
+
+                const headPath = `M ${tgt.x},${tgt.y} L ${wing1x},${wing1y} L ${wing2x},${wing2y} Z`;
+                const head = new fabric.Path(headPath, {
+                    fill: CONNECTION_COLOR,
+                    stroke: CONNECTION_COLOR,
+                    strokeWidth: 1,
+                    strokeLineJoin: 'round',
+                    strokeUniform: true,
+                    selectable: false,
+                    evented: false,
+                });
+
+                const connectionGroup = new fabric.Group([shaft, head], {
+                    selectable: true,
+                    // Connection metadata — survives serialization via CUSTOM_PROPERTIES
+                    sourceEntityId: sourceEntityId,
+                    targetEntityId: targetEntityId,
+                });
+
+                // Generate a connection UUID before adding to canvas
+                const connectionId = crypto.randomUUID();
+                connectionGroup.connectionId = connectionId;
+
+                fc.add(connectionGroup);
+
+                // Stamp markup metadata — markupType 'connection' for identification
+                this.canvas.stampDefaults(connectionGroup, {
+                    markupType: 'note',
+                    preserveColor: true,
+                });
+
+                connectionGroup.setCoords();
+                fc.renderAll();
+
+                // ── Save connection to DB ────────────────────────────────────
+                const docId = this.viewer ? this.viewer.docId : null;
+                const pageNum = this.viewer ? this.viewer.currentPage : null;
+
+                fetch('/api/connections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_id: sourceEntityId,
+                        target_id: targetEntityId,
+                        connection_type: 'signal',
+                        doc_id: docId ? parseInt(docId, 10) : null,
+                        page_number: pageNum,
+                        fabric_data: JSON.stringify(connectionGroup.toObject()),
+                    }),
+                })
+                .then(resp => {
+                    if (!resp.ok) {
+                        return resp.json().then(data => {
+                            throw new Error(data.detail || 'Failed to save connection');
+                        });
+                    }
+                    return resp.json();
+                })
+                .then(data => {
+                    // Update the canvas object with the server-assigned connection ID
+                    // (we used crypto.randomUUID client-side, but the server generates its own)
+                    connectionGroup.connectionId = data.connection.id;
+                    showHint('Connection saved');
+                })
+                .catch(err => {
+                    console.error('[Connect] Failed to save connection:', err);
+                    // Remove the visual line if DB save failed — no orphan canvas objects
+                    fc.remove(connectionGroup);
+                    fc.renderAll();
+                    showHint('Connection failed: ' + err.message);
+                });
+
+                // One-shot: clean up and revert to select
+                this._cleanupShapeDrawing();
+                this.activeTool = 'select';
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === 'select');
+                });
+            }
+        };
+
+        const onMouseMove = (opt) => {
+            if (!previewLine) return;
+            const pointer = fc.getPointer(opt.e);
+            previewLine.set({ x2: pointer.x, y2: pointer.y });
+            fc.renderAll();
+        };
+
+        // ── Handler registration ────────────────────────────────────────────
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+        };
+
+        // ── Cleanup override ────────────────────────────────────────────────
+        // Remove preview line and reset source state when tool is deactivated
+        this._cleanupShapeDrawing = () => {
+            if (previewLine) {
+                fc.remove(previewLine);
+                previewLine = null;
+            }
+            if (sourceMarker) {
+                sourceMarker.set({ borderColor: '', borderScaleFactor: 1 });
+                sourceMarker = null;
+            }
+            sourceEntityId = null;
+
+            // Restore status bar mode display
+            showHint('');
+
+            const fc2 = this.canvas && this.canvas.fabricCanvas;
+            if (fc2 && this._shapeHandlers) {
+                for (const [ev, fn] of Object.entries(this._shapeHandlers)) {
+                    fc2.off(ev, fn);
+                }
+                this._shapeHandlers = null;
+            }
+
+            // Restore prototype method for future tool activations
+            delete this._cleanupShapeDrawing;
         };
     }
 }

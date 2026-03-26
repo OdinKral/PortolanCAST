@@ -93,12 +93,13 @@ export class EntityModal {
 
         try {
             // Fetch entity dossier, markups, tasks, photos, and parts in parallel
-            const [dossierResp, markupsResp, tasksResp, photosResp, partsResp] = await Promise.all([
+            const [dossierResp, markupsResp, tasksResp, photosResp, partsResp, connsResp] = await Promise.all([
                 fetch(`/api/entities/${entityId}`),
                 fetch(`/api/entities/${entityId}/markups`),
                 fetch(`/api/entities/${entityId}/tasks`),
                 fetch(`/api/entities/${entityId}/photos`),
                 fetch(`/api/entities/${entityId}/parts`),
+                fetch(`/api/entities/${entityId}/connections`),
             ]);
 
             if (!dossierResp.ok) {
@@ -112,6 +113,7 @@ export class EntityModal {
             const tasksData = tasksResp.ok ? await tasksResp.json() : { tasks: [] };
             const photosData = photosResp.ok ? await photosResp.json() : { photos: [] };
             const partsData = partsResp.ok ? await partsResp.json() : { parts: [] };
+            const connsData = connsResp.ok ? await connsResp.json() : { outgoing: [], incoming: [] };
 
             const entity = dossier.entity;
             const log = dossier.log || [];
@@ -121,6 +123,10 @@ export class EntityModal {
             const tasks = tasksData.tasks || [];
             const photos = photosData.photos || [];
             const parts = partsData.parts || [];
+            const connections = {
+                outgoing: connsData.outgoing || [],
+                incoming: connsData.incoming || [],
+            };
 
             // Render header title — show building prefix if set
             const titleEl = document.getElementById('entity-modal-title');
@@ -139,6 +145,7 @@ export class EntityModal {
                 body.innerHTML = '';
                 this._renderFields(body, entity);
                 this._renderPatternAndTags(body, pattern, tags);
+                this._renderConnections(body, entity.id, connections);
                 this._renderObservations(body, markups);
                 this._renderLog(body, entity, log);
                 this._renderTasks(body, entity.id, tasks);
@@ -386,6 +393,140 @@ export class EntityModal {
         }
 
         container.appendChild(section);
+    }
+
+    // =========================================================================
+    // RENDER — CONNECTIONS (Haystack Phase 2 — upstream/downstream entities)
+    // =========================================================================
+
+    /**
+     * Render the Connections section — directed edges to other entities.
+     *
+     * Shows outgoing connections ("feeds into") and incoming connections
+     * ("receives from") with connection type badges and delete buttons.
+     *
+     * Args:
+     *   container: DOM element to append into.
+     *   entityId:  UUID of the current entity.
+     *   connections: { outgoing: [...], incoming: [...] } from API.
+     */
+    _renderConnections(container, entityId, connections) {
+        const total = connections.outgoing.length + connections.incoming.length;
+
+        // Skip section entirely if no connections — keeps modal clean
+        // for entities that haven't been wired yet
+        if (total === 0) return;
+
+        const section = document.createElement('div');
+        section.className = 'entity-modal-section';
+
+        const header = document.createElement('div');
+        header.className = 'entity-modal-section-header';
+        // SECURITY: textContent only — no innerHTML
+        header.textContent = `Connections (${total})`;
+        section.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'entity-connections-list';
+
+        // ── Outgoing connections (this entity → target) ─────────────────
+        for (const conn of connections.outgoing) {
+            const row = document.createElement('div');
+            row.className = 'entity-connection-row';
+
+            // Direction arrow + target label
+            const label = document.createElement('span');
+            label.className = 'entity-connection-label';
+            const targetName = conn.target_building
+                ? `${conn.target_building} / ${conn.target_tag}`
+                : conn.target_tag;
+            label.textContent = `→ ${targetName}`;
+            row.appendChild(label);
+
+            // Equipment type hint
+            if (conn.target_equip_type) {
+                const typeHint = document.createElement('span');
+                typeHint.className = 'entity-connection-type-hint';
+                typeHint.textContent = conn.target_equip_type;
+                row.appendChild(typeHint);
+            }
+
+            // Connection type badge
+            const badge = document.createElement('span');
+            badge.className = `entity-connection-badge entity-connection-badge--${conn.connection_type}`;
+            badge.textContent = conn.connection_type;
+            row.appendChild(badge);
+
+            // Delete button
+            const delBtn = document.createElement('button');
+            delBtn.className = 'entity-connection-delete';
+            delBtn.textContent = '×';
+            delBtn.title = 'Remove connection';
+            delBtn.addEventListener('click', () => this._deleteConnection(conn.id, row));
+            row.appendChild(delBtn);
+
+            list.appendChild(row);
+        }
+
+        // ── Incoming connections (source → this entity) ─────────────────
+        for (const conn of connections.incoming) {
+            const row = document.createElement('div');
+            row.className = 'entity-connection-row entity-connection-row--incoming';
+
+            const label = document.createElement('span');
+            label.className = 'entity-connection-label';
+            const sourceName = conn.source_building
+                ? `${conn.source_building} / ${conn.source_tag}`
+                : conn.source_tag;
+            label.textContent = `← ${sourceName}`;
+            row.appendChild(label);
+
+            if (conn.source_equip_type) {
+                const typeHint = document.createElement('span');
+                typeHint.className = 'entity-connection-type-hint';
+                typeHint.textContent = conn.source_equip_type;
+                row.appendChild(typeHint);
+            }
+
+            const badge = document.createElement('span');
+            badge.className = `entity-connection-badge entity-connection-badge--${conn.connection_type}`;
+            badge.textContent = conn.connection_type;
+            row.appendChild(badge);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'entity-connection-delete';
+            delBtn.textContent = '×';
+            delBtn.title = 'Remove connection';
+            delBtn.addEventListener('click', () => this._deleteConnection(conn.id, row));
+            row.appendChild(delBtn);
+
+            list.appendChild(row);
+        }
+
+        section.appendChild(list);
+        container.appendChild(section);
+    }
+
+    /**
+     * Delete a connection and remove its row from the modal.
+     *
+     * Args:
+     *   connectionId: UUID of the connection to delete.
+     *   rowEl: DOM element to remove on success.
+     */
+    async _deleteConnection(connectionId, rowEl) {
+        try {
+            const resp = await fetch(`/api/connections/${connectionId}`, {
+                method: 'DELETE',
+            });
+            if (resp.ok) {
+                rowEl.remove();
+            } else {
+                console.error('[EntityModal] Failed to delete connection:', resp.status);
+            }
+        } catch (err) {
+            console.error('[EntityModal] Error deleting connection:', err);
+        }
     }
 
     // =========================================================================

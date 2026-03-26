@@ -47,7 +47,7 @@ A **PortolanCAST Server** terminal window will appear — this is your server lo
 ### Option 2 — WSL Terminal
 
 ```bash
-cd /mnt/c/Users/User1/ClaudeProjects/PortolanCAST
+cd ~/projects/PortolanCAST
 venv/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
