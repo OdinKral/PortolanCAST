@@ -4303,3 +4303,122 @@ html, body {
 .part-add-desc { flex: 1; }
 .part-add-qty { width: 45px; flex-shrink: 0; }
 .part-add-unit { width: 50px; flex-shrink: 0; }
+
+
+/* =============================================================================
+ * VALIDATION PLUGIN (Haystack Phase 4)
+ *
+ * Finding cards with severity-coded colors, summary counts, and clickable
+ * navigation. Follows the same dark-UI palette as Health Monitor cards.
+ * ========================================================================= */
+
+/* --- Panel header ------------------------------------------------------ */
+
+.validation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0 4px;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.validation-status-text {
+    font-weight: 600;
+    font-size: 12px;
+    color: #888;
+}
+
+.validation-status-pass  { color: #4caf50; }
+.validation-status-error { color: #f44336; }
+.validation-status-warn  { color: #ff9800; }
+
+/* --- Validate button --------------------------------------------------- */
+
+.validation-run-btn {
+    width: 100%;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+/* --- Summary counts bar ------------------------------------------------ */
+
+.validation-summary {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 0 8px;
+    font-size: 11px;
+    border-bottom: 1px solid #2a2a3d;
+    margin-bottom: 8px;
+}
+
+.validation-count {
+    color: #888;
+}
+
+.vc-error { color: #e57373; }
+.vc-warn  { color: #ffb74d; }
+.vc-info  { color: #64b5f6; }
+.vc-pass  { color: #81c784; }
+
+/* --- Finding cards ----------------------------------------------------- */
+
+.validation-findings {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.validation-finding-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.validation-finding-card:hover {
+    filter: brightness(1.2);
+}
+
+/* Severity color variants (same palette as Health Monitor) */
+.validation-finding-error   { background: #3a0f0f; color: #e57373; }
+.validation-finding-warning { background: #3a2e0f; color: #ffb74d; }
+.validation-finding-info    { background: #0f1e3a; color: #64b5f6; }
+
+.validation-finding-icon {
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+}
+
+.validation-finding-msg {
+    flex: 1;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.validation-finding-tag {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.7;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+/* --- Empty state ------------------------------------------------------- */
+
+.validation-empty {
+    color: #666;
+    font-size: 12px;
+    padding: 12px 0;
+    text-align: center;
+}

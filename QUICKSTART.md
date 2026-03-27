@@ -27,10 +27,11 @@ and generate structured review briefs — all in a local web app with no cloud d
 17. [Health Monitor](#health-monitor)
 18. [nodeCAST (Graph View)](#nodecast-graph-view)
 19. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
-20. [Navigating Pages](#navigating-pages)
-21. [Keyboard Shortcuts](#keyboard-shortcuts)
-22. [Save, Export, and Bundles](#save-export-and-bundles)
-23. [Tips and Workflow](#tips-and-workflow)
+20. [Validation Engine](#validation-engine)
+21. [Navigating Pages](#navigating-pages)
+22. [Keyboard Shortcuts](#keyboard-shortcuts)
+23. [Save, Export, and Bundles](#save-export-and-bundles)
+24. [Tips and Workflow](#tips-and-workflow)
 
 ---
 
@@ -668,6 +669,49 @@ across sessions.
 | Humidity Sensor | Sensor | MT | MT-101 |
 | VFD/Speed Controller | Controller | SIC | SIC-101 |
 | CO₂ Sensor | Sensor | AT | AT-101 |
+
+---
+
+## Validation Engine
+
+The Validation tab in the right panel scans equipment markers for incomplete
+control loops, orphan sensors, and missing connections. Pattern constraints
+define the rules — the engine enforces them automatically.
+
+### Running Validation
+
+1. Open a document that has equipment markers linked to entities
+2. Click the **Validate** tab in the right panel
+3. Click **▶ Validate**
+4. Review the findings list — each card is color-coded by severity
+
+### Severity Levels
+
+| Color | Level | Meaning |
+|-------|-------|---------|
+| Red | Error | Broken constraint — must be fixed (orphan sensor, incomplete controller) |
+| Orange | Warning | Suspicious but not necessarily wrong (entity with pattern but no connections) |
+| Blue | Info | Suggestion for better data quality (entity without a pattern assigned) |
+
+### Validation Rules
+
+| Rule | Category | Trigger |
+|------|----------|---------|
+| Orphan Sensor | Sensor | Zero outgoing connections (nobody reads the signal) |
+| Orphan Actuator | Actuator | Zero incoming connections (nothing controls it) |
+| Incomplete Controller | Controller | Missing input OR output connections |
+| Unlinked Entity | Any | Has a pattern but zero total connections |
+| No Pattern | Any | Entity without a pattern — consider assigning one |
+
+### Click-to-Navigate
+
+Click any finding card to jump to that entity's page and select its marker
+on the canvas. The tag number is shown on the right side of each card for
+quick identification.
+
+> **Tip:** After fixing a finding (e.g., drawing a connection from a sensor
+> to a controller with Shift+C), click **▶ Validate** again to confirm the
+> finding disappears.
 
 ---
 

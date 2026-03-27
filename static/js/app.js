@@ -24,6 +24,7 @@ import { MeasureSummary } from './measure-summary.js';
 import { ExtendedCognitionPlugin } from './plugins/extended-cognition.js';
 import { NodeCastPlugin } from './plugins/nodecast.js';
 import { HealthMonitorPlugin } from './plugins/health-monitor.js';
+import { ValidationPlugin } from './plugins/validation.js';
 import { LayerManager } from './layers.js';
 import { PDFLayerPanel } from './pdf-layers.js';
 import { SearchPanel } from './search.js';
@@ -1157,6 +1158,12 @@ class App {
         // Provides fast (<500 ms) self-diagnostic checks (DB, PDF engine, disk, AI)
         // and a streaming dev test runner button for the full Playwright suite.
         this.plugins.register(HealthMonitorPlugin);
+
+        // Register Validation — Haystack Phase 4 entity graph validator.
+        // Scans equipment patterns and connections for incomplete control loops,
+        // orphan sensors/actuators, and unlinked entities. Findings are clickable
+        // cards that navigate to the entity on the correct page.
+        this.plugins.register(ValidationPlugin);
 
         // Check if we're on an edit page (URL: /edit/{id})
         const match = window.location.pathname.match(/^\/edit\/(\d+)$/);

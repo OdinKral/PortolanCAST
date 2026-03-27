@@ -2346,3 +2346,66 @@ class Database:
                         break  # one result per object — avoid duplicate rows
 
         return results
+
+    # =========================================================================
+    # VALIDATION — Document-scoped entity & connection queries
+    # =========================================================================
+    # These methods power the Haystack Phase 4 validation engine.
+    # They scope queries to a single document via the markup_entities bridge
+    # table, so the validator only examines equipment that appears on the
+    # document being checked — not the entire campus database.
+    # =========================================================================
+
+    def get_entities_for_document(self, doc_id: int) -> list:
+        """
+        Return all entities linked to markups in a specific document.
+
+        Joins through markup_entities to find equipment that appears on the
+        document's pages. Each entity is returned once, with the highest
+        page_number where it appears (used for navigation on click).
+
+        Args:
+            doc_id: Document ID to scope the query.
+
+        Returns:
+            List of entity dicts, each with an extra 'page_number' field.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT e.*, MAX(me.page_number) AS page_number
+                   FROM entities e
+                   JOIN markup_entities me ON me.entity_id = e.id
+                   WHERE me.doc_id = ?
+                   GROUP BY e.id
+                   ORDER BY e.building, e.tag_number""",
+                (doc_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_all_connections_for_document(self, doc_id: int) -> list:
+        """
+        Return all connections where source OR target appears in the document.
+
+        This captures the full connectivity picture for a document's entities,
+        including connections that might be drawn on other pages or even other
+        documents (cross-document wiring).
+
+        Args:
+            doc_id: Document ID to scope the query.
+
+        Returns:
+            List of connection dicts.
+        """
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT ec.*
+                   FROM entity_connections ec
+                   WHERE ec.source_id IN (
+                       SELECT entity_id FROM markup_entities WHERE doc_id = ?
+                   )
+                   OR ec.target_id IN (
+                       SELECT entity_id FROM markup_entities WHERE doc_id = ?
+                   )""",
+                (doc_id, doc_id),
+            ).fetchall()
+            return [dict(r) for r in rows]
