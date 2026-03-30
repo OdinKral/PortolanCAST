@@ -143,6 +143,48 @@ expectations from Bluebeam Revu and Adobe Acrobat.
 
 ---
 
+## Text Editing Enhancements
+
+Bluebeam/Acrobat-parity text editing for field inventory workflow.
+
+### Floating Text Format Bar (`static/js/text-format-bar.js`)
+
+Appears above IText/Textbox objects during editing. Contains: font family
+(system fonts detected via `queryLocalFonts()` or canvas measurement fallback),
+font size, bold/italic/underline/strikethrough toggles, L/C/R alignment, color
+picker, and spell check button. Uses `position: fixed` with scroll-aware
+repositioning. Prevents focus theft via `mousedown preventDefault` on non-input
+elements.
+
+### Quick Text Stamps (`static/js/tools-panel.js`)
+
+15 built-in entries in the Stamps panel: 9 HVAC equipment prefixes (AHU-, VAV-,
+FCU-, RTU-, CHP-, CHW-, HW-, EF-, P-) and 6 status labels (VERIFIED, NEEDS
+ATTENTION, NOT FOUND, REPLACED, FIELD VERIFY, AS-BUILT DIFFERS). Equipment
+prefixes create editable IText with cursor at end for immediate appending
+(e.g., "AHU-" → user types "1" → "AHU-1"). Status labels place as immutable text.
+
+### Find & Replace (`static/js/find-replace.js`)
+
+Ctrl+H or Edit menu. Searches all text-bearing objects on the current page
+(IText `.text` and `.markupNote` metadata). Live search with match count,
+prev/next navigation (highlights with cyan border), Replace/Replace All.
+Case-sensitive toggle.
+
+### Additional Typography Controls
+
+- **Underline & Strikethrough**: Toggle buttons in properties panel typography
+  section (Fabric.js `underline` and `linethrough` properties)
+- **Text Alignment**: Left/center/right buttons in properties panel
+- **Continuous Text Placement**: Text and sticky note tools stay active after
+  placing, enabling click-type-click-type workflow. Escape exits.
+- **Spell Check**: Modal with native `<textarea spellcheck="true">` — browser
+  handles red squiggles and right-click suggestions. Apply syncs back.
+- **System Fonts**: Detected lazily on first text edit. Populates both format
+  bar and properties panel font dropdowns.
+
+---
+
 ## Haystack Pattern System
 
 Equipment identification using ISA-5.1 structured patterns. 12 HVAC patterns,

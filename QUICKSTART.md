@@ -15,26 +15,27 @@ local web app with no cloud dependency.
 4. [Menu Bar](#menu-bar)
 5. [Drawing Markups](#drawing-markups)
 6. [Properties Panel](#properties-panel)
-7. [Measurement Tools](#measurement-tools)
-8. [Left Panel Tabs](#left-panel-tabs)
-9. [Layers](#layers)
-10. [Review Brief + Tags](#review-brief--tags)
-11. [RFI Generator](#rfi-generator)
-12. [Search](#search)
-13. [Photo Attachments](#photo-attachments)
-14. [Entity Management](#entity-management-equipment-tab)
-15. [Quick Capture](#quick-capture)
-16. [Image Overlays](#image-overlays)
-17. [PDF Layers (OCG)](#pdf-layers-ocg)
-18. [Obsidian Export](#obsidian-export)
-19. [Health Monitor](#health-monitor)
-20. [nodeCAST (Graph View)](#nodecast-graph-view)
-21. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
-22. [Validation Engine](#validation-engine)
-23. [Navigating Pages](#navigating-pages)
-24. [Keyboard Shortcuts](#keyboard-shortcuts)
-25. [Save, Export, and Bundles](#save-export-and-bundles)
-26. [Tips and Workflow](#tips-and-workflow)
+7. [Text Editing](#text-editing)
+8. [Measurement Tools](#measurement-tools)
+9. [Left Panel Tabs](#left-panel-tabs)
+10. [Layers](#layers)
+11. [Review Brief + Tags](#review-brief--tags)
+12. [RFI Generator](#rfi-generator)
+13. [Search](#search)
+14. [Photo Attachments](#photo-attachments)
+15. [Entity Management](#entity-management-equipment-tab)
+16. [Quick Capture](#quick-capture)
+17. [Image Overlays](#image-overlays)
+18. [PDF Layers (OCG)](#pdf-layers-ocg)
+19. [Obsidian Export](#obsidian-export)
+20. [Health Monitor](#health-monitor)
+21. [nodeCAST (Graph View)](#nodecast-graph-view)
+22. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
+23. [Validation Engine](#validation-engine)
+24. [Navigating Pages](#navigating-pages)
+25. [Keyboard Shortcuts](#keyboard-shortcuts)
+26. [Save, Export, and Bundles](#save-export-and-bundles)
+27. [Tips and Workflow](#tips-and-workflow)
 
 ---
 
@@ -143,7 +144,7 @@ PortolanCAST uses a Bluebeam/Acrobat-style menu bar with four top-level menus.
 | Menu | Key Items |
 |------|-----------|
 | **File** | New, Open (Ctrl+O), Close, Save Bundle (Ctrl+S), Export PDF, Export Page as Image, Export to Obsidian, Print (Ctrl+P), Delete Document |
-| **Edit** | Undo (Ctrl+Z), Redo (Ctrl+Y), Delete Selected (Del), Select All (Ctrl+A), Deselect All (Esc) |
+| **Edit** | Undo (Ctrl+Z), Redo (Ctrl+Y), Delete Selected (Del), Select All (Ctrl+A), Deselect All (Esc), Find & Replace (Ctrl+H) |
 | **View** | Zoom In/Out/Fit, Rotate Page (Ctrl+R), Pages Panel, Properties Panel, Toolbar Settings |
 | **Help** | Quick Start Guide (F1), Keyboard Shortcuts (?), About |
 
@@ -215,6 +216,64 @@ When a markup is selected, the **right panel** shows its properties.
 | **Photos** | Attach reference photos to this markup (see [Photo Attachments](#photo-attachments)) |
 
 Tag chips appear live below the Note field as you type `#word` patterns.
+
+---
+
+## Text Editing
+
+PortolanCAST includes Bluebeam/Acrobat-style text editing features designed for
+field inventory work.
+
+### Floating Format Bar
+
+When you edit any text object (Text tool, Sticky Note, Callout), a floating
+toolbar appears directly above the text with:
+
+- **Font family** — includes your system fonts (detected automatically)
+- **Font size** — 6–200px
+- **B / I / U / S** — Bold, Italic, Underline, Strikethrough
+- **Alignment** — Left, Center, Right
+- **Color picker** — change text color
+- **Spell check** — opens a browser-native spell check dialog
+
+The bar follows the text if you move it and hides during scrolling.
+
+### Quick Text (Stamps Panel)
+
+The Stamps panel (in the collapsible right-side Tools area) includes a
+**Quick Text** section with pre-built HVAC equipment tags and status labels:
+
+**Equipment prefixes** (editable — cursor at end for appending):
+AHU-, VAV-, FCU-, RTU-, CHP-, CHW-, HW-, EF-, P-
+
+**Status labels** (placed as-is):
+VERIFIED, NEEDS ATTENTION, NOT FOUND, REPLACED, FIELD VERIFY, AS-BUILT DIFFERS
+
+Click a Quick Text item, then click on the drawing to place it. Equipment
+prefixes enter editing mode so you can immediately type the tag number
+(e.g., click "AHU-" → click on drawing → type "1" → result is "AHU-1").
+
+### Continuous Text Placement
+
+The Text tool and Sticky Note tool stay active after placing text. You can
+click → type → click elsewhere → type again without re-selecting the tool.
+Press **Escape** to exit text placement mode.
+
+### Find & Replace
+
+**Ctrl+H** (or **Edit → Find & Replace**) opens the search dialog:
+
+- Searches all text markups and notes on the current page
+- Live match count with **▲ / ▼** navigation between matches
+- **Replace** (current match) and **Replace All** buttons
+- Optional case-sensitive matching
+
+### Spell Check
+
+Click the pencil button (✏) in the floating format bar while editing text.
+A dialog opens with your text in a standard text area where your browser's
+built-in spell check is active — misspelled words get red underlines and
+right-click shows suggestions. Click **Apply** to sync corrections back.
 
 ---
 
@@ -817,6 +876,7 @@ quick identification.
 | Delete / Backspace | Delete selected markup |
 | Ctrl + Z | Undo |
 | Ctrl + Shift + Z | Redo |
+| Ctrl + H | Find & Replace |
 | Esc | Deselect / exit tool |
 
 ---
