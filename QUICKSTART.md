@@ -1,8 +1,9 @@
 # PortolanCAST Quick Start Guide
 
-PortolanCAST is an open-source PDF markup and measurement tool for construction
-professionals. Mark up drawings, measure distances and areas, organize by layer,
-and generate structured review briefs — all in a local web app with no cloud dependency.
+PortolanCAST is an open-source markup and measurement tool for construction
+professionals. Open PDFs, DXF, and DWG files. Mark up drawings, measure distances
+and areas, organize by layer, and generate structured review briefs — all in a
+local web app with no cloud dependency.
 
 ---
 
@@ -10,28 +11,30 @@ and generate structured review briefs — all in a local web app with no cloud d
 
 1. [Starting the Server](#starting-the-server)
 2. [Loading Documents](#loading-documents)
-3. [Drawing Markups](#drawing-markups)
-4. [Properties Panel](#properties-panel)
-5. [Measurement Tools](#measurement-tools)
-6. [Left Panel Tabs](#left-panel-tabs)
-7. [Layers](#layers)
-8. [Review Brief + Tags](#review-brief--tags)
-9. [RFI Generator](#rfi-generator)
-10. [Search](#search)
-11. [Photo Attachments](#photo-attachments)
-12. [Entity Management](#entity-management-equipment-tab)
-13. [Quick Capture](#quick-capture)
-14. [Image Overlays](#image-overlays)
-15. [PDF Layers (OCG)](#pdf-layers-ocg)
-16. [Obsidian Export](#obsidian-export)
-17. [Health Monitor](#health-monitor)
-18. [nodeCAST (Graph View)](#nodecast-graph-view)
-19. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
-20. [Validation Engine](#validation-engine)
-21. [Navigating Pages](#navigating-pages)
-22. [Keyboard Shortcuts](#keyboard-shortcuts)
-23. [Save, Export, and Bundles](#save-export-and-bundles)
-24. [Tips and Workflow](#tips-and-workflow)
+3. [Opening DWG and DXF Files](#opening-dwg-and-dxf-files)
+4. [Menu Bar](#menu-bar)
+5. [Drawing Markups](#drawing-markups)
+6. [Properties Panel](#properties-panel)
+7. [Measurement Tools](#measurement-tools)
+8. [Left Panel Tabs](#left-panel-tabs)
+9. [Layers](#layers)
+10. [Review Brief + Tags](#review-brief--tags)
+11. [RFI Generator](#rfi-generator)
+12. [Search](#search)
+13. [Photo Attachments](#photo-attachments)
+14. [Entity Management](#entity-management-equipment-tab)
+15. [Quick Capture](#quick-capture)
+16. [Image Overlays](#image-overlays)
+17. [PDF Layers (OCG)](#pdf-layers-ocg)
+18. [Obsidian Export](#obsidian-export)
+19. [Health Monitor](#health-monitor)
+20. [nodeCAST (Graph View)](#nodecast-graph-view)
+21. [Equipment Patterns & ISA View](#equipment-patterns--isa-view)
+22. [Validation Engine](#validation-engine)
+23. [Navigating Pages](#navigating-pages)
+24. [Keyboard Shortcuts](#keyboard-shortcuts)
+25. [Save, Export, and Bundles](#save-export-and-bundles)
+26. [Tips and Workflow](#tips-and-workflow)
 
 ---
 
@@ -81,10 +84,72 @@ All data is stored locally in `data/portolancast.db`. Nothing leaves your machin
 
 | Action | How |
 |--------|-----|
-| Open a PDF | Click **Open** in the toolbar → select a PDF |
-| Create a blank document | Click **New** in the toolbar → enter a name and page size |
-| Import a bundle | Click **Import** → select a `.portolan` file (restores PDF + all markups, layers, and scale) |
+| Open a file | **File → Open** (Ctrl+O) → select a PDF, DXF, or DWG |
+| Create a blank document | **File → New** → enter a name and page size |
+| Import a bundle | **File → Open** → select a `.portolan` file (restores document + all markups, layers, and scale) |
 | Reopen a recent document | Click its name in the welcome screen list |
+
+PortolanCAST accepts PDF, DXF, and DWG files. DWG files are automatically
+converted to DXF on upload (see [Opening DWG and DXF Files](#opening-dwg-and-dxf-files)).
+
+---
+
+## Opening DWG and DXF Files
+
+PortolanCAST natively supports DXF (AutoCAD Drawing Exchange Format) and DWG
+(AutoCAD native binary format) files alongside PDF.
+
+### DXF Files
+
+DXF files open directly with no additional requirements. PortolanCAST extracts:
+
+- **Layers** — each DXF layer appears in the Layers panel with independent
+  visibility toggles, just like PDF OCG layers
+- **Text entities** — TEXT, MTEXT, and ATTRIB elements are searchable
+- **Block insertions** — block references are rendered in place
+
+### DWG Files
+
+DWG files are converted to DXF automatically on upload. This requires the
+**LibreDWG** converter to be installed.
+
+**Installing LibreDWG:**
+
+1. Download the win64 release from [LibreDWG GitHub](https://github.com/LibreDWG/libredwg/releases) (v0.13.4 or later)
+2. Extract to `~/.local/libredwg/` so that `~/.local/libredwg/dwg2dxf.exe` exists
+3. No PATH changes needed — PortolanCAST looks for it at that location
+
+**Check converter status:** Visit `/api/cad/converter-status` or check the
+Health Monitor panel.
+
+> **Legacy DWG files (R10/AC1006):** PortolanCAST includes a repair pipeline
+> for old DWG files that produce malformed DXF output. The converter extracts
+> entities directly from the raw DXF text and rebuilds a clean file. Some block
+> definitions may be simplified, but lines, arcs, text, and circles are preserved.
+
+### CAD Layer Visibility
+
+When a CAD file is open, the **Layers panel** shows all DXF layers. Toggle
+the eye icon to show or hide individual layers. The page re-renders with only
+the visible layers drawn — useful for isolating mechanical, electrical, or
+architectural disciplines.
+
+---
+
+## Menu Bar
+
+PortolanCAST uses a Bluebeam/Acrobat-style menu bar with four top-level menus.
+
+| Menu | Key Items |
+|------|-----------|
+| **File** | New, Open (Ctrl+O), Close, Save Bundle (Ctrl+S), Export PDF, Export Page as Image, Export to Obsidian, Print (Ctrl+P), Delete Document |
+| **Edit** | Undo (Ctrl+Z), Redo (Ctrl+Y), Delete Selected (Del), Select All (Ctrl+A), Deselect All (Esc) |
+| **View** | Zoom In/Out/Fit, Rotate Page (Ctrl+R), Pages Panel, Properties Panel, Toolbar Settings |
+| **Help** | Quick Start Guide (F1), Keyboard Shortcuts (?), About |
+
+Keyboard shortcuts are shown on the right side of each menu item.
+
+Destructive actions (Delete Document) appear in red to prevent accidental clicks.
 
 ---
 
@@ -441,7 +506,7 @@ manufacturer diagrams, or detail sketches on top of your drawings.
 
 ### Placing an Image
 
-1. Click the **Image** button in the markup toolbar (or use the toolbar menu)
+1. Click the **Image** button in the markup toolbar
 2. Select an image file (JPEG, PNG, GIF, WEBP)
 3. The image appears on the canvas as a resizable, movable object
 4. Drag corners to resize; drag the body to reposition
@@ -493,7 +558,7 @@ into an [Obsidian](https://obsidian.md/) vault.
 ### How to Export
 
 1. Open a document with markups
-2. Click **File → Export → Obsidian Export** (or use the API)
+2. Click **File → Export to Obsidian** in the menu bar
 3. A `.zip` file downloads containing one `.md` file per markup
 
 ### File Structure
@@ -581,7 +646,7 @@ Click a node in the graph to select the corresponding markup on the canvas.
 | Zoom in | Ctrl + `+` or Ctrl + scroll up |
 | Zoom out | Ctrl + `-` or Ctrl + scroll down |
 | Reset zoom | Ctrl + 0 |
-| Fit to width | Click **Fit** in toolbar |
+| Fit to width | **View → Zoom to Fit** or click **Fit** in toolbar |
 | Pan | Scroll normally, or press G for Hand tool |
 
 ### Scroll-to-Page Navigation
@@ -592,7 +657,7 @@ viewer automatically advances to the next (or previous) page.
 
 A 1.2-second cooldown prevents accidentally skipping multiple pages in one gesture.
 
-**Adjusting sensitivity:** Open the gear (⚙) menu in the toolbar → drag the
+**Adjusting sensitivity:** Open **View → Toolbar Settings** → drag the
 **Scroll page sensitivity** slider.
 
 | Setting | Behaviour |
@@ -764,11 +829,11 @@ The status bar shows **Unsaved changes** briefly, then clears. Markups also
 save when you navigate between pages.
 
 ### Export PDF
-Click **Export** in the toolbar to download a PDF with all markups baked in as
+Click **File → Export PDF** to download a PDF with all markups baked in as
 native shapes. The original file is never modified.
 
 ### Save Bundle (.portolan)
-Click **Save Bundle** to download a `.portolan` file — a ZIP archive containing:
+Click **File → Save Bundle** (Ctrl+S) to download a `.portolan` file — a ZIP archive containing:
 - The original PDF
 - All markup data (all pages)
 - Layer configuration

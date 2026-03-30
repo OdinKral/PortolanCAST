@@ -19,7 +19,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from config import db, pdf_engine
+from config import db, pdf_engine, dxf_engine
 
 router = APIRouter()
 
@@ -46,7 +46,33 @@ async def get_page_text(doc_id: int, page_number: int, ocr: bool = False):
 
     filepath = doc['filepath']
     if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+        raise HTTPException(status_code=404, detail="Document file not found on disk")
+
+    # Check if this is a CAD document — extract text entities from DXF
+    source_format = db.get_document_setting(doc_id, "source_format")
+    if source_format in ("dxf", "dwg"):
+        try:
+            from pathlib import Path
+            fp = Path(filepath)
+            # For DWG uploads, use the converted DXF
+            if fp.suffix.lower() == ".dwg":
+                dxf_path = fp.with_suffix(".dxf")
+                fp = dxf_path if dxf_path.exists() else fp
+            texts = dxf_engine.get_text_entities(str(fp))
+            # Format as a plain text blob for compatibility with the viewer
+            all_text = "\n".join(t["text"] for t in texts if t.get("text"))
+            return JSONResponse(content={
+                "text": all_text,
+                "word_count": len(all_text.split()),
+                "char_count": len(all_text),
+                "has_native_text": bool(texts),
+                "method": "dxf_text_entities",
+                "ocr_available": False,
+                "page": page_number,
+                "entities": texts,  # bonus: structured text with coordinates
+            })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"CAD text extraction error: {e}")
 
     try:
         result = pdf_engine.extract_text(filepath, page_number, use_ocr=ocr)

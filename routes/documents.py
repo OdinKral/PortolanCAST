@@ -2,19 +2,21 @@
 PortolanCAST — Document CRUD Routes
 
 Purpose:
-    PDF upload, blank document creation, page addition, document info/listing,
-    thumbnail rendering, deletion, and PDF export with annotations.
+    PDF/DXF/DWG upload, blank document creation, page addition, document
+    info/listing, thumbnail rendering, deletion, and PDF export with annotations.
 
 Security assumptions:
-    - File uploads restricted to PDF format with magic byte validation
+    - File uploads restricted to PDF/DXF/DWG formats with magic byte validation
     - UUID filenames prevent path traversal and collisions
     - Document IDs validated against DB before any file operation
+    - DWG conversion uses subprocess with list args (no shell injection)
 
 Author: PortolanCAST
-Version: 0.1.0
-Date: 2026-03-15
+Version: 0.2.0
+Date: 2026-03-30
 """
 
+import logging
 import uuid
 from pathlib import Path
 
@@ -22,20 +24,53 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import Response, JSONResponse
 
 from config import (
-    db, pdf_engine, PROJECTS_DIR, PAGE_SIZES,
+    db, pdf_engine, dxf_engine, PROJECTS_DIR, PAGE_SIZES,
     MAX_UPLOAD_SIZE, ALLOWED_EXTENSIONS,
 )
+from dxf_engine import convert_dwg_to_dxf
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# CAD source formats — documents whose rendering goes through dxf_engine
+_CAD_FORMATS = {"dxf", "dwg"}
+
+
+def _is_cad_document(doc_id: int) -> bool:
+    """Check if a document was uploaded as a CAD file (DXF or DWG)."""
+    fmt = db.get_document_setting(doc_id, "source_format")
+    return fmt in _CAD_FORMATS
+
+
+def _get_cad_filepath(doc: dict) -> str:
+    """
+    Get the DXF filepath for a CAD document.
+
+    For DWG uploads, the filepath still points to the DWG original but the
+    converted DXF lives alongside it (same name, .dxf extension). For DXF
+    uploads, filepath already points to the DXF.
+    """
+    fp = Path(doc["filepath"])
+    if fp.suffix.lower() == ".dwg":
+        # DWG was converted to DXF at upload time — use the converted file
+        dxf_path = fp.with_suffix(".dxf")
+        if dxf_path.exists():
+            return str(dxf_path)
+    return str(fp)
+
 
 @router.post("/api/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...)):
     """
-    Upload a PDF file.
+    Upload a PDF, DXF, or DWG file.
 
-    Validates the file is a PDF, saves it to the projects directory,
+    Validates the file format, saves it to the projects directory,
     extracts metadata, and registers it in the database.
+
+    DWG files are converted to DXF server-side (requires ODA File Converter
+    or LibreDWG). DXF files are parsed directly by ezdxf for layer/block
+    extraction and rendered to PNG via matplotlib.
 
     Returns:
         JSON with document ID and metadata for immediate viewing.
@@ -48,7 +83,8 @@ async def upload_pdf(file: UploadFile = File(...)):
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Only PDF files are allowed (got {ext})"
+            detail=f"Unsupported format (got {ext}). "
+            f"Accepted: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
         )
 
     # Read the file content
@@ -61,12 +97,29 @@ async def upload_pdf(file: UploadFile = File(...)):
             detail=f"File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)"
         )
 
-    # SECURITY: Basic PDF magic number check
-    if not content[:5] == b'%PDF-':
-        raise HTTPException(
-            status_code=400,
-            detail="File does not appear to be a valid PDF"
-        )
+    # SECURITY: Format-specific magic byte validation
+    if ext == ".pdf":
+        if not content[:5] == b'%PDF-':
+            raise HTTPException(
+                status_code=400,
+                detail="File does not appear to be a valid PDF"
+            )
+    elif ext == ".dwg":
+        # DWG magic bytes: "AC10" (AutoCAD 2.5+) at offset 0
+        if not content[:4] == b'AC10' and not content[:2] == b'AC':
+            raise HTTPException(
+                status_code=400,
+                detail="File does not appear to be a valid DWG"
+            )
+    elif ext == ".dxf":
+        # DXF is plain text or binary. Text DXF starts with "0" or whitespace+0.
+        # Binary DXF starts with "AutoCAD Binary DXF"
+        header = content[:50].strip()
+        if not (header.startswith(b'0') or header.startswith(b'AutoCAD')):
+            raise HTTPException(
+                status_code=400,
+                detail="File does not appear to be a valid DXF"
+            )
 
     # Generate unique filename to prevent collisions
     unique_name = f"{uuid.uuid4().hex}_{file.filename}"
@@ -78,29 +131,162 @@ async def upload_pdf(file: UploadFile = File(...)):
     with open(save_path, "wb") as f:
         f.write(content)
 
-    # Extract PDF metadata
-    try:
-        info = pdf_engine.get_pdf_info(str(save_path))
-    except (ValueError, Exception) as e:
-        # Clean up the invalid file
-        save_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"Invalid PDF: {e}")
+    # -------------------------------------------------------------------------
+    # Format-specific processing
+    # -------------------------------------------------------------------------
+    source_format = ext.lstrip(".")
+
+    if ext == ".dwg":
+        # Convert DWG → clean DXF using the repair pipeline:
+        # DWG → LibreDWG → raw DXF → text parse → ezdxf rebuild → clean DXF
+        from dwg_converter import convert_and_repair, is_converter_available
+        if not is_converter_available():
+            save_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No DWG converter found. Install LibreDWG (dwg2dxf.exe) at "
+                    "~/.local/libredwg/ or the ODA File Converter. "
+                    "Alternatively, export the file as DXF from your CAD software."
+                )
+            )
+        try:
+            clean_dxf = str(save_path.with_suffix(".dxf"))
+            convert_and_repair(str(save_path), clean_dxf)
+            working_path = clean_dxf
+            source_format = "dwg"
+        except Exception as e:
+            save_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400,
+                detail=f"DWG conversion failed: {e}"
+            )
+    elif ext == ".dxf":
+        working_path = str(save_path)
+    else:
+        working_path = str(save_path)
+
+    # Extract metadata based on format
+    if ext in (".dxf", ".dwg"):
+        try:
+            info = dxf_engine.get_dxf_info(working_path)
+        except Exception as e:
+            save_path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=400, detail=f"Invalid DXF: {e}"
+            )
+    else:
+        # PDF path — unchanged from original
+        try:
+            info = pdf_engine.get_pdf_info(str(save_path))
+        except (ValueError, Exception) as e:
+            save_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail=f"Invalid PDF: {e}")
 
     # Register in database
     doc_id = db.add_document(
         filename=file.filename,
-        filepath=str(save_path),
+        filepath=working_path if ext in (".dxf", ".dwg") else str(save_path),
         page_count=info["page_count"],
         file_size=info["file_size"]
     )
 
-    return JSONResponse({
+    # Store source format and CAD metadata as document settings
+    if ext in (".dxf", ".dwg"):
+        db.set_document_setting(doc_id, "source_format", source_format)
+        if ext == ".dwg":
+            # Keep reference to original DWG file
+            db.set_document_setting(doc_id, "dwg_filepath", str(save_path))
+        # Store layer count and block count for the UI
+        db.set_document_setting(
+            doc_id, "cad_layer_count", str(len(info.get("layers", [])))
+        )
+        db.set_document_setting(
+            doc_id, "cad_block_count", str(len(info.get("blocks", [])))
+        )
+        db.set_document_setting(
+            doc_id, "cad_entity_count", str(info.get("entity_count", 0))
+        )
+
+    response = {
         "id": doc_id,
         "filename": file.filename,
         "page_count": info["page_count"],
         "file_size": info["file_size"],
         "page_sizes": info["page_sizes"],
+        "source_format": source_format,
         "redirect": f"/edit/{doc_id}"
+    }
+
+    # Include CAD-specific info in the response
+    if ext in (".dxf", ".dwg"):
+        response["layers"] = info.get("layers", [])
+        response["blocks"] = info.get("blocks", [])
+        response["entity_count"] = info.get("entity_count", 0)
+        logger.info(
+            "CAD upload: %s — %d layers, %d blocks, %d entities",
+            file.filename, len(info.get("layers", [])),
+            len(info.get("blocks", [])), info.get("entity_count", 0)
+        )
+
+    return JSONResponse(response)
+
+
+@router.get("/api/cad/converter-status")
+async def get_converter_status():
+    """
+    Check whether a DWG-to-DXF converter is available on this system.
+
+    Used by the frontend to show/hide the DWG upload option and display
+    installation instructions if needed.
+
+    Returns:
+        JSON with 'available' bool, 'converter' name, 'formats' list.
+    """
+    from dwg_converter import get_converter_info
+    info = get_converter_info()
+    return JSONResponse({
+        "dwg_converter_available": info["available"],
+        "converter": info["type"] or "none",
+        "converter_path": info["path"],
+        "supported_formats": ["pdf", "dxf"] + (["dwg"] if info["available"] else []),
+    })
+
+
+@router.get("/api/documents/{doc_id}/cad-info")
+async def get_cad_info(doc_id: int):
+    """
+    Get CAD-specific metadata: text entities, block insertions, layer details.
+
+    Returns structured data that can be used to auto-populate PortolanCAST
+    entities from the CAD drawing — room names from text, equipment from blocks.
+
+    Returns 404 if the document is not a CAD file.
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not _is_cad_document(doc_id):
+        raise HTTPException(status_code=400, detail="Not a CAD document")
+
+    cad_path = _get_cad_filepath(doc)
+    if not Path(cad_path).exists():
+        raise HTTPException(status_code=404, detail="CAD file missing from disk")
+
+    try:
+        texts = dxf_engine.get_text_entities(cad_path)
+        blocks = dxf_engine.get_block_insertions(cad_path)
+        layers = dxf_engine.get_layers(cad_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"CAD parse error: {e}")
+
+    return JSONResponse({
+        "doc_id": doc_id,
+        "source_format": db.get_document_setting(doc_id, "source_format"),
+        "layers": layers,
+        "text_entities": texts,
+        "block_insertions": blocks,
     })
 
 
@@ -271,12 +457,17 @@ async def get_pdf_layers(doc_id: int):
         raise HTTPException(status_code=404, detail="Document not found")
 
     if not Path(doc["filepath"]).exists():
-        raise HTTPException(status_code=404, detail="PDF file missing from disk")
+        raise HTTPException(status_code=404, detail="Document file missing from disk")
 
     try:
-        layers = pdf_engine.get_pdf_layers(doc["filepath"])
+        if _is_cad_document(doc_id):
+            # DXF layers come from ezdxf — includes color and visibility state
+            cad_path = _get_cad_filepath(doc)
+            layers = dxf_engine.get_layers(cad_path)
+        else:
+            layers = pdf_engine.get_pdf_layers(doc["filepath"])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Cannot read PDF layers: {e}")
+        raise HTTPException(status_code=500, detail=f"Cannot read layers: {e}")
 
     return JSONResponse({"layers": layers})
 
@@ -309,7 +500,7 @@ async def get_page_image(
         raise HTTPException(status_code=404, detail="Document not found")
 
     if not Path(doc["filepath"]).exists():
-        raise HTTPException(status_code=404, detail="PDF file missing from disk")
+        raise HTTPException(status_code=404, detail="Document file missing from disk")
 
     # Parse hidden_layers query param into a list of layer names
     # SECURITY: layer names are passed to the content stream filter, not executed
@@ -317,7 +508,14 @@ async def get_page_image(
                   if hidden_layers else []
 
     try:
-        if hidden_list:
+        if _is_cad_document(doc_id):
+            # CAD rendering — dxf_engine handles layer visibility natively
+            cad_path = _get_cad_filepath(doc)
+            png_bytes = dxf_engine.render_page(
+                cad_path, page_number, dpi=float(dpi),
+                hidden_layers=hidden_list or None,
+            )
+        elif hidden_list:
             png_bytes = pdf_engine.render_page_with_layers(
                 doc["filepath"], page_number,
                 hidden_layers=hidden_list, dpi=dpi, rotate=rotate
@@ -357,7 +555,12 @@ async def get_page_thumbnail(doc_id: int, page_number: int):
         raise HTTPException(status_code=404, detail="PDF file missing from disk")
 
     try:
-        png_bytes = pdf_engine.render_thumbnail(doc["filepath"], page_number)
+        if _is_cad_document(doc_id):
+            # CAD thumbnails — render at low DPI for sidebar preview
+            cad_path = _get_cad_filepath(doc)
+            png_bytes = dxf_engine.render_to_png(cad_path, dpi=36.0)
+        else:
+            png_bytes = pdf_engine.render_thumbnail(doc["filepath"], page_number)
     except IndexError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -397,10 +600,22 @@ async def delete_document(doc_id: int):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Remove the PDF file from disk
+    # Remove the document file from disk
     filepath = Path(doc["filepath"])
     if filepath.exists():
         filepath.unlink()
+
+    # For DWG uploads, also remove the converted DXF (or vice versa)
+    if _is_cad_document(doc_id):
+        dwg_setting = db.get_document_setting(doc_id, "dwg_filepath")
+        if dwg_setting:
+            dwg_path = Path(dwg_setting)
+            if dwg_path.exists():
+                dwg_path.unlink()
+        # If filepath was .dwg, the .dxf conversion lives alongside it
+        dxf_sibling = filepath.with_suffix(".dxf")
+        if dxf_sibling != filepath and dxf_sibling.exists():
+            dxf_sibling.unlink()
 
     # Remove from database
     db.delete_document(doc_id)
@@ -460,7 +675,25 @@ async def export_page_image(
                   if hidden_layers else []
 
     try:
-        if format == "svg":
+        is_cad = _is_cad_document(doc_id)
+
+        if is_cad and format == "svg":
+            # SVG export not yet supported for CAD — DXF rendering is raster-only
+            raise HTTPException(
+                status_code=400,
+                detail="SVG export is not supported for CAD documents"
+            )
+
+        if is_cad:
+            # CAD PNG export — dxf_engine handles layer visibility natively
+            cad_path = _get_cad_filepath(doc)
+            content = dxf_engine.render_to_png(
+                cad_path, dpi=float(dpi),
+                hidden_layers=hidden_list or None,
+            )
+            media_type = "image/png"
+            ext = "png"
+        elif format == "svg":
             svg_bytes = pdf_engine.export_page_svg(
                 doc["filepath"], page_number,
                 hidden_layers=hidden_list, rotate=rotate
@@ -469,7 +702,7 @@ async def export_page_image(
             ext = "svg"
             content = svg_bytes
         else:
-            # PNG export — reuses the same layer-aware render pipeline
+            # PDF PNG export — reuses the same layer-aware render pipeline
             if hidden_list:
                 png_bytes = pdf_engine.render_page_with_layers(
                     doc["filepath"], page_number,
@@ -482,6 +715,8 @@ async def export_page_image(
             media_type = "image/png"
             ext = "png"
             content = png_bytes
+    except HTTPException:
+        raise  # Re-raise our own validation errors
     except IndexError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

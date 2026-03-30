@@ -32,6 +32,7 @@ from fastapi.templating import Jinja2Templates
 
 from db import Database
 from pdf_engine import PDFEngine
+from dxf_engine import DXFEngine
 
 # =============================================================================
 # PATH CONFIGURATION
@@ -71,8 +72,8 @@ MAX_UPLOAD_SIZE = 200 * 1024 * 1024
 # Maximum photo upload size: 20MB
 MAX_PHOTO_SIZE = 20 * 1024 * 1024
 
-# Allowed upload extensions — PDF only for now
-ALLOWED_EXTENSIONS = {".pdf"}
+# Allowed upload extensions — PDF, DXF, and DWG
+ALLOWED_EXTENSIONS = {".pdf", ".dxf", ".dwg"}
 
 # Allowed photo extensions for markup attachments
 ALLOWED_PHOTO_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -103,9 +104,10 @@ RENDER_DPI = 150.0
 # HTML templates
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Database and PDF engine — initialized on startup via db.init()
+# Database and rendering engines — initialized on startup via db.init()
 db = Database()
 pdf_engine = PDFEngine()
+dxf_engine = DXFEngine()
 
 # Tracks server start time; exposed by GET /api/health for uptime reporting
 app_start_time: float = time.time()

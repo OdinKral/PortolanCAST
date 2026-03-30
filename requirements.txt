@@ -16,5 +16,11 @@ jinja2==3.1.4
 # PDF manipulation (rendering, annotations, combining)
 PyMuPDF==1.24.9
 
+# CAD file handling (DXF parsing, DWG metadata)
+ezdxf==1.3.4
+
+# Plotting backend for CAD rendering (DXF → PNG)
+matplotlib==3.9.2
+
 # Async file serving
 aiofiles==24.1.0
