@@ -48,6 +48,34 @@ const BUILTIN_STAMPS = [
     { id: 'void',             label: 'VOID',             color: '#cc0000' },
 ];
 
+/**
+ * Quick Text stamps — equipment prefixes and field labels.
+ * Editable stamps place an IText that enters edit mode with cursor at end,
+ * so the user can immediately type "AHU-1", "VAV-204", etc.
+ * Non-editable stamps place the full text as-is (like status labels).
+ *
+ * @type {Array<{id:string, label:string, color:string, editable:boolean, category:string}>}
+ */
+const BUILTIN_QUICK_TEXT = [
+    // Equipment prefixes — cursor lands at end for quick completion
+    { id: 'qt-ahu', label: 'AHU-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-vav', label: 'VAV-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-fcu', label: 'FCU-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-rtu', label: 'RTU-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-chp', label: 'CHP-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-chw', label: 'CHW-', color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-hw',  label: 'HW-',  color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-ef',  label: 'EF-',  color: '#e0e0f0', editable: true, category: 'Equipment' },
+    { id: 'qt-p',   label: 'P-',   color: '#e0e0f0', editable: true, category: 'Equipment' },
+    // Status labels — placed as-is, not editable
+    { id: 'qt-verified',    label: 'VERIFIED',         color: '#44cc66', editable: false, category: 'Status' },
+    { id: 'qt-needs-attn',  label: 'NEEDS ATTENTION',  color: '#ffaa00', editable: false, category: 'Status' },
+    { id: 'qt-not-found',   label: 'NOT FOUND',        color: '#ff4444', editable: false, category: 'Status' },
+    { id: 'qt-replaced',    label: 'REPLACED',         color: '#44cc66', editable: false, category: 'Status' },
+    { id: 'qt-field-verify',label: 'FIELD VERIFY',     color: '#4a9eff', editable: false, category: 'Status' },
+    { id: 'qt-as-built',    label: 'AS-BUILT DIFFERS', color: '#ff6600', editable: false, category: 'Status' },
+];
+
 /** Diagonal angle (degrees) applied to all stamps — matches Bluebeam convention. */
 const STAMP_ANGLE = 30;
 
@@ -116,6 +144,36 @@ export class StampManager {
         if (!list) return;
         // Clear previous content
         while (list.firstChild) list.removeChild(list.firstChild);
+
+        // Quick Text section — equipment prefixes and field labels
+        const qtHeader = document.createElement('div');
+        qtHeader.className = 'stamp-section-header';
+        qtHeader.textContent = 'Quick Text';
+        list.appendChild(qtHeader);
+
+        BUILTIN_QUICK_TEXT.forEach(qt => {
+            const row = document.createElement('div');
+            row.className = 'stamp-row';
+            const btn = document.createElement('button');
+            btn.className = 'stamp-btn';
+            btn.title = qt.editable
+                ? `Place "${qt.label}" then type to complete (e.g. ${qt.label}1)`
+                : `Click to place "${qt.label}" label`;
+            const preview = document.createElement('span');
+            preview.className = 'stamp-preview';
+            preview.style.color = qt.color;
+            preview.textContent = qt.label;
+            btn.appendChild(preview);
+            btn.addEventListener('click', () => this._activateQuickTextPlacement(qt));
+            row.appendChild(btn);
+            list.appendChild(row);
+        });
+
+        // Stamps section header
+        const stampHeader = document.createElement('div');
+        stampHeader.className = 'stamp-section-header';
+        stampHeader.textContent = 'Stamps';
+        list.appendChild(stampHeader);
 
         const allStamps = [...BUILTIN_STAMPS, ...this._customStamps];
         allStamps.forEach(stamp => {
@@ -278,6 +336,90 @@ export class StampManager {
 
         fc.on('mouse:down', onMouseDown);
         // Register in _shapeHandlers so Escape key cleans up via _cleanupShapeDrawing()
+        if (this._toolbar) {
+            this._toolbar._shapeHandlers = { 'mouse:down': onMouseDown };
+        }
+    }
+
+    // ── Quick Text placement ─────────────────────────────────────────────────
+
+    /**
+     * Activate Quick Text placement mode.
+     *
+     * Editable quick text (equipment prefixes): places an IText with angle=0,
+     * enters editing mode, and positions the cursor at the END of the text so
+     * the user can append (e.g., "AHU-" → user types "1" → "AHU-1").
+     *
+     * Non-editable quick text (status labels): places like a regular stamp
+     * with angle=0 and no editing.
+     *
+     * Args:
+     *   qt: Quick text definition { id, label, color, editable, category }
+     */
+    _activateQuickTextPlacement(qt) {
+        const fc = this._canvas?.fabricCanvas;
+        if (!fc) return;
+
+        // Clean up any active shape drawing first
+        if (this._toolbar) {
+            this._toolbar._cleanupShapeDrawing();
+            this._toolbar.activeTool = 'quick-text';
+        }
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+
+            const pointer = fc.getPointer(opt.e);
+
+            // Read persisted typography prefs for consistent styling
+            let textPrefs = {};
+            try {
+                textPrefs = JSON.parse(localStorage.getItem('portolancast-text-prefs') || '{}');
+            } catch { /* ignore */ }
+
+            const textObj = new fabric.IText(qt.label, {
+                left:       pointer.x,
+                top:        pointer.y,
+                fontFamily: textPrefs.fontFamily || 'Arial, sans-serif',
+                fontSize:   textPrefs.fontSize || 16,
+                fontWeight: 'bold',
+                fill:       qt.color,
+                stroke:     null,
+                strokeWidth: 0,
+                angle:      0,           // Quick text is always horizontal
+                selectable: true,
+                editable:   qt.editable,
+                originX:    'left',
+                originY:    'top',
+            });
+
+            fc.add(textObj);
+            this._canvas.stampDefaults(textObj, {
+                markupType: 'note',
+                preserveColor: true,
+            });
+            fc.setActiveObject(textObj);
+
+            if (qt.editable) {
+                // Enter editing with cursor at end — user appends tag number
+                textObj.enterEditing();
+                textObj.setSelectionStart(textObj.text.length);
+                textObj.setSelectionEnd(textObj.text.length);
+            }
+
+            fc.renderAll();
+
+            // One-shot: remove listener and return to select
+            fc.off('mouse:down', onMouseDown);
+            if (this._toolbar) {
+                this._toolbar.activeTool = 'select';
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === 'select');
+                });
+            }
+        };
+
+        fc.on('mouse:down', onMouseDown);
         if (this._toolbar) {
             this._toolbar._shapeHandlers = { 'mouse:down': onMouseDown };
         }

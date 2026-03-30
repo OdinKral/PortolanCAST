@@ -321,6 +321,131 @@ export class Toolbar {
             btnAbout.addEventListener('click', () => this._showAbout());
         }
 
+        // =================================================================
+        // MENU BAR ITEM BINDINGS (File, Edit, View)
+        // These delegate to existing viewer/canvas methods so the menu
+        // is a second interface to the same behavior as toolbar buttons.
+        // =================================================================
+
+        // File → Close — return to welcome screen
+        const btnClose = document.getElementById('btn-close-doc');
+        if (btnClose) {
+            btnClose.addEventListener('click', () => {
+                const ws = document.getElementById('welcome-screen');
+                if (ws) ws.style.display = '';
+                const cv = document.getElementById('canvas-container');
+                if (cv) cv.style.display = 'none';
+                document.getElementById('filename-display').textContent = 'No file open';
+            });
+        }
+
+        // File → Print
+        const btnPrint = document.getElementById('btn-print');
+        if (btnPrint) {
+            btnPrint.addEventListener('click', () => window.print());
+        }
+
+        // File → Delete Document
+        const btnDeleteDoc = document.getElementById('btn-delete-doc');
+        if (btnDeleteDoc) {
+            btnDeleteDoc.addEventListener('click', async () => {
+                if (!this.viewer?.docId) return;
+                if (!confirm('Permanently delete this document and its file?')) return;
+                try {
+                    await fetch(`/api/documents/${this.viewer.docId}`, { method: 'DELETE' });
+                    // Return to welcome screen after deletion
+                    const ws = document.getElementById('welcome-screen');
+                    if (ws) ws.style.display = '';
+                    const cv = document.getElementById('canvas-container');
+                    if (cv) cv.style.display = 'none';
+                    document.getElementById('filename-display').textContent = 'No file open';
+                } catch (err) {
+                    console.error('Delete failed:', err);
+                }
+            });
+        }
+
+        // Edit → Undo / Redo
+        const btnUndo = document.getElementById('btn-undo');
+        if (btnUndo) {
+            btnUndo.addEventListener('click', () => this.canvas?.undo());
+        }
+        const btnRedo = document.getElementById('btn-redo');
+        if (btnRedo) {
+            btnRedo.addEventListener('click', () => this.canvas?.redo());
+        }
+
+        // Edit → Delete Selected
+        const btnDeleteSel = document.getElementById('btn-delete-selected');
+        if (btnDeleteSel) {
+            btnDeleteSel.addEventListener('click', () => {
+                if (!this.canvas?.fabricCanvas) return;
+                const active = this.canvas.fabricCanvas.getActiveObject();
+                if (active) {
+                    this.canvas.fabricCanvas.remove(active);
+                    this.canvas.fabricCanvas.renderAll();
+                }
+            });
+        }
+
+        // Edit → Select All
+        const btnSelectAll = document.getElementById('btn-select-all');
+        if (btnSelectAll) {
+            btnSelectAll.addEventListener('click', () => {
+                if (!this.canvas?.fabricCanvas) return;
+                const fc = this.canvas.fabricCanvas;
+                const objs = fc.getObjects().filter(o => o.selectable);
+                if (objs.length === 0) return;
+                fc.discardActiveObject();
+                const sel = new fabric.ActiveSelection(objs, { canvas: fc });
+                fc.setActiveObject(sel);
+                fc.requestRenderAll();
+            });
+        }
+
+        // Edit → Deselect All
+        const btnDeselect = document.getElementById('btn-deselect');
+        if (btnDeselect) {
+            btnDeselect.addEventListener('click', () => {
+                this.canvas?.fabricCanvas?.discardActiveObject();
+                this.canvas?.fabricCanvas?.requestRenderAll();
+            });
+        }
+
+        // View → Zoom In / Out / Fit (delegate to existing viewer methods)
+        const btnMenuZoomIn = document.getElementById('btn-menu-zoom-in');
+        if (btnMenuZoomIn) {
+            btnMenuZoomIn.addEventListener('click', () => this.viewer.zoomIn());
+        }
+        const btnMenuZoomOut = document.getElementById('btn-menu-zoom-out');
+        if (btnMenuZoomOut) {
+            btnMenuZoomOut.addEventListener('click', () => this.viewer.zoomOut());
+        }
+        const btnMenuZoomFit = document.getElementById('btn-menu-zoom-fit');
+        if (btnMenuZoomFit) {
+            btnMenuZoomFit.addEventListener('click', () => this.viewer.fitToWidth());
+        }
+
+        // View → Rotate Page
+        const btnMenuRotate = document.getElementById('btn-menu-rotate');
+        if (btnMenuRotate) {
+            btnMenuRotate.addEventListener('click', () => this.viewer.rotate());
+        }
+
+        // View → Toggle Panels (simulate clicks on existing collapse buttons)
+        const btnToggleLeft = document.getElementById('btn-toggle-left-panel');
+        if (btnToggleLeft) {
+            btnToggleLeft.addEventListener('click', () => {
+                document.getElementById('btn-collapse-left')?.click();
+            });
+        }
+        const btnToggleRight = document.getElementById('btn-toggle-right-panel');
+        if (btnToggleRight) {
+            btnToggleRight.addEventListener('click', () => {
+                document.getElementById('btn-collapse-right')?.click();
+            });
+        }
+
         // Dropdown menu toggle — click trigger to open, click outside to close
         this._initDropdowns();
     }
@@ -517,6 +642,14 @@ export class Toolbar {
                     if (e.ctrlKey && this.canvas) {
                         e.preventDefault();
                         this.canvas.redo();
+                    }
+                    break;
+
+                // Find & Replace: Ctrl+H
+                case 'h':
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        if (this.onFindReplace) this.onFindReplace();
                     }
                     break;
 
@@ -1910,10 +2043,13 @@ export class Toolbar {
         try {
             textPrefs = JSON.parse(localStorage.getItem('portolancast-text-prefs') || '{}');
         } catch { /* ignore corrupt data */ }
-        const fontFamily = textPrefs.fontFamily || 'Arial, sans-serif';
-        const fontSize   = Math.max(8, Math.min(200, Number(textPrefs.fontSize) || 16));
-        const fontWeight = textPrefs.bold   ? 'bold'   : 'normal';
-        const fontStyle  = textPrefs.italic ? 'italic' : 'normal';
+        const fontFamily  = textPrefs.fontFamily || 'Arial, sans-serif';
+        const fontSize    = Math.max(8, Math.min(200, Number(textPrefs.fontSize) || 16));
+        const fontWeight  = textPrefs.fontWeight === 'bold' || textPrefs.fontWeight === '700' ? 'bold' : 'normal';
+        const fontStyle   = textPrefs.fontStyle === 'italic' ? 'italic' : 'normal';
+        const underline   = textPrefs.underline   || false;
+        const linethrough = textPrefs.linethrough || false;
+        const textAlign   = textPrefs.textAlign   || 'left';
 
         const onMouseDown = (opt) => {
             // Ignore if clicking on an existing object
@@ -1928,6 +2064,9 @@ export class Toolbar {
                 fontSize,
                 fontWeight,
                 fontStyle,
+                underline,
+                linethrough,
+                textAlign,
                 fill:        STROKE_COLOR,
                 // No stroke on text — use fill for the character color
                 stroke:      null,
@@ -1950,13 +2089,10 @@ export class Toolbar {
             textObj.selectAll();
             fc.renderAll();
 
-            // One-shot: clean up this handler and switch to select tool
-            // (without triggering toggle-off since activeTool is 'text' not 'select')
-            this._cleanupShapeDrawing();
-            this.activeTool = 'select';
-            document.querySelectorAll('.tool-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.tool === 'select');
-            });
+            // Continuous placement: stay in text tool so user can click again
+            // to place another text. Escape or tool-switch exits via
+            // _cleanupShapeDrawing(). Empty text objects are auto-removed by
+            // canvas.js text:editing:exited handler if user types nothing.
         };
 
         fc.on('mouse:down', onMouseDown);
@@ -2055,14 +2191,9 @@ export class Toolbar {
 
             noteObj.on('editing:exited', onEditingExited);
 
-            // One-shot: clean up this mousedown handler and switch to select tool.
-            // Done immediately after placement — the editing:exited handler above
-            // is attached directly to the noteObj, not to the canvas handler.
-            this._cleanupShapeDrawing();
-            this.activeTool = 'select';
-            document.querySelectorAll('.tool-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.tool === 'select');
-            });
+            // Continuous placement: stay in sticky-note tool so user can click
+            // again to place another note. Escape or tool-switch exits via
+            // _cleanupShapeDrawing(). Empty notes auto-removed by onEditingExited.
         };
 
         fc.on('mouse:down', onMouseDown);

@@ -398,11 +398,116 @@ html, body {
     flex-shrink: 0;
 }
 
+/* Right-aligned keyboard shortcut hint inside menu items */
+.dropdown-shortcut {
+    margin-left: auto;
+    padding-left: 24px;
+    color: #777;
+    font-size: 11px;
+    font-family: monospace;
+}
+
+/* Destructive actions (Delete Document) — red text to signal danger */
+.dropdown-item-danger {
+    color: #e55;
+}
+.dropdown-item-danger:hover {
+    background: #3a1520;
+    color: #ff6b6b;
+}
+
 /* Horizontal separator between menu sections */
 .dropdown-divider {
     height: 1px;
     background: #3a3a55;
     margin: 4px 8px;
+}
+
+/* =========================================================================
+ * FLOATING TEXT FORMAT BAR
+ * Appears above text objects during editing. Bluebeam/Acrobat-style.
+ * ========================================================================= */
+
+.text-format-bar {
+    position: fixed;
+    z-index: 1000;
+    display: none;  /* shown via JS when editing text */
+    align-items: center;
+    gap: 3px;
+    background: #1a1a2e;
+    border: 1px solid #3a3a50;
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    /* Prevent the bar from being too wide on small screens */
+    max-width: 95vw;
+    flex-wrap: wrap;
+}
+
+/* Font family dropdown */
+.tfb-select {
+    background: #0f0f1a;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #e0e0f0;
+    font-size: 11px;
+    padding: 3px 4px;
+    max-width: 140px;
+    cursor: pointer;
+}
+
+/* Font size input */
+.tfb-input {
+    background: #0f0f1a;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    color: #e0e0f0;
+    font-size: 11px;
+    padding: 3px 4px;
+    width: 40px;
+    text-align: center;
+}
+
+/* Format toggle buttons (B, I, U, S, alignment) */
+.tfb-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #aaa;
+    font-size: 12px;
+    padding: 3px 6px;
+    cursor: pointer;
+    min-width: 24px;
+    text-align: center;
+    line-height: 1;
+}
+.tfb-btn:hover {
+    background: #2a2a45;
+    color: #fff;
+}
+.tfb-btn.active {
+    background: #3a3a55;
+    color: #fff;
+    border-color: #5a5a7a;
+}
+
+/* Vertical separator between control groups */
+.tfb-separator {
+    width: 1px;
+    height: 18px;
+    background: #3a3a55;
+    margin: 0 2px;
+}
+
+/* Color picker — small square */
+.tfb-color {
+    width: 24px;
+    height: 24px;
+    border: 1px solid #3a3a50;
+    border-radius: 3px;
+    padding: 0;
+    cursor: pointer;
+    background: none;
 }
 
 /* =========================================================================
@@ -2832,6 +2937,18 @@ html, body {
 /* =========================================================================
  * STAMPS
  * ========================================================================= */
+
+/* Section header within the stamps list (Quick Text / Stamps) */
+.stamp-section-header {
+    padding: 6px 8px 2px;
+    color: #8888a0;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #2a2a40;
+    margin-bottom: 2px;
+}
 
 /* Each stamp row: [activation button] [optional delete] */
 .stamp-row {

@@ -172,10 +172,15 @@ export class PropertiesPanel {
             tagDisplay: document.getElementById('prop-markup-tags'),
             // Typography section — shown only for IText / Textbox objects
             typographySection: document.getElementById('markup-typography'),
-            fontFamily:   document.getElementById('prop-font-family'),
-            fontSize:     document.getElementById('prop-font-size'),
-            fontBold:     document.getElementById('prop-font-bold'),
-            fontItalic:   document.getElementById('prop-font-italic'),
+            fontFamily:       document.getElementById('prop-font-family'),
+            fontSize:         document.getElementById('prop-font-size'),
+            fontBold:         document.getElementById('prop-font-bold'),
+            fontItalic:       document.getElementById('prop-font-italic'),
+            fontUnderline:    document.getElementById('prop-font-underline'),
+            fontStrikethrough:document.getElementById('prop-font-strikethrough'),
+            textAlignLeft:    document.getElementById('prop-text-align-left'),
+            textAlignCenter:  document.getElementById('prop-text-align-center'),
+            textAlignRight:   document.getElementById('prop-text-align-right'),
         };
 
         this._bindInputHandlers();
@@ -301,6 +306,43 @@ export class PropertiesPanel {
             this.canvas.fabricCanvas.renderAll();
             this._saveTextPrefs();
             this._fireChange();
+        });
+
+        // Underline toggle — Fabric.js uses boolean `underline` property
+        this._els.fontUnderline?.addEventListener('click', () => {
+            if (!this._selectedObject) return;
+            const isUnderline = this._selectedObject.underline === true;
+            this._selectedObject.set('underline', !isUnderline);
+            this._els.fontUnderline.classList.toggle('active', !isUnderline);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
+            this._fireChange();
+        });
+
+        // Strikethrough toggle — Fabric.js uses `linethrough` (one word, not camelCase)
+        this._els.fontStrikethrough?.addEventListener('click', () => {
+            if (!this._selectedObject) return;
+            const isStrike = this._selectedObject.linethrough === true;
+            this._selectedObject.set('linethrough', !isStrike);
+            this._els.fontStrikethrough.classList.toggle('active', !isStrike);
+            this.canvas.fabricCanvas.renderAll();
+            this._saveTextPrefs();
+            this._fireChange();
+        });
+
+        // Text alignment — mutually exclusive: left, center, right
+        ['left', 'center', 'right'].forEach(align => {
+            const btn = this._els[`textAlign${align.charAt(0).toUpperCase() + align.slice(1)}`];
+            btn?.addEventListener('click', () => {
+                if (!this._selectedObject) return;
+                this._selectedObject.set('textAlign', align);
+                this._els.textAlignLeft?.classList.toggle('active', align === 'left');
+                this._els.textAlignCenter?.classList.toggle('active', align === 'center');
+                this._els.textAlignRight?.classList.toggle('active', align === 'right');
+                this.canvas.fabricCanvas.renderAll();
+                this._saveTextPrefs();
+                this._fireChange();
+            });
         });
     }
 
@@ -552,6 +594,17 @@ export class PropertiesPanel {
             if (this._els.fontItalic) {
                 this._els.fontItalic.classList.toggle('active', obj.fontStyle === 'italic');
             }
+            if (this._els.fontUnderline) {
+                this._els.fontUnderline.classList.toggle('active', obj.underline === true);
+            }
+            if (this._els.fontStrikethrough) {
+                this._els.fontStrikethrough.classList.toggle('active', obj.linethrough === true);
+            }
+            // Alignment — default to 'left' when not set
+            const align = obj.textAlign || 'left';
+            this._els.textAlignLeft?.classList.toggle('active', align === 'left');
+            this._els.textAlignCenter?.classList.toggle('active', align === 'center');
+            this._els.textAlignRight?.classList.toggle('active', align === 'right');
         }
 
         // Show photo section and load photos for this markup
@@ -666,10 +719,13 @@ export class PropertiesPanel {
     _saveTextPrefs() {
         if (!this._selectedObject) return;
         const prefs = {
-            fontFamily: this._selectedObject.fontFamily || 'Arial, sans-serif',
-            fontSize:   this._selectedObject.fontSize   || 16,
-            fontWeight: this._selectedObject.fontWeight || 'normal',
-            fontStyle:  this._selectedObject.fontStyle  || 'normal',
+            fontFamily:  this._selectedObject.fontFamily  || 'Arial, sans-serif',
+            fontSize:    this._selectedObject.fontSize    || 16,
+            fontWeight:  this._selectedObject.fontWeight  || 'normal',
+            fontStyle:   this._selectedObject.fontStyle   || 'normal',
+            underline:   this._selectedObject.underline   || false,
+            linethrough: this._selectedObject.linethrough || false,
+            textAlign:   this._selectedObject.textAlign   || 'left',
         };
         try {
             localStorage.setItem('portolancast-text-prefs', JSON.stringify(prefs));

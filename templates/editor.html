@@ -22,12 +22,6 @@
         </div>
 
         <div class="toolbar-group toolbar-file">
-            <button id="btn-new" class="toolbar-btn" title="New blank document">
-                <span class="icon">&#128196;</span> New
-            </button>
-            <button id="btn-open" class="toolbar-btn" title="Open PDF">
-                <span class="icon">&#128194;</span> Open
-            </button>
             <span id="filename-display" class="filename-display">No file open</span>
         </div>
 
@@ -46,70 +40,179 @@
             </span>
         </div>
 
-        <!-- ── Menu bar: File, Settings, Help ── -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             Menu bar: File, Edit, View, Help
+             Follows Bluebeam/Acrobat conventions for desktop users.
+             ═══════════════════════════════════════════════════════════════ -->
         <div class="toolbar-group toolbar-menus">
-            <!-- File dropdown -->
+
+            <!-- ── File ── -->
             <div class="toolbar-dropdown" id="file-menu">
-                <button class="toolbar-btn toolbar-dropdown-trigger"
-                        title="File menu — export, save, and download options">
-                    <span class="icon">&#128196;</span> File <span class="dropdown-arrow">&#9662;</span>
+                <button class="toolbar-btn toolbar-dropdown-trigger">
+                    File <span class="dropdown-arrow">&#9662;</span>
                 </button>
                 <div class="toolbar-dropdown-menu">
-                    <button id="btn-export" class="dropdown-item"
-                            title="Export annotated PDF — markups become permanent (not editable after export)">
-                        <span class="dropdown-icon">&#128190;</span> Export PDF
+                    <button id="btn-new" class="dropdown-item"
+                            title="Create a new blank document">
+                        <span class="dropdown-icon">&#128196;</span> New
+                        <span class="dropdown-shortcut"></span>
                     </button>
-                    <button id="btn-export-page" class="dropdown-item"
-                            title="Export current page as PNG or SVG with current layer visibility">
-                        <span class="dropdown-icon">&#128444;</span> Export Page as Image...
+                    <button id="btn-open" class="dropdown-item"
+                            title="Open a PDF, DXF, or DWG file">
+                        <span class="dropdown-icon">&#128194;</span> Open...
+                        <span class="dropdown-shortcut">Ctrl+O</span>
+                    </button>
+                    <button id="btn-close-doc" class="dropdown-item"
+                            title="Close the current document">
+                        <span class="dropdown-icon">&#10006;</span> Close
+                        <span class="dropdown-shortcut"></span>
                     </button>
                     <div class="dropdown-divider"></div>
                     <button id="btn-save-bundle" class="dropdown-item"
-                            title="Save editable bundle (.portolan) — preserves markups and layers for re-editing">
-                        <span class="dropdown-icon">&#128230;</span> Save Bundle (.portolan)
+                            title="Save editable bundle — preserves markups and layers">
+                        <span class="dropdown-icon">&#128190;</span> Save Bundle (.portolan)
+                        <span class="dropdown-shortcut">Ctrl+S</span>
                     </button>
                     <div class="dropdown-divider"></div>
+                    <button id="btn-export" class="dropdown-item"
+                            title="Export annotated PDF — markups become permanent">
+                        <span class="dropdown-icon">&#128424;</span> Export PDF
+                        <span class="dropdown-shortcut"></span>
+                    </button>
+                    <button id="btn-export-page" class="dropdown-item"
+                            title="Export current page as PNG or SVG">
+                        <span class="dropdown-icon">&#128444;</span> Export Page as Image...
+                        <span class="dropdown-shortcut"></span>
+                    </button>
                     <button id="btn-export-obsidian" class="dropdown-item"
-                            title="Export markup notes as Obsidian Markdown files (.zip)">
+                            title="Export markup notes as Obsidian Markdown (.zip)">
                         <span class="dropdown-icon">&#128221;</span> Export to Obsidian
+                        <span class="dropdown-shortcut"></span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-print" class="dropdown-item"
+                            title="Print the current page">
+                        <span class="dropdown-icon">&#128424;</span> Print...
+                        <span class="dropdown-shortcut">Ctrl+P</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-delete-doc" class="dropdown-item dropdown-item-danger"
+                            title="Delete this document and its file permanently">
+                        <span class="dropdown-icon">&#128465;</span> Delete Document
+                        <span class="dropdown-shortcut"></span>
                     </button>
                 </div>
             </div>
 
-            <!-- Settings dropdown -->
-            <div class="toolbar-dropdown" id="settings-menu">
-                <button class="toolbar-btn toolbar-dropdown-trigger"
-                        title="Settings">
-                    &#9881; Settings <span class="dropdown-arrow">&#9662;</span>
+            <!-- ── Edit ── -->
+            <div class="toolbar-dropdown" id="edit-menu">
+                <button class="toolbar-btn toolbar-dropdown-trigger">
+                    Edit <span class="dropdown-arrow">&#9662;</span>
                 </button>
                 <div class="toolbar-dropdown-menu">
-                    <button id="btn-toolbar-settings" class="dropdown-item"
-                            title="Show/hide toolbar tools and adjust display settings">
-                        <span class="dropdown-icon">&#128295;</span> Toolbar Settings...
+                    <button id="btn-undo" class="dropdown-item"
+                            title="Undo the last action">
+                        <span class="dropdown-icon">&#8630;</span> Undo
+                        <span class="dropdown-shortcut">Ctrl+Z</span>
+                    </button>
+                    <button id="btn-redo" class="dropdown-item"
+                            title="Redo the last undone action">
+                        <span class="dropdown-icon">&#8631;</span> Redo
+                        <span class="dropdown-shortcut">Ctrl+Y</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-delete-selected" class="dropdown-item"
+                            title="Delete the selected markup">
+                        <span class="dropdown-icon">&#128465;</span> Delete Selected
+                        <span class="dropdown-shortcut">Del</span>
+                    </button>
+                    <button id="btn-select-all" class="dropdown-item"
+                            title="Select all markups on the current page">
+                        <span class="dropdown-icon">&#9634;</span> Select All
+                        <span class="dropdown-shortcut">Ctrl+A</span>
+                    </button>
+                    <button id="btn-deselect" class="dropdown-item"
+                            title="Deselect all">
+                        <span class="dropdown-icon">&#9635;</span> Deselect All
+                        <span class="dropdown-shortcut">Esc</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-find-replace" class="dropdown-item"
+                            title="Find and replace text in markups">
+                        <span class="dropdown-icon">&#128269;</span> Find &amp; Replace
+                        <span class="dropdown-shortcut">Ctrl+H</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Help dropdown -->
+            <!-- ── View ── -->
+            <div class="toolbar-dropdown" id="view-menu">
+                <button class="toolbar-btn toolbar-dropdown-trigger">
+                    View <span class="dropdown-arrow">&#9662;</span>
+                </button>
+                <div class="toolbar-dropdown-menu">
+                    <button id="btn-menu-zoom-in" class="dropdown-item"
+                            title="Zoom in">
+                        <span class="dropdown-icon">&#128269;</span> Zoom In
+                        <span class="dropdown-shortcut">+</span>
+                    </button>
+                    <button id="btn-menu-zoom-out" class="dropdown-item"
+                            title="Zoom out">
+                        <span class="dropdown-icon">&#128270;</span> Zoom Out
+                        <span class="dropdown-shortcut">-</span>
+                    </button>
+                    <button id="btn-menu-zoom-fit" class="dropdown-item"
+                            title="Fit page to window width">
+                        <span class="dropdown-icon">&#8596;</span> Fit to Width
+                        <span class="dropdown-shortcut">0</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-menu-rotate" class="dropdown-item"
+                            title="Rotate page 90 degrees clockwise">
+                        <span class="dropdown-icon">&#8635;</span> Rotate Page
+                        <span class="dropdown-shortcut">Ctrl+R</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-toggle-left-panel" class="dropdown-item"
+                            title="Show or hide the page thumbnails panel">
+                        <span class="dropdown-icon">&#9776;</span> Pages Panel
+                        <span class="dropdown-shortcut"></span>
+                    </button>
+                    <button id="btn-toggle-right-panel" class="dropdown-item"
+                            title="Show or hide the properties/layers panel">
+                        <span class="dropdown-icon">&#9776;</span> Properties Panel
+                        <span class="dropdown-shortcut"></span>
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button id="btn-toolbar-settings" class="dropdown-item"
+                            title="Customize which tools appear in the toolbar">
+                        <span class="dropdown-icon">&#128295;</span> Toolbar Settings...
+                        <span class="dropdown-shortcut"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Help ── -->
             <div class="toolbar-dropdown" id="help-menu">
-                <button class="toolbar-btn toolbar-dropdown-trigger"
-                        title="Help and keyboard shortcuts">
-                    &#63; Help <span class="dropdown-arrow">&#9662;</span>
+                <button class="toolbar-btn toolbar-dropdown-trigger">
+                    Help <span class="dropdown-arrow">&#9662;</span>
                 </button>
                 <div class="toolbar-dropdown-menu">
                     <button id="btn-help-guide" class="dropdown-item"
-                            title="Open the Quick Start Guide"
                             onclick="window.open('/help', '_blank')">
                         <span class="dropdown-icon">&#128214;</span> Quick Start Guide
+                        <span class="dropdown-shortcut">F1</span>
                     </button>
                     <button id="btn-help-shortcuts" class="dropdown-item"
                             title="View all keyboard shortcuts">
                         <span class="dropdown-icon">&#9000;</span> Keyboard Shortcuts
+                        <span class="dropdown-shortcut">?</span>
                     </button>
                     <div class="dropdown-divider"></div>
                     <button id="btn-help-about" class="dropdown-item"
                             title="About PortolanCAST">
                         <span class="dropdown-icon">&#9432;</span> About PortolanCAST
+                        <span class="dropdown-shortcut"></span>
                     </button>
                 </div>
             </div>
@@ -534,7 +637,7 @@
             <div class="welcome-content">
                 <h1>PortolanCAST</h1>
                 <p>Open-source PDF markup &amp; measurement</p>
-                <button id="btn-welcome-open" class="welcome-btn">Open a PDF</button>
+                <button id="btn-welcome-open" class="welcome-btn">Open a File</button>
 
                 {% if recent_documents %}
                 <div class="recent-files">
@@ -717,6 +820,16 @@
                             <div class="prop-toggle-row">
                                 <button id="prop-font-bold" class="prop-toggle-btn" title="Bold"><strong>B</strong></button>
                                 <button id="prop-font-italic" class="prop-toggle-btn" title="Italic"><em>I</em></button>
+                                <button id="prop-font-underline" class="prop-toggle-btn" title="Underline"><u>U</u></button>
+                                <button id="prop-font-strikethrough" class="prop-toggle-btn" title="Strikethrough"><s>S</s></button>
+                            </div>
+                        </div>
+                        <div class="prop-field">
+                            <label>Alignment</label>
+                            <div class="prop-toggle-row">
+                                <button id="prop-text-align-left" class="prop-toggle-btn active" title="Align Left">&#9776;</button>
+                                <button id="prop-text-align-center" class="prop-toggle-btn" title="Center">&#8801;</button>
+                                <button id="prop-text-align-right" class="prop-toggle-btn" title="Align Right">&#9776;</button>
                             </div>
                         </div>
                     </div>
@@ -843,8 +956,8 @@
     <span id="status-message"></span>
 </div>
 
-<!-- Hidden file input for PDF upload -->
-<input type="file" id="file-input" accept=".pdf,.portolan" style="display: none;">
+<!-- Hidden file input for document upload (PDF, DXF, DWG, Portolan bundle) -->
+<input type="file" id="file-input" accept=".pdf,.dxf,.dwg,.portolan" style="display: none;">
 
 <!-- ====================================================================== -->
 <!-- NEW DOCUMENT MODAL                                                      -->
@@ -1195,6 +1308,69 @@
     </div>
     <div id="entity-modal-body" class="entity-modal-body">
         <!-- Populated by EntityModal.open() in entity-modal.js (Stage 3B) -->
+    </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- SPELL CHECK MODAL                                                      -->
+<!-- Uses the browser's native spell check on a real <textarea> — red       -->
+<!-- squiggles appear, right-click shows suggestions. Apply syncs text back  -->
+<!-- to the Fabric.js canvas object.                                        -->
+<!-- ====================================================================== -->
+<div id="modal-spellcheck" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-spellcheck-title">
+    <div class="modal-overlay" id="modal-spellcheck-overlay"></div>
+    <div class="modal-box" style="width: 420px;">
+        <h2 id="modal-spellcheck-title">Spell Check</h2>
+        <p class="modal-hint">Edit text below — your browser's spell check is active.
+           Right-click underlined words for suggestions.</p>
+        <div class="modal-field">
+            <textarea id="spellcheck-textarea" spellcheck="true" rows="8"
+                      style="width:100%; box-sizing:border-box; background:#0f0f1a;
+                             border:1px solid #3a3a50; border-radius:4px; color:#e0e0f0;
+                             padding:8px; font-size:14px; resize:vertical;"></textarea>
+        </div>
+        <div class="modal-buttons">
+            <button id="spellcheck-cancel" class="toolbar-btn">Cancel</button>
+            <button id="spellcheck-apply" class="toolbar-btn modal-btn-primary">Apply</button>
+        </div>
+    </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- FIND & REPLACE MODAL                                                   -->
+<!-- Searches text objects and markup notes on the current page.            -->
+<!-- ====================================================================== -->
+<div id="modal-find-replace" class="modal" style="display: none;"
+     role="dialog" aria-modal="true" aria-labelledby="modal-find-replace-title">
+    <div class="modal-overlay" id="modal-find-replace-overlay"></div>
+    <div class="modal-box" style="width: 440px;">
+        <h2 id="modal-find-replace-title">Find &amp; Replace</h2>
+        <p class="modal-hint">Searches text markups on the current page.</p>
+        <div class="modal-field">
+            <label for="find-input">Find</label>
+            <input type="text" id="find-input" placeholder="Search text..."
+                   autocomplete="off">
+        </div>
+        <div class="modal-field">
+            <label for="replace-input">Replace with</label>
+            <input type="text" id="replace-input" placeholder="Replacement text..."
+                   autocomplete="off">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <label style="display:flex; align-items:center; gap:4px; color:#888; font-size:12px;">
+                <input type="checkbox" id="find-case-sensitive"> Case sensitive
+            </label>
+            <span style="flex:1;"></span>
+            <span id="find-match-count" style="color:#8888a0; font-size:12px;">0 matches</span>
+            <button id="find-prev" class="toolbar-btn" style="padding:2px 8px;" title="Previous match">&#9650;</button>
+            <button id="find-next" class="toolbar-btn" style="padding:2px 8px;" title="Next match">&#9660;</button>
+        </div>
+        <div class="modal-buttons">
+            <button id="find-replace-close" class="toolbar-btn">Close</button>
+            <button id="find-replace-one" class="toolbar-btn">Replace</button>
+            <button id="find-replace-all" class="toolbar-btn modal-btn-primary">Replace All</button>
+        </div>
     </div>
 </div>
 

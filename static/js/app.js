@@ -35,6 +35,8 @@ import { EntityManager } from './entity-manager.js';
 import { EntityModal } from './entity-modal.js';
 import { QuickCapture } from './quick-capture.js';
 import { EquipmentMarkerPanel } from './equipment-marker.js';
+import { TextFormatBar } from './text-format-bar.js';
+import { FindReplace } from './find-replace.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -73,6 +75,10 @@ class App {
         this.quickCapture = new QuickCapture();
         // Equipment Marker: click-to-place entity pin on drawings
         this.equipmentMarkerPanel = new EquipmentMarkerPanel();
+        // Floating text format bar — appears above text during editing
+        this.textFormatBar = new TextFormatBar();
+        // Find & Replace — searches text markups on current page
+        this.findReplace = new FindReplace();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -428,6 +434,17 @@ class App {
             this.stampManager.init(this.toolbar, this.canvas);
             this.toolPresets.init(this.toolbar);
             this.sequenceManager.init(this.toolbar, this.canvas);
+
+            // Text editing enhancements — format bar + find/replace
+            this.textFormatBar.init(this.canvas, this.properties);
+            this.findReplace.init(this.canvas);
+
+            // Wire Ctrl+H to open Find & Replace
+            this.toolbar.onFindReplace = () => this.findReplace.open();
+
+            // Wire Edit menu Find & Replace button
+            document.getElementById('btn-find-replace')?.addEventListener('click',
+                () => this.findReplace.open());
         }
 
         // Wire canvas content changes to auto-save, list refresh, and status counts
