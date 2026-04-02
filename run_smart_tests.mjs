@@ -553,6 +553,58 @@ for (const s of suitesToRun) {
 console.log();
 
 // =============================================================================
+// PRE-FLIGHT: Ensure server is running
+// =============================================================================
+
+/**
+ * Check if the PortolanCAST server is reachable. If not, attempt to start it
+ * and wait for it to become healthy. Prevents wasting time on timeout failures
+ * when the server simply isn't running.
+ */
+function ensureServerRunning() {
+    const SERVER_URL = 'http://127.0.0.1:8000/api/health';
+    const MAX_WAIT_SEC = 15;
+
+    // Quick check — is it already up?
+    try {
+        execSync(`curl -sf --connect-timeout 3 ${SERVER_URL}`, { stdio: 'pipe' });
+        console.log('  Server: running (port 8000)');
+        return;
+    } catch {
+        // Not running — try to start it
+    }
+
+    console.log('  Server: not running — starting...');
+
+    // Start the server in background via shell
+    try {
+        execSync(
+            'nohup venv/bin/python3 -u main.py > /tmp/portolancast-test-server.log 2>&1 &',
+            { stdio: 'pipe' }
+        );
+    } catch {
+        console.error('  ERROR: Failed to start server. Run it manually.');
+        process.exit(1);
+    }
+
+    // Poll until healthy or timeout
+    for (let i = 0; i < MAX_WAIT_SEC; i++) {
+        sleepSync(1000);
+        try {
+            execSync(`curl -sf --connect-timeout 2 ${SERVER_URL}`, { stdio: 'pipe' });
+            console.log(`  Server: started (took ${i + 1}s)`);
+            return;
+        } catch {
+            // Still starting...
+        }
+    }
+
+    console.error(`  ERROR: Server did not start within ${MAX_WAIT_SEC}s.`);
+    console.error('  Check /tmp/portolancast-test-server.log for errors.');
+    process.exit(1);
+}
+
+// =============================================================================
 // RUN SELECTED SUITES
 // =============================================================================
 
@@ -566,6 +618,9 @@ function sleepSync(ms) {
         // Busy-wait — acceptable for short pauses between test batches
     }
 }
+
+// Pre-flight server check — auto-starts if needed
+ensureServerRunning();
 
 let totalPassed = 0;
 let totalFailed = 0;
