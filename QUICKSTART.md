@@ -184,8 +184,14 @@ carries this meaning automatically — no need to re-assign after the fact.
 | **L** | Line | Click + drag |
 | **H** | Highlighter | Click + drag — semi-transparent overlay |
 | **T** | Text | Click to place; type annotation; auto-returns to Select |
+| **W** | Polyline | Click to add vertices; double-click to finish open path |
+| — | Polygon | Click to add vertices; double-click to close and fill (25% opacity) |
+| **Shift+A** | Arrow | Click + drag — line with arrowhead |
 | **C** | Cloud | Click + drag — revision cloud (construction standard) |
 | **O** | Callout | Click anchor point, then click text position |
+| — | Dimension | Click + drag — line with auto-measured text from scale |
+| — | Eraser | Click on any markup to delete it |
+| **S** | Sticky Note | Click to place a yellow note box |
 | **G** | Hand | Click + drag to pan without activating a tool |
 | **Esc** | Deselect | Exit current tool, return to pan/scroll |
 
@@ -284,7 +290,10 @@ Set the drawing scale first (bottom status bar → scale selector), then measure
 | Key | Tool | How to use |
 |-----|------|------------|
 | **U** | Distance | Click start point, click end point |
+| — | Polylength | Click to add segments; double-click to finish. Shows per-segment + total distance |
 | **A** | Area | Click vertices; double-click to close polygon |
+| — | Perimeter | Click vertices; double-click or snap to close. Measures total edge length |
+| — | Angle | Click 3 points: ray endpoint, vertex, ray endpoint. Shows angle in degrees |
 | **N** | Count | Click to place numbered markers |
 | **K** | Calibrate | Click two known points, enter the real-world distance |
 

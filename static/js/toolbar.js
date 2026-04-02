@@ -91,8 +91,9 @@ export class Toolbar {
             hand: 'navigate', select: 'navigate',
             pen: 'markup', rect: 'markup', ellipse: 'markup', line: 'markup',
             highlighter: 'markup', text: 'markup', cloud: 'markup', callout: 'markup',
-            polyline: 'markup', arrow: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
-            distance: 'measure', area: 'measure', count: 'measure',
+            polyline: 'markup', polygon: 'markup', arrow: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
+            dimension: 'markup', eraser: 'markup',
+            distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', count: 'measure',
             calibrate: 'measure', 'node-edit': 'measure',
         };
 
@@ -735,10 +736,7 @@ export class Toolbar {
                     }
                     break;
 
-                // W: Polyline tool (multi-segment connected line)
-                // Bluebeam uses SHIFT+N; we use capital 'N' (Shift+N in browser key events)
-                // to avoid conflicting with lowercase 'n' (count tool).
-                case 'W':
+                // w: Polyline tool (multi-segment connected line, open path)
                 case 'w':
                     if (!e.ctrlKey) {
                         this.setTool('polyline');
@@ -955,6 +953,31 @@ export class Toolbar {
                 this._initPolylineDrawing();
                 break;
 
+            case 'polygon':
+                // Like polyline but creates a closed, filled shape.
+                // Click to add vertices, double-click to close and fill.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initPolygonDrawing();
+                break;
+
+            case 'dimension':
+                // Click-drag dimension line: line with measurement text calculated from scale.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initDimensionDrawing();
+                break;
+
+            case 'eraser':
+                // Click on pen strokes or markups to delete them.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initEraserMode();
+                break;
+
             case 'sticky-note':
                 // Click-to-place sticky note — Textbox with yellow background and colored border.
                 // One-shot: places the box, enters editing, reverts to select.
@@ -1056,12 +1079,39 @@ export class Toolbar {
                 }
                 break;
 
+            case 'polylength':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initPolylength(this.canvas, this, this.scale);
+                }
+                break;
+
             case 'area':
                 fc.isDrawingMode = false;
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 if (this.measureTools) {
                     this.measureTools.initArea(this.canvas, this, this.scale);
+                }
+                break;
+
+            case 'perimeter':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initPerimeter(this.canvas, this, this.scale);
+                }
+                break;
+
+            case 'angle':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initAngle(this.canvas, this);
                 }
                 break;
 
@@ -2018,6 +2068,372 @@ export class Toolbar {
 
             // Restore prototype method for future tool activations
             delete this._cleanupShapeDrawing;
+        };
+    }
+
+    // =========================================================================
+    // POLYGON DRAWING (click-accumulate-dblclick, closed + filled)
+    // =========================================================================
+
+    /**
+     * Set up the click-accumulate-dblclick interaction for drawing a filled polygon.
+     * Same vertex accumulation pattern as polyline, but creates a closed fabric.Polygon
+     * with semi-transparent fill on completion.
+     */
+    _initPolygonDrawing() {
+        const fc = this.canvas.fabricCanvas;
+        const STROKE_COLOR = MARKUP_COLORS[this.activeMarkupType] || MARKUP_COLORS.note;
+        const STROKE_WIDTH = 2;
+
+        let vertices = [];
+        let previewPolyline = null;
+        let rubberBand = null;
+        /** @type {fabric.Line|null} Closing line preview from last vertex to first */
+        let closingLine = null;
+
+        const clearTemp = () => {
+            if (previewPolyline) { fc.remove(previewPolyline); previewPolyline = null; }
+            if (rubberBand)      { fc.remove(rubberBand);      rubberBand = null; }
+            if (closingLine)     { fc.remove(closingLine);     closingLine = null; }
+        };
+
+        const rebuildPreview = () => {
+            if (previewPolyline) { fc.remove(previewPolyline); previewPolyline = null; }
+            if (closingLine)     { fc.remove(closingLine);     closingLine = null; }
+            if (vertices.length < 2) return;
+
+            // Show the accumulated path as an open polyline
+            previewPolyline = new fabric.Polyline([...vertices], {
+                stroke: STROKE_COLOR,
+                strokeWidth: STROKE_WIDTH,
+                strokeUniform: true,
+                fill: 'transparent',
+                selectable: false,
+                evented: false,
+                objectCaching: false,
+            });
+            fc.add(previewPolyline);
+
+            // Show closing line (dashed) from last vertex back to first
+            if (vertices.length >= 3) {
+                const first = vertices[0];
+                const last = vertices[vertices.length - 1];
+                closingLine = new fabric.Line(
+                    [last.x, last.y, first.x, first.y],
+                    {
+                        stroke: STROKE_COLOR,
+                        strokeWidth: 1,
+                        strokeDashArray: [4, 4],
+                        strokeUniform: true,
+                        selectable: false,
+                        evented: false,
+                        objectCaching: false,
+                    }
+                );
+                fc.add(closingLine);
+            }
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            if (vertices.length === 0) {
+                rubberBand = new fabric.Line(
+                    [pointer.x, pointer.y, pointer.x, pointer.y],
+                    {
+                        stroke: STROKE_COLOR,
+                        strokeWidth: STROKE_WIDTH,
+                        strokeDashArray: [6, 4],
+                        strokeUniform: true,
+                        selectable: false,
+                        evented: false,
+                        objectCaching: false,
+                    }
+                );
+                fc.add(rubberBand);
+            } else {
+                rubberBand.set({ x1: pointer.x, y1: pointer.y,
+                                 x2: pointer.x, y2: pointer.y });
+                rebuildPreview();
+            }
+
+            vertices.push({ x: pointer.x, y: pointer.y });
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (vertices.length === 0 || !rubberBand) return;
+            const pointer = fc.getPointer(opt.e);
+            rubberBand.set({ x2: pointer.x, y2: pointer.y });
+            fc.renderAll();
+        };
+
+        const onDblClick = (opt) => {
+            // Pop the duplicate vertex from the extra mousedown before dblclick
+            if (vertices.length > 0) vertices.pop();
+
+            // Need at least 3 points for a closed polygon
+            if (vertices.length < 3) {
+                clearTemp();
+                vertices = [];
+                fc.renderAll();
+                return;
+            }
+
+            clearTemp();
+
+            // Build the permanent filled Polygon
+            const finalPolygon = new fabric.Polygon([...vertices], {
+                stroke: STROKE_COLOR,
+                strokeWidth: STROKE_WIDTH,
+                strokeUniform: true,
+                fill: STROKE_COLOR,
+                opacity: 0.25,
+                selectable: true,
+            });
+
+            fc.add(finalPolygon);
+            this.canvas.stampDefaults(finalPolygon, {
+                markupType: this.activeMarkupType,
+                preserveColor: true,
+            });
+
+            finalPolygon.setCoords();
+            fc.setActiveObject(finalPolygon);
+            fc.renderAll();
+
+            vertices = [];
+            this.setTool('select');
+        };
+
+        fc.on('mouse:down',    onMouseDown);
+        fc.on('mouse:move',    onMouseMove);
+        fc.on('mouse:dblclick', onDblClick);
+
+        this._shapeHandlers = {
+            'mouse:down':    onMouseDown,
+            'mouse:move':    onMouseMove,
+            'mouse:dblclick': onDblClick,
+        };
+
+        this._cleanupShapeDrawing = () => {
+            clearTemp();
+            vertices = [];
+            const fc2 = this.canvas && this.canvas.fabricCanvas;
+            if (fc2 && this._shapeHandlers) {
+                for (const [ev, fn] of Object.entries(this._shapeHandlers)) {
+                    fc2.off(ev, fn);
+                }
+                this._shapeHandlers = null;
+            }
+            delete this._cleanupShapeDrawing;
+        };
+    }
+
+    // =========================================================================
+    // DIMENSION LINE (click-drag line with auto-calculated measurement text)
+    // =========================================================================
+
+    /**
+     * Set up click-drag interaction for dimension lines.
+     * Creates a Group containing the line + tick marks + measurement text.
+     * Text is auto-calculated from the document's scale calibration.
+     */
+    _initDimensionDrawing() {
+        const fc = this.canvas.fabricCanvas;
+        const STROKE_COLOR = MARKUP_COLORS[this.activeMarkupType] || MARKUP_COLORS.note;
+        const STROKE_WIDTH = 2;
+        const TICK_SIZE = 10; // perpendicular tick height at each end
+
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let tempLine = null;
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            isDrawing = true;
+            const pointer = fc.getPointer(opt.e);
+            startX = pointer.x;
+            startY = pointer.y;
+
+            tempLine = new fabric.Line(
+                [startX, startY, startX, startY],
+                {
+                    stroke: STROKE_COLOR,
+                    strokeWidth: STROKE_WIDTH,
+                    strokeUniform: true,
+                    selectable: false,
+                    evented: false,
+                }
+            );
+            fc.add(tempLine);
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (!isDrawing || !tempLine) return;
+            const pointer = fc.getPointer(opt.e);
+            tempLine.set({ x2: pointer.x, y2: pointer.y });
+            fc.renderAll();
+        };
+
+        const onMouseUp = (opt) => {
+            if (!isDrawing || !tempLine) return;
+            isDrawing = false;
+
+            const pointer = fc.getPointer(opt.e);
+            const endX = pointer.x;
+            const endY = pointer.y;
+
+            fc.remove(tempLine);
+            tempLine = null;
+
+            // Calculate pixel distance
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const pixelLen = Math.sqrt(dx * dx + dy * dy);
+
+            if (pixelLen < 5) {
+                fc.renderAll();
+                return;
+            }
+
+            // Get real-world measurement from scale
+            let label = `${Math.round(pixelLen)}px`;
+            if (window.app && window.app.scale) {
+                label = window.app.scale.formatDistance(pixelLen, 1);
+            }
+
+            // Calculate perpendicular direction for tick marks
+            const angle = Math.atan2(dy, dx);
+            const perpX = Math.cos(angle + Math.PI / 2) * TICK_SIZE / 2;
+            const perpY = Math.sin(angle + Math.PI / 2) * TICK_SIZE / 2;
+
+            // Build the dimension line group
+            const mainLine = new fabric.Line([startX, startY, endX, endY], {
+                stroke: STROKE_COLOR,
+                strokeWidth: STROKE_WIDTH,
+                strokeUniform: true,
+            });
+
+            const tick1 = new fabric.Line(
+                [startX - perpX, startY - perpY, startX + perpX, startY + perpY],
+                { stroke: STROKE_COLOR, strokeWidth: STROKE_WIDTH, strokeUniform: true }
+            );
+
+            const tick2 = new fabric.Line(
+                [endX - perpX, endY - perpY, endX + perpX, endY + perpY],
+                { stroke: STROKE_COLOR, strokeWidth: STROKE_WIDTH, strokeUniform: true }
+            );
+
+            // Measurement text at midpoint, offset above the line
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            const textOffset = 12;
+            const labelText = new fabric.IText(label, {
+                left: midX + perpX * (textOffset / (TICK_SIZE / 2)),
+                top: midY + perpY * (textOffset / (TICK_SIZE / 2)),
+                fontSize: 14,
+                fill: STROKE_COLOR,
+                fontFamily: 'Arial, sans-serif',
+                originX: 'center',
+                originY: 'center',
+                angle: (angle * 180 / Math.PI),
+                selectable: false,
+                evented: false,
+            });
+
+            // Flip text if it would be upside down
+            if (labelText.angle > 90 || labelText.angle < -90) {
+                labelText.angle += 180;
+            }
+
+            const group = new fabric.Group([mainLine, tick1, tick2, labelText], {
+                selectable: true,
+            });
+
+            fc.add(group);
+            this.canvas.stampDefaults(group, {
+                markupType: this.activeMarkupType,
+                preserveColor: true,
+            });
+
+            // Store dimension metadata for later update if scale changes
+            group.dimensionPixelLength = pixelLen;
+            group.dimensionLabel = label;
+
+            group.setCoords();
+            fc.setActiveObject(group);
+            fc.renderAll();
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:up',   onMouseUp);
+
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:up':   onMouseUp,
+        };
+    }
+
+    // =========================================================================
+    // ERASER (click on objects to delete them)
+    // =========================================================================
+
+    /**
+     * Set up click-to-delete interaction for the eraser tool.
+     * Clicking on any markup object removes it from the canvas.
+     * Particularly useful for cleaning up freehand pen strokes.
+     */
+    _initEraserMode() {
+        const fc = this.canvas.fabricCanvas;
+
+        // Change cursor to indicate eraser mode
+        if (this.viewer && this.viewer.container) {
+            this.viewer.container.style.cursor = 'crosshair';
+        }
+
+        const onMouseDown = (opt) => {
+            if (!opt.target) return;
+
+            const obj = opt.target;
+            // Don't erase temp/non-markup objects (measurement in progress, etc.)
+            if (obj.evented === false) return;
+
+            // Remove the object
+            fc.remove(obj);
+            fc.renderAll();
+
+            // Notify canvas that markups changed (triggers auto-save)
+            if (this.canvas._fireChange) {
+                this.canvas._fireChange();
+            } else if (this.canvas.onMarkupChange) {
+                this.canvas.onMarkupChange();
+            }
+        };
+
+        fc.on('mouse:down', onMouseDown);
+
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+        };
+
+        // Restore cursor on cleanup
+        const originalCleanup = this._cleanupShapeDrawing.bind(this);
+        this._cleanupShapeDrawing = () => {
+            if (this.viewer && this.viewer.container) {
+                this.viewer.container.style.cursor = '';
+            }
+            // Call prototype cleanup
+            if (this._shapeHandlers && fc) {
+                for (const [ev, fn] of Object.entries(this._shapeHandlers)) {
+                    fc.off(ev, fn);
+                }
+                this._shapeHandlers = null;
+            }
         };
     }
 

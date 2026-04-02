@@ -669,6 +669,714 @@ export class MeasureTools {
     }
 
     // =========================================================================
+    // POLYLENGTH TOOL — multi-segment distance measurement
+    // =========================================================================
+
+    /**
+     * Initialize the polylength measurement tool.
+     *
+     * Interaction:
+     *   Click to add vertices (like area tool), double-click or snap-to-start to finish.
+     *   Creates an open polyline with per-segment labels and a total distance label.
+     *   Unlike area, this does NOT close the polygon — it measures a path.
+     *
+     * The resulting Polyline has:
+     *   measurementType: 'polylength'
+     *   pixelLength: total path length in natural Fabric coords
+     *   segmentLengths: array of per-segment pixel lengths
+     *   labelText: formatted total distance string
+     *
+     * Args:
+     *   canvas: CanvasOverlay instance.
+     *   toolbar: Toolbar instance.
+     *   scale: ScaleManager instance for unit conversion.
+     */
+    initPolylength(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+
+        let vertices = [];
+        let tempObjects = [];
+        let rubberBand = null;
+
+        /** Add a temp preview object to the canvas. */
+        const addTemp = (obj) => {
+            obj.selectable = false;
+            obj.evented = false;
+            fc.add(obj);
+            tempObjects.push(obj);
+        };
+
+        /** Remove all temporary preview objects. */
+        const clearTemp = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+            if (rubberBand) { fc.remove(rubberBand); rubberBand = null; }
+        };
+
+        /** Euclidean distance between two points. */
+        const segDist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+
+        /** Rebuild the visible in-progress polyline + per-segment labels. */
+        const updatePreview = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+
+            if (vertices.length === 0) return;
+
+            // Vertex dots
+            for (const v of vertices) {
+                const dot = new fabric.Circle({
+                    left: v.x - 4,
+                    top: v.y - 4,
+                    radius: 4,
+                    fill: DISTANCE_COLOR,
+                    stroke: null,
+                    strokeWidth: 0,
+                });
+                addTemp(dot);
+            }
+
+            // Polyline connecting vertices so far
+            if (vertices.length > 1) {
+                const line = new fabric.Polyline(
+                    vertices.map(v => ({ x: v.x, y: v.y })),
+                    {
+                        fill: 'transparent',
+                        stroke: DISTANCE_COLOR,
+                        strokeWidth: 2,
+                        strokeUniform: true,
+                    }
+                );
+                addTemp(line);
+
+                // Per-segment distance labels
+                let runningTotal = 0;
+                for (let i = 0; i < vertices.length - 1; i++) {
+                    const d = segDist(vertices[i], vertices[i + 1]);
+                    runningTotal += d;
+                    const midX = (vertices[i].x + vertices[i + 1].x) / 2;
+                    const midY = (vertices[i].y + vertices[i + 1].y) / 2;
+
+                    const segLabel = scale
+                        ? scale.formatDistance(d)
+                        : `${d.toFixed(1)} px`;
+
+                    const txt = new fabric.IText(segLabel, {
+                        left: midX,
+                        top: midY - 10,
+                        fontFamily: 'Arial, sans-serif',
+                        fontSize: 10,
+                        fill: DISTANCE_COLOR,
+                        originX: 'center',
+                        originY: 'center',
+                        opacity: 0.7,
+                    });
+                    addTemp(txt);
+                }
+
+                // Running total label at the last vertex
+                const last = vertices[vertices.length - 1];
+                const totalLabel = scale
+                    ? scale.formatDistance(runningTotal)
+                    : `${runningTotal.toFixed(1)} px`;
+
+                const totalTxt = new fabric.IText(`Σ ${totalLabel}`, {
+                    left: last.x + 12,
+                    top: last.y - 12,
+                    fontFamily: 'Arial, sans-serif',
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                    fill: DISTANCE_COLOR,
+                    originX: 'left',
+                    originY: 'center',
+                });
+                addTemp(totalTxt);
+            }
+        };
+
+        /** Finalize the polylength measurement. */
+        const finalize = () => {
+            if (vertices.length < 2) {
+                clearTemp();
+                vertices = [];
+                fc.renderAll();
+                return;
+            }
+
+            clearTemp();
+
+            // Calculate segment lengths and total
+            const segmentLengths = [];
+            let totalPixelLength = 0;
+            for (let i = 0; i < vertices.length - 1; i++) {
+                const d = segDist(vertices[i], vertices[i + 1]);
+                segmentLengths.push(d);
+                totalPixelLength += d;
+            }
+
+            const totalLabel = scale
+                ? scale.formatDistance(totalPixelLength)
+                : `${totalPixelLength.toFixed(1)} px`;
+
+            // Build the permanent polyline
+            const polyline = new fabric.Polyline(
+                vertices.map(v => ({ x: v.x, y: v.y })),
+                {
+                    fill: 'transparent',
+                    stroke: DISTANCE_COLOR,
+                    strokeWidth: 2,
+                    strokeUniform: true,
+                    selectable: true,
+                    objectCaching: false,
+                }
+            );
+
+            // Total label near the midpoint of the path
+            const midIdx = Math.floor(vertices.length / 2);
+            const labelPos = vertices[midIdx];
+            const label = new fabric.IText(`Σ ${totalLabel}`, {
+                left: labelPos.x,
+                top: labelPos.y - 16,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 13,
+                fontWeight: 'bold',
+                fill: DISTANCE_COLOR,
+                stroke: null,
+                strokeWidth: 0,
+                selectable: true,
+                editable: false,
+                originX: 'center',
+                originY: 'center',
+            });
+
+            // Link polyline and label with shared pairedId
+            const pairedId = crypto.randomUUID();
+
+            polyline.measurementType = 'polylength';
+            polyline.pixelLength = totalPixelLength;
+            polyline.segmentLengths = segmentLengths;
+            polyline.labelText = totalLabel;
+            polyline.markupAuthor = 'User';
+            polyline.markupTimestamp = new Date().toISOString();
+            polyline.pairedId = pairedId;
+
+            label.measurementType = 'polylength';
+            label.pixelLength = totalPixelLength;
+            label.labelText = totalLabel;
+            label.markupAuthor = 'User';
+            label.markupTimestamp = new Date().toISOString();
+            label.pairedId = pairedId;
+
+            fc.add(polyline);
+            fc.add(label);
+            fc.setActiveObject(polyline);
+            fc.renderAll();
+
+            vertices = [];
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            vertices.push({ x: pointer.x, y: pointer.y });
+            updatePreview();
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (vertices.length === 0) return;
+
+            const pointer = fc.getPointer(opt.e);
+            const last = vertices[vertices.length - 1];
+
+            // Update rubber-band line
+            if (rubberBand) {
+                rubberBand.set({ x1: last.x, y1: last.y, x2: pointer.x, y2: pointer.y });
+            } else {
+                rubberBand = new fabric.Line(
+                    [last.x, last.y, pointer.x, pointer.y],
+                    {
+                        stroke: DISTANCE_COLOR,
+                        strokeWidth: 1,
+                        strokeDashArray: [4, 3],
+                        selectable: false,
+                        evented: false,
+                        opacity: 0.7,
+                    }
+                );
+                fc.add(rubberBand);
+            }
+
+            fc.renderAll();
+        };
+
+        const onDblClick = () => {
+            // Double-click fires mousedown first — pop the duplicate vertex
+            if (vertices.length > 0) vertices.pop();
+            finalize();
+
+            toolbar._cleanupShapeDrawing();
+            toolbar.activeTool = 'select';
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tool === 'select');
+            });
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:dblclick', onDblClick);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:dblclick': onDblClick,
+        };
+
+        const origCleanup = toolbar._cleanupShapeDrawing.bind(toolbar);
+        toolbar._cleanupShapeDrawing = function () {
+            clearTemp();
+            vertices = [];
+            origCleanup();
+            toolbar._cleanupShapeDrawing = origCleanup;
+        };
+    }
+
+    // =========================================================================
+    // PERIMETER TOOL — closed polygon perimeter measurement
+    // =========================================================================
+
+    /**
+     * Initialize the perimeter measurement tool.
+     *
+     * Like area tool but measures perimeter instead of enclosed area.
+     * Click to add vertices, double-click or snap-to-start to close.
+     * Creates a closed polygon outline (no fill) with total perimeter label.
+     *
+     * The resulting Polygon has:
+     *   measurementType: 'perimeter'
+     *   pixelLength: total perimeter in natural Fabric coords
+     *   labelText: formatted perimeter distance string
+     *
+     * Args:
+     *   canvas: CanvasOverlay instance.
+     *   toolbar: Toolbar instance.
+     *   scale: ScaleManager instance for unit conversion.
+     */
+    initPerimeter(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+
+        let vertices = [];
+        let tempObjects = [];
+        let rubberBand = null;
+        let snapIndicator = null;
+
+        const addTemp = (obj) => {
+            obj.selectable = false;
+            obj.evented = false;
+            fc.add(obj);
+            tempObjects.push(obj);
+        };
+
+        const clearTemp = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+            if (rubberBand) { fc.remove(rubberBand); rubberBand = null; }
+            if (snapIndicator) { fc.remove(snapIndicator); snapIndicator = null; }
+        };
+
+        const segDist = (a, b) => Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+
+        const updatePreview = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+
+            if (vertices.length === 0) return;
+
+            for (const v of vertices) {
+                const dot = new fabric.Circle({
+                    left: v.x - 4, top: v.y - 4, radius: 4,
+                    fill: AREA_COLOR, stroke: null, strokeWidth: 0,
+                });
+                addTemp(dot);
+            }
+
+            if (vertices.length > 1) {
+                const line = new fabric.Polyline(
+                    vertices.map(v => ({ x: v.x, y: v.y })),
+                    { fill: 'transparent', stroke: AREA_COLOR, strokeWidth: 2, strokeUniform: true }
+                );
+                addTemp(line);
+            }
+        };
+
+        const finalize = () => {
+            if (vertices.length < 3) {
+                clearTemp();
+                vertices = [];
+                fc.renderAll();
+                return;
+            }
+
+            clearTemp();
+
+            // Sum all edges including the closing edge (last → first)
+            let totalPixelLength = 0;
+            for (let i = 0; i < vertices.length; i++) {
+                const next = (i + 1) % vertices.length;
+                totalPixelLength += segDist(vertices[i], vertices[next]);
+            }
+
+            const totalLabel = scale
+                ? scale.formatDistance(totalPixelLength)
+                : `${totalPixelLength.toFixed(1)} px`;
+
+            // Closed polygon outline — no fill
+            const polygon = new fabric.Polygon(
+                vertices.map(v => ({ x: v.x, y: v.y })),
+                {
+                    fill: 'transparent',
+                    stroke: AREA_COLOR,
+                    strokeWidth: 2,
+                    strokeUniform: true,
+                    selectable: true,
+                    objectCaching: false,
+                }
+            );
+
+            // Label at centroid
+            const centroid = this._centroid(vertices);
+            const label = new fabric.IText(`⊡ ${totalLabel}`, {
+                left: centroid.x,
+                top: centroid.y,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 13,
+                fontWeight: 'bold',
+                fill: AREA_COLOR,
+                stroke: null,
+                strokeWidth: 0,
+                selectable: true,
+                editable: false,
+                originX: 'center',
+                originY: 'center',
+            });
+
+            const pairedId = crypto.randomUUID();
+
+            polygon.measurementType = 'perimeter';
+            polygon.pixelLength = totalPixelLength;
+            polygon.labelText = totalLabel;
+            polygon.markupAuthor = 'User';
+            polygon.markupTimestamp = new Date().toISOString();
+            polygon.pairedId = pairedId;
+
+            label.measurementType = 'perimeter';
+            label.pixelLength = totalPixelLength;
+            label.labelText = totalLabel;
+            label.markupAuthor = 'User';
+            label.markupTimestamp = new Date().toISOString();
+            label.pairedId = pairedId;
+
+            fc.add(polygon);
+            fc.add(label);
+            fc.setActiveObject(polygon);
+            fc.renderAll();
+
+            vertices = [];
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            // Snap-to-start close
+            if (vertices.length >= 3) {
+                if (this._snapToStart(pointer.x, pointer.y, vertices[0].x, vertices[0].y)) {
+                    finalize();
+                    toolbar._cleanupShapeDrawing();
+                    toolbar.activeTool = 'select';
+                    document.querySelectorAll('.tool-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.tool === 'select');
+                    });
+                    return;
+                }
+            }
+
+            vertices.push({ x: pointer.x, y: pointer.y });
+            updatePreview();
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (vertices.length === 0) return;
+            const pointer = fc.getPointer(opt.e);
+            const last = vertices[vertices.length - 1];
+
+            if (rubberBand) {
+                rubberBand.set({ x1: last.x, y1: last.y, x2: pointer.x, y2: pointer.y });
+            } else {
+                rubberBand = new fabric.Line(
+                    [last.x, last.y, pointer.x, pointer.y],
+                    { stroke: AREA_COLOR, strokeWidth: 1, strokeDashArray: [4, 3],
+                      selectable: false, evented: false, opacity: 0.7 }
+                );
+                fc.add(rubberBand);
+            }
+
+            // Snap indicator
+            const nearStart = vertices.length >= 3 &&
+                this._snapToStart(pointer.x, pointer.y, vertices[0].x, vertices[0].y);
+
+            if (nearStart && !snapIndicator) {
+                snapIndicator = new fabric.Circle({
+                    left: vertices[0].x - 8, top: vertices[0].y - 8, radius: 8,
+                    fill: 'transparent', stroke: '#ffffff', strokeWidth: 2,
+                    selectable: false, evented: false,
+                });
+                fc.add(snapIndicator);
+            } else if (!nearStart && snapIndicator) {
+                fc.remove(snapIndicator);
+                snapIndicator = null;
+            }
+
+            fc.renderAll();
+        };
+
+        const onDblClick = () => {
+            if (vertices.length >= 3) {
+                vertices.pop();
+                finalize();
+                toolbar._cleanupShapeDrawing();
+                toolbar.activeTool = 'select';
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === 'select');
+                });
+            }
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:dblclick', onDblClick);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:dblclick': onDblClick,
+        };
+
+        const origCleanup = toolbar._cleanupShapeDrawing.bind(toolbar);
+        toolbar._cleanupShapeDrawing = function () {
+            clearTemp();
+            vertices = [];
+            origCleanup();
+            toolbar._cleanupShapeDrawing = origCleanup;
+        };
+    }
+
+    // =========================================================================
+    // ANGLE TOOL — 3-point angle measurement
+    // =========================================================================
+
+    /**
+     * Initialize the angle measurement tool.
+     *
+     * Interaction:
+     *   Click 1: first ray endpoint
+     *   Click 2: vertex (angle origin)
+     *   Click 3: second ray endpoint → creates angle measurement
+     *
+     * Creates a Group with two ray lines, an arc indicator, and an angle label.
+     *
+     * Args:
+     *   canvas: CanvasOverlay instance.
+     *   toolbar: Toolbar instance.
+     */
+    initAngle(canvas, toolbar) {
+        const fc = canvas.fabricCanvas;
+        const ANGLE_COLOR = '#ff8800'; // Orange — distinct from other measurement colors
+
+        let clicks = []; // Array of {x, y} — accumulates 3 points
+        let tempObjects = [];
+        let rubberBand = null;
+
+        const addTemp = (obj) => {
+            obj.selectable = false;
+            obj.evented = false;
+            fc.add(obj);
+            tempObjects.push(obj);
+        };
+
+        const clearTemp = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+            if (rubberBand) { fc.remove(rubberBand); rubberBand = null; }
+        };
+
+        const updatePreview = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+
+            // Dots at each placed point
+            for (const pt of clicks) {
+                const dot = new fabric.Circle({
+                    left: pt.x - 4, top: pt.y - 4, radius: 4,
+                    fill: ANGLE_COLOR, stroke: null, strokeWidth: 0,
+                });
+                addTemp(dot);
+            }
+
+            // Line from first click to second (vertex)
+            if (clicks.length >= 2) {
+                const line = new fabric.Line(
+                    [clicks[0].x, clicks[0].y, clicks[1].x, clicks[1].y],
+                    { stroke: ANGLE_COLOR, strokeWidth: 2, strokeUniform: true }
+                );
+                addTemp(line);
+            }
+        };
+
+        const finalize = () => {
+            clearTemp();
+
+            const [p1, vertex, p2] = clicks;
+
+            // Calculate angle using atan2
+            const angle1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
+            const angle2 = Math.atan2(p2.y - vertex.y, p2.x - vertex.x);
+
+            let angleDeg = ((angle2 - angle1) * 180 / Math.PI);
+            // Normalize to 0-360
+            if (angleDeg < 0) angleDeg += 360;
+            // Always show the smaller angle (0-180) unless reflex
+            const displayAngle = angleDeg > 180 ? 360 - angleDeg : angleDeg;
+
+            // Ray lengths (for drawing)
+            const ray1Len = Math.sqrt((p1.x - vertex.x) ** 2 + (p1.y - vertex.y) ** 2);
+            const ray2Len = Math.sqrt((p2.x - vertex.x) ** 2 + (p2.y - vertex.y) ** 2);
+            const rayLen = Math.min(ray1Len, ray2Len, 60); // Cap arc radius
+
+            // Build the two ray lines
+            const line1 = new fabric.Line(
+                [vertex.x, vertex.y, p1.x, p1.y],
+                { stroke: ANGLE_COLOR, strokeWidth: 2, strokeUniform: true,
+                  selectable: false, evented: false }
+            );
+            const line2 = new fabric.Line(
+                [vertex.x, vertex.y, p2.x, p2.y],
+                { stroke: ANGLE_COLOR, strokeWidth: 2, strokeUniform: true,
+                  selectable: false, evented: false }
+            );
+
+            // Arc indicator — approximate with a polyline of small segments
+            const arcRadius = rayLen * 0.4;
+            const arcPoints = [];
+            const startAngle = angleDeg > 180 ? angle2 : angle1;
+            const sweep = angleDeg > 180 ? (360 - angleDeg) : angleDeg;
+            const steps = Math.max(12, Math.round(sweep / 5));
+            for (let i = 0; i <= steps; i++) {
+                const t = startAngle + (sweep * Math.PI / 180) * (i / steps);
+                arcPoints.push({
+                    x: vertex.x + arcRadius * Math.cos(t),
+                    y: vertex.y + arcRadius * Math.sin(t),
+                });
+            }
+
+            const arc = new fabric.Polyline(arcPoints, {
+                fill: 'transparent',
+                stroke: ANGLE_COLOR,
+                strokeWidth: 1.5,
+                strokeUniform: true,
+                selectable: false,
+                evented: false,
+            });
+
+            // Label at the midpoint of the arc
+            const midT = startAngle + (sweep * Math.PI / 180) * 0.5;
+            const labelR = arcRadius + 14;
+            const label = new fabric.IText(`${displayAngle.toFixed(1)}°`, {
+                left: vertex.x + labelR * Math.cos(midT),
+                top: vertex.y + labelR * Math.sin(midT),
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 12,
+                fontWeight: 'bold',
+                fill: ANGLE_COLOR,
+                originX: 'center',
+                originY: 'center',
+                selectable: false,
+                editable: false,
+            });
+
+            const group = new fabric.Group([line1, line2, arc, label], {
+                selectable: true,
+                subTargetCheck: false,
+            });
+
+            group.measurementType = 'angle';
+            group.angleDegrees = displayAngle;
+            group.labelText = `${displayAngle.toFixed(1)}°`;
+            group.markupAuthor = 'User';
+            group.markupTimestamp = new Date().toISOString();
+
+            fc.add(group);
+            fc.setActiveObject(group);
+            fc.renderAll();
+
+            clicks = [];
+
+            // Switch to select
+            toolbar.setTool('select');
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            clicks.push({ x: pointer.x, y: pointer.y });
+            updatePreview();
+            fc.renderAll();
+
+            if (clicks.length === 3) {
+                finalize();
+            }
+        };
+
+        const onMouseMove = (opt) => {
+            if (clicks.length === 0) return;
+            const pointer = fc.getPointer(opt.e);
+            const last = clicks[clicks.length - 1];
+
+            if (rubberBand) {
+                rubberBand.set({ x1: last.x, y1: last.y, x2: pointer.x, y2: pointer.y });
+            } else {
+                rubberBand = new fabric.Line(
+                    [last.x, last.y, pointer.x, pointer.y],
+                    { stroke: ANGLE_COLOR, strokeWidth: 1, strokeDashArray: [4, 3],
+                      selectable: false, evented: false, opacity: 0.7 }
+                );
+                fc.add(rubberBand);
+            }
+
+            fc.renderAll();
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+        };
+
+        const origCleanup = toolbar._cleanupShapeDrawing.bind(toolbar);
+        toolbar._cleanupShapeDrawing = function () {
+            clearTemp();
+            clicks = [];
+            origCleanup();
+            toolbar._cleanupShapeDrawing = origCleanup;
+        };
+    }
+
+    // =========================================================================
     // COUNT TOOL — click to place numbered markers
     // =========================================================================
 

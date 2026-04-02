@@ -62,7 +62,10 @@ const TYPE_LABELS = {
     'change': 'Chng',
     // Phase 2: measurement types
     'distance': 'Dist',
+    'polylength': 'PLen',
     'area': 'Area',
+    'perimeter': 'Peri',
+    'angle': 'Angl',
     'count': 'Count',
     // Phase 3: image overlay — photo placed as a canvas markup object
     'image-overlay': 'Image',
@@ -377,6 +380,21 @@ export class MarkupList {
                         ? scale.formatArea(obj.pixelArea)
                         : (obj.labelText || '');
                     break;
+                case 'polylength':
+                    note = (scale && obj.pixelLength != null)
+                        ? `Σ ${scale.formatDistance(obj.pixelLength)}`
+                        : (obj.labelText || '');
+                    break;
+                case 'perimeter':
+                    note = (scale && obj.pixelLength != null)
+                        ? `⊡ ${scale.formatDistance(obj.pixelLength)}`
+                        : (obj.labelText || '');
+                    break;
+                case 'angle':
+                    note = obj.angleDegrees != null
+                        ? `${obj.angleDegrees.toFixed(1)}°`
+                        : (obj.labelText || '');
+                    break;
                 case 'count':
                     note = obj.countIndex != null ? `#${obj.countIndex}` : '';
                     break;
@@ -513,8 +531,10 @@ export class MarkupList {
         // For measurement objects, show a descriptive shape label based on measurementType
         let shapeLabel;
         if (entry.isMeasurement) {
-            shapeLabel = { distance: 'Ruler', area: 'Polygon', count: 'Marker' }[entry.type]
-                || SHAPE_LABELS[entry.shape] || entry.shape;
+            shapeLabel = {
+                distance: 'Ruler', polylength: 'Path', area: 'Polygon',
+                perimeter: 'Perimeter', angle: 'Angle', count: 'Marker',
+            }[entry.type] || SHAPE_LABELS[entry.shape] || entry.shape;
         } else if (entry.shape === 'group' || entry.shape === 'Group') {
             shapeLabel = 'Callout';
         } else {

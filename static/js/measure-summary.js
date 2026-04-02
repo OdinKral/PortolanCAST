@@ -34,7 +34,7 @@
 // VALID MEASUREMENT TYPES — allowlist for filter validation
 // =============================================================================
 
-const VALID_TYPES = new Set(['all', 'distance', 'area', 'count']);
+const VALID_TYPES = new Set(['all', 'distance', 'polylength', 'area', 'perimeter', 'angle', 'count']);
 
 // =============================================================================
 // MEASURE SUMMARY
@@ -230,7 +230,10 @@ export class MeasureSummary {
      *   boolean — true if this object should be skipped.
      */
     _isAreaCompanionLabel(obj) {
-        if (obj.measurementType !== 'area') return false;
+        // Area, polylength, and perimeter all create a paired IText label.
+        // Skip the IText to avoid double-counting in the summary panel.
+        const mt = obj.measurementType;
+        if (mt !== 'area' && mt !== 'polylength' && mt !== 'perimeter') return false;
         const t = obj.type;
         return t === 'IText' || t === 'i-text' || t === 'Textbox' || t === 'textbox';
     }
@@ -270,6 +273,25 @@ export class MeasureSummary {
                 formattedValue = (this.scale && rawValue > 0)
                     ? this.scale.formatArea(rawValue)
                     : (obj.labelText || `${rawValue.toFixed(0)} sq px`);
+                break;
+
+            case 'polylength':
+                rawValue = obj.pixelLength || 0;
+                formattedValue = (this.scale && rawValue > 0)
+                    ? `Σ ${this.scale.formatDistance(rawValue)}`
+                    : (obj.labelText || `${rawValue.toFixed(1)} px`);
+                break;
+
+            case 'perimeter':
+                rawValue = obj.pixelLength || 0;
+                formattedValue = (this.scale && rawValue > 0)
+                    ? `⊡ ${this.scale.formatDistance(rawValue)}`
+                    : (obj.labelText || `${rawValue.toFixed(1)} px`);
+                break;
+
+            case 'angle':
+                rawValue = obj.angleDegrees || 0;
+                formattedValue = obj.labelText || `${rawValue.toFixed(1)}°`;
                 break;
 
             case 'count':
@@ -313,13 +335,13 @@ export class MeasureSummary {
         };
 
         for (const e of this._entries) {
-            if (e.type === 'distance') {
+            if (e.type === 'distance' || e.type === 'polylength' || e.type === 'perimeter') {
                 stats.distance.count++;
                 stats.distance.totalPx += e.rawValue;
             } else if (e.type === 'area') {
                 stats.area.count++;
                 stats.area.totalPx += e.rawValue;
-            } else if (e.type === 'count') {
+            } else if (e.type === 'count' || e.type === 'angle') {
                 stats.count.count++;
             }
         }

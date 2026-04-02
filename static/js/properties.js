@@ -467,6 +467,34 @@ export class PropertiesPanel {
                 break;
             }
 
+            case 'polylength': {
+                if (this._els.measureLabel) this._els.measureLabel.textContent = 'Path Length:';
+                const plFormatted = scale && obj.pixelLength != null
+                    ? scale.formatDistance(obj.pixelLength)
+                    : (obj.labelText || '—');
+                if (this._els.measureValue) this._els.measureValue.textContent = plFormatted;
+                break;
+            }
+
+            case 'perimeter': {
+                if (this._els.measureLabel) this._els.measureLabel.textContent = 'Perimeter:';
+                const pmFormatted = scale && obj.pixelLength != null
+                    ? scale.formatDistance(obj.pixelLength)
+                    : (obj.labelText || '—');
+                if (this._els.measureValue) this._els.measureValue.textContent = pmFormatted;
+                break;
+            }
+
+            case 'angle': {
+                if (this._els.measureLabel) this._els.measureLabel.textContent = 'Angle:';
+                if (this._els.measureValue) {
+                    this._els.measureValue.textContent = obj.angleDegrees != null
+                        ? `${obj.angleDegrees.toFixed(1)}°`
+                        : (obj.labelText || '—');
+                }
+                break;
+            }
+
             case 'count': {
                 if (this._els.measureLabel) this._els.measureLabel.textContent = 'Marker:';
                 if (this._els.measureValue) {
@@ -563,7 +591,12 @@ export class PropertiesPanel {
         }
 
         // Visual properties
-        this._els.strokeColor.value = this._toHexColor(obj.stroke) || '#ff0000';
+        // Highlighter stores its visible color in fill (not stroke), so read
+        // fill for non-transparent filled objects, stroke for everything else.
+        const displayColor = (obj.fill && obj.fill !== 'transparent')
+            ? this._toHexColor(obj.fill)
+            : this._toHexColor(obj.stroke);
+        this._els.strokeColor.value = displayColor || '#ff0000';
         const sw = obj.strokeWidth || 2;
         this._els.strokeWidth.value = sw;
         this._els.strokeWidthVal.textContent = sw;
