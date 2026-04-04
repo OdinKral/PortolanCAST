@@ -187,6 +187,7 @@ carries this meaning automatically — no need to re-assign after the fact.
 | **W** | Polyline | Click to add vertices; double-click to finish open path |
 | — | Polygon | Click to add vertices; double-click to close and fill (25% opacity) |
 | **Shift+A** | Arrow | Click + drag — line with arrowhead |
+| — | Arc | Click + drag — semicircular arc between two points |
 | **C** | Cloud | Click + drag — revision cloud (construction standard) |
 | **O** | Callout | Click anchor point, then click text position |
 | — | Dimension | Click + drag — line with auto-measured text from scale |
@@ -281,6 +282,28 @@ A dialog opens with your text in a standard text area where your browser's
 built-in spell check is active — misspelled words get red underlines and
 right-click shows suggestions. Click **Apply** to sync corrections back.
 
+### PDF Text Selection
+
+In **Hand mode** (press **G** or **Esc**), you can click and drag over PDF text to
+select it — just like in Bluebeam or Adobe Reader. Selected text can be copied
+with Ctrl+C. Text selection is automatically disabled when any drawing or
+measurement tool is active.
+
+The text layer works by overlaying invisible positioned text spans that match
+the PDF's native text positions. This only works for born-digital PDFs (not
+scanned images).
+
+### Grouping
+
+Select multiple markups, then press **Ctrl+G** to combine them into a single
+group. The group moves, scales, and rotates as one object.
+
+Press **Ctrl+Shift+G** to ungroup back into individual markups. Only
+user-created groups can be ungrouped — measurement groups, callouts, and
+equipment markers are protected.
+
+Group and Ungroup are also available in the **Edit** menu.
+
 ---
 
 ## Measurement Tools
@@ -294,6 +317,7 @@ Set the drawing scale first (bottom status bar → scale selector), then measure
 | **A** | Area | Click vertices; double-click to close polygon |
 | — | Perimeter | Click vertices; double-click or snap to close. Measures total edge length |
 | — | Angle | Click 3 points: ray endpoint, vertex, ray endpoint. Shows angle in degrees |
+| — | Radius/Diameter | Click center, drag to edge. Shows circle outline, diameter line, and measurement |
 | **N** | Count | Click to place numbered markers |
 | **K** | Calibrate | Click two known points, enter the real-world distance |
 
@@ -885,6 +909,8 @@ quick identification.
 | Delete / Backspace | Delete selected markup |
 | Ctrl + Z | Undo |
 | Ctrl + Shift + Z | Redo |
+| Ctrl + G | Group selected markups |
+| Ctrl + Shift + G | Ungroup |
 | Ctrl + H | Find & Replace |
 | Esc | Deselect / exit tool |
 

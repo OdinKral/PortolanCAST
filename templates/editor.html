@@ -137,6 +137,17 @@
                         <span class="dropdown-shortcut">Esc</span>
                     </button>
                     <div class="dropdown-divider"></div>
+                    <button id="btn-group" class="dropdown-item"
+                            title="Group selected markups into a single object">
+                        <span class="dropdown-icon">&#9638;</span> Group
+                        <span class="dropdown-shortcut">Ctrl+G</span>
+                    </button>
+                    <button id="btn-ungroup" class="dropdown-item"
+                            title="Ungroup a grouped markup back into individual objects">
+                        <span class="dropdown-icon">&#9639;</span> Ungroup
+                        <span class="dropdown-shortcut">Ctrl+Shift+G</span>
+                    </button>
+                    <div class="dropdown-divider"></div>
                     <button id="btn-find-replace" class="dropdown-item"
                             title="Find and replace text in markups">
                         <span class="dropdown-icon">&#128269;</span> Find &amp; Replace
@@ -286,6 +297,9 @@
                 <button class="toolbar-btn tool-btn" data-tool="arrow" title="Arrow (Shift+A)">
                     <span class="icon">&#8594;</span> Arrow
                 </button>
+                <button class="toolbar-btn tool-btn" data-tool="arc" title="Arc — curved line segment">
+                    <span class="icon">&#8978;</span> Arc
+                </button>
                 <button class="toolbar-btn tool-btn" data-tool="dimension" title="Dimension Line — auto-measured">
                     <span class="icon">&#8596;</span> Dimension
                 </button>
@@ -324,6 +338,9 @@
                 </button>
                 <button class="toolbar-btn tool-btn" data-tool="angle" title="Angle — 3-point angle measurement">
                     <span class="icon">&#8736;</span> Angle
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="radius" title="Radius/Diameter — circle measurement">
+                    <span class="icon">&#8960;</span> Radius
                 </button>
                 <button class="toolbar-btn tool-btn" data-tool="count" title="Count Markers (N)">
                     <span class="icon">&#35;</span> Count
@@ -679,6 +696,10 @@
         <div id="canvas-container" style="display: none;">
             <!-- PDF rendered image -->
             <img id="pdf-image" alt="PDF page" draggable="false">
+            <!-- Text selection layer — transparent positioned spans over PDF image.
+                 Sits between the PDF image and the Fabric canvas so text is selectable
+                 when no drawing tool is active. Populated by text-layer.js on page load. -->
+            <div id="text-layer"></div>
             <!-- Fabric.js markup overlay — positioned absolutely over pdf-image via CSS -->
             <canvas id="fabric-canvas"></canvas>
         </div>

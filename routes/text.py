@@ -81,3 +81,38 @@ async def get_page_text(doc_id: int, page_number: int, ocr: bool = False):
         raise HTTPException(status_code=400, detail=str(e))
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/documents/{doc_id}/text-words/{page_number}")
+async def get_page_text_words(doc_id: int, page_number: int, rotate: int = 0):
+    """
+    Get word-level bounding boxes for the PDF text selection layer.
+
+    Returns positioned word data that the frontend renders as transparent
+    <span> elements over the PDF image, enabling native browser text selection.
+
+    Coordinates are in pixels at BASE_DPI (150), matching the rendered image.
+
+    Returns:
+        JSON with words array: [{x, y, w, h, text, block, line}, ...]
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    filepath = doc['filepath']
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Document file not found on disk")
+
+    # Text selection only works for PDF documents (not CAD)
+    source_format = db.get_document_setting(doc_id, "source_format")
+    if source_format in ("dxf", "dwg"):
+        return JSONResponse(content={"words": [], "page": page_number})
+
+    try:
+        words = pdf_engine.get_text_words(filepath, page_number, dpi=150, rotate=rotate)
+        return JSONResponse(content={"words": words, "page": page_number})
+    except IndexError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status_code=500, detail=str(e))

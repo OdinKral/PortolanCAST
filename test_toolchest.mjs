@@ -293,8 +293,10 @@ async function run() {
 
         // Clicking a stamp button sets activeTool to 'stamp'
         await page.evaluate(() => {
+            // Find the APPROVED stamp by label text (Quick Text buttons render first)
             const btns = document.querySelectorAll('#stamps-list .stamp-btn');
-            btns[0].click();   // APPROVED (first built-in)
+            const approved = [...btns].find(b => b.textContent.includes('APPROVED'));
+            approved.click();
         });
         await page.waitForTimeout(200);
 

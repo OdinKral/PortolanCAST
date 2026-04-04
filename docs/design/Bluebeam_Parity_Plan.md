@@ -116,27 +116,28 @@ source: "Bluebeam support.bluebeam.com + bluebeam.com product pages"
 | Polylength measure | Small | ✅ Done | Multi-segment distance (polyline + sum lengths) |
 
 #### Tier 2 — Weekly use, professional polish
-| Feature | Effort | Description |
-|---------|--------|-------------|
-| Custom Tool Chest | Large | Save/load/share custom markup presets |
-| Multi-row toolbar | Medium | 1-4 rows, configurable |
-| Editable hotkeys | Medium | User-configurable keyboard shortcuts |
-| Save-as naming | Small | Rename on bundle export |
-| Layer assignment | Medium | Right-click → assign markup to layer |
-| Landscape default | Small | Auto-detect page orientation |
+| Feature | Effort | Status | Description |
+|---------|--------|--------|-------------|
+| Custom Tool Chest | Large | ✅ Done | Stamps, presets, sequences (tools-panel.js) |
+| Stamps | Medium | ✅ Done | Built-in + custom stamps, quick text (tools-panel.js) |
+| Grouping/Ungrouping | Small | ✅ Done | Ctrl+G / Ctrl+Shift+G — Fabric.js groups |
+| Text selection in PDF | Large | ✅ Done | Transparent text layer with word-level bboxes |
+| Multi-row toolbar | Medium | | 1-4 rows, configurable |
+| Editable hotkeys | Medium | | User-configurable keyboard shortcuts |
+| Save-as naming | Small | | Rename on bundle export |
+| Layer assignment | Medium | | Right-click → assign markup to layer |
+| Landscape default | Small | | Auto-detect page orientation |
 
 #### Tier 3 — Advanced / next version
 | Feature | Effort | Status | Description |
 |---------|--------|--------|-------------|
-| Text selection in PDF | Large | | Requires PDF text layer interaction |
 | Review Text (edit marks) | Large | | Underline/strikethrough on PDF text |
 | Hyperlinks | Medium | | Clickable links in markups |
-| Stamps | Medium | | Pre-made stamp library |
 | Form fields | Large | | Interactive PDF forms |
 | Digital signatures | Large | | PKI signing |
-| Arc tool | Small | | Single arc segment |
+| Arc tool | Small | ✅ Done | Semicircular arc via click-drag |
 | Perimeter measure | Small | ✅ Done | Polygon perimeter (no fill) |
-| Radius/Diameter | Small | | Circle-based measurements |
+| Radius/Diameter | Small | ✅ Done | Circle center→edge, shows radius + diameter |
 | Angle measure | Medium | ✅ Done | 3-point angle |
 | Volume | Medium | | Area × depth calculation |
 | Dynamic Fill | Large | | Flood-fill counting |

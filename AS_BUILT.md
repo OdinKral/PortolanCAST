@@ -1,6 +1,6 @@
 # PortolanCAST — As-Built Architecture
 
-**Last updated:** 2026-03-30
+**Last updated:** 2026-04-03
 **Status:** Living document — updated with each major feature addition
 
 ---
@@ -182,6 +182,92 @@ Case-sensitive toggle.
   handles red squiggles and right-click suggestions. Apply syncs back.
 - **System Fonts**: Detected lazily on first text edit. Populates both format
   bar and properties panel font dropdowns.
+
+---
+
+## PDF Text Selection Layer
+
+Transparent text overlay enabling native browser text selection on PDF documents.
+
+### Architecture
+
+The text layer sits between the PDF image and the Fabric.js canvas overlay in the
+DOM z-order:
+
+```
+#canvas-container
+  ├── <img> #pdf-image           (z-index: auto)
+  ├── <div> #text-layer          (z-index: 1)
+  └── <div> .canvas-container    (z-index: 2, Fabric.js wrapper)
+```
+
+### Backend (`pdf_engine.py`)
+
+`get_text_words()` uses PyMuPDF's `page.get_text('words')` to extract word-level
+bounding boxes. Returns `[{x, y, w, h, text, block, line}]` in pixels at
+BASE_DPI (150). Handles page rotation by transforming coordinates through the
+rotation matrix before scaling.
+
+### API (`routes/text.py`)
+
+`GET /api/documents/{id}/text-words/{page}?rotate=N` — returns word bboxes.
+Returns `{words: []}` for CAD documents (no text layer for DXF/DWG).
+
+### Frontend (`static/js/text-layer.js`)
+
+- Renders transparent `<span>` elements positioned over the PDF image
+- Text inserted via `textContent` (XSS-safe)
+- Font size set to 85% of bbox height for visual alignment
+- Word data cached per page for fast zoom changes
+- `applyZoom()` uses CSS `transform: scale()` — no re-rendering on zoom
+- `setDrawingActive()` toggles `pointer-events` via `.text-select-active` class
+
+### Pointer Event Strategy
+
+- Hand/null mode: text layer interactive (pointer-events: auto)
+- Select/drawing/measure mode: text layer transparent (pointer-events: none)
+- Controlled by `toolbar.onToolSet` callback in app.js
+
+---
+
+## Grouping / Ungrouping
+
+### Group (`Ctrl+G`)
+
+Converts an `ActiveSelection` (multi-select) into a persistent `fabric.Group`.
+Individual objects are removed from the canvas and added as Group children.
+The `_isUserGroup` property (serialized via CUSTOM_PROPERTIES) distinguishes
+user-created groups from system groups (measurements, callouts, equipment markers).
+
+Semantic metadata (markupType, markupStatus, markupNote, etc.) is promoted from
+the first child to the group so the Properties panel and Markup List can display it.
+
+### Ungroup (`Ctrl+Shift+G`)
+
+Only acts on groups with `_isUserGroup === true`. Transforms child coordinates
+from group-local space to canvas-space using `fabric.util.qrDecompose` on the
+composed transform matrix, then adds each child back to the canvas as an
+independent object.
+
+---
+
+## Additional Markup Tools
+
+### Arc Tool (`toolbar.js`)
+
+Click-drag semicircular arc. Uses SVG Path with `A` (arc) command:
+`M x1 y1 A radius radius 0 0 1 x2 y2`. The radius equals half the chord length
+(semicircle). Produces a `fabric.Path` object with semantic metadata.
+
+### Radius/Diameter Measure (`measure.js`)
+
+Click center, drag to edge. Creates a Group containing:
+- Circle outline (transparent fill, cyan stroke)
+- Diameter line (through center in the direction of the drag)
+- Center crosshair (small +)
+- Label: `⌀ {diameter} (r={radius})`
+
+`measurementType: 'radius'`, `pixelLength` stores the radius in natural pixels.
 
 ---
 

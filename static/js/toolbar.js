@@ -66,6 +66,14 @@ export class Toolbar {
         this.onToolChange = null;
 
         /**
+         * Callback fired AFTER the active tool is fully configured.
+         * Unlike onToolChange (which fires before cleanup), onToolSet fires
+         * after this.activeTool is updated, so listeners see the new tool.
+         * @type {Function|null}
+         */
+        this.onToolSet = null;
+
+        /**
          * Callback fired when the node-edit tool is activated.
          * Set by app.js to call nodeEditor.enterEditModeOnSelection().
          * node-edit is a transient action: it triggers edit mode for the
@@ -91,9 +99,9 @@ export class Toolbar {
             hand: 'navigate', select: 'navigate',
             pen: 'markup', rect: 'markup', ellipse: 'markup', line: 'markup',
             highlighter: 'markup', text: 'markup', cloud: 'markup', callout: 'markup',
-            polyline: 'markup', polygon: 'markup', arrow: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
+            polyline: 'markup', polygon: 'markup', arrow: 'markup', arc: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
             dimension: 'markup', eraser: 'markup',
-            distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', count: 'measure',
+            distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', radius: 'measure', count: 'measure',
             calibrate: 'measure', 'node-edit': 'measure',
         };
 
@@ -413,6 +421,18 @@ export class Toolbar {
             });
         }
 
+        // Edit → Group (Ctrl+G)
+        const btnGroup = document.getElementById('btn-group');
+        if (btnGroup) {
+            btnGroup.addEventListener('click', () => this._groupSelection());
+        }
+
+        // Edit → Ungroup (Ctrl+Shift+G)
+        const btnUngroup = document.getElementById('btn-ungroup');
+        if (btnUngroup) {
+            btnUngroup.addEventListener('click', () => this._ungroupSelection());
+        }
+
         // View → Zoom In / Out / Fit (delegate to existing viewer methods)
         const btnMenuZoomIn = document.getElementById('btn-menu-zoom-in');
         if (btnMenuZoomIn) {
@@ -651,6 +671,18 @@ export class Toolbar {
                     if (e.ctrlKey) {
                         e.preventDefault();
                         if (this.onFindReplace) this.onFindReplace();
+                    }
+                    break;
+
+                // Group: Ctrl+G / Ungroup: Ctrl+Shift+G
+                case 'g':
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this._ungroupSelection();
+                        } else {
+                            this._groupSelection();
+                        }
                     }
                     break;
 
@@ -933,6 +965,15 @@ export class Toolbar {
                 this._initShapeDrawing(toolName);
                 break;
 
+            case 'arc':
+                // Click-drag tool: mousedown sets start, mousemove shows preview arc,
+                // mouseup commits. Arc bulges perpendicular to the chord.
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initArcDrawing();
+                break;
+
             case 'arrow':
                 // Click-drag tool: mousedown sets tail, mouseup places tip with filled arrowhead.
                 // Produces a Group(shaft Line + arrowhead Path) so the whole arrow moves/scales
@@ -1124,6 +1165,15 @@ export class Toolbar {
                 }
                 break;
 
+            case 'radius':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initRadius(this.canvas, this, this.scale);
+                }
+                break;
+
             case 'calibrate':
                 fc.isDrawingMode = false;
                 fc.selection = false;
@@ -1144,6 +1194,11 @@ export class Toolbar {
                 this.viewer.container.classList.add('hand-mode');
                 break;
         }
+
+        // Notify listeners that the tool is now fully configured.
+        // Unlike onToolChange (fires before cleanup), this fires after
+        // activeTool is set and drawing mode is configured.
+        if (this.onToolSet) this.onToolSet(this.activeTool);
     }
 
     // =========================================================================
@@ -1233,6 +1288,117 @@ export class Toolbar {
     // =========================================================================
     // SETTINGS MODAL — per-tool visibility
     // =========================================================================
+
+    // =========================================================================
+    // GROUP / UNGROUP
+    // =========================================================================
+
+    /**
+     * Group the current multi-selection into a single Fabric Group.
+     *
+     * Only acts when an ActiveSelection (multi-select) is active.
+     * Custom properties from the first child are promoted to the group
+     * so markup metadata (type, status, note) survives serialization.
+     */
+    _groupSelection() {
+        const fc = this.canvas?.fabricCanvas;
+        if (!fc) return;
+
+        const active = fc.getActiveObject();
+        if (!active || active.type !== 'activeselection') return;
+
+        // Convert ActiveSelection → persistent Group.
+        // Collect object references, discard the selection (returns objects to canvas),
+        // then remove each from the canvas before creating the Group.
+        const objects = active.getObjects().slice();  // copy the array
+        fc.discardActiveObject();
+
+        // Remove individual objects — they'll live inside the Group instead
+        objects.forEach(obj => fc.remove(obj));
+
+        const group = new fabric.Group(objects, {
+            canvas: fc,
+        });
+
+        // Promote semantic metadata from the first child so the group
+        // carries a markupType for the properties panel and markup list.
+        const donor = objects[0];
+        if (donor) {
+            if (donor.markupType)      group.markupType      = donor.markupType;
+            if (donor.markupStatus)    group.markupStatus    = donor.markupStatus;
+            if (donor.markupNote)      group.markupNote      = donor.markupNote;
+            if (donor.markupAuthor)    group.markupAuthor    = donor.markupAuthor;
+            if (donor.markupTimestamp) group.markupTimestamp  = donor.markupTimestamp;
+            if (donor.markupId)        group.markupId        = donor.markupId;
+        }
+
+        // Tag the group so ungroup knows it was user-created (not a measurement
+        // or callout group that should not be ungrouped).
+        group._isUserGroup = true;
+
+        fc.add(group);
+        fc.setActiveObject(group);
+        fc.requestRenderAll();
+
+        // Push undo snapshot
+        this.canvas?._pushUndoSnapshot?.();
+    }
+
+    /**
+     * Ungroup a user-created Group back into individual objects.
+     *
+     * Only acts on Groups tagged with _isUserGroup to avoid breaking
+     * measurement groups, callouts, or equipment markers.
+     */
+    _ungroupSelection() {
+        const fc = this.canvas?.fabricCanvas;
+        if (!fc) return;
+
+        const active = fc.getActiveObject();
+        if (!active || active.type !== 'group' || !active._isUserGroup) return;
+
+        // Get the group's transform matrix to convert child coords to canvas-space
+        const groupMatrix = active.calcTransformMatrix();
+        const items = active.getObjects().slice();
+
+        // Remove the group from canvas first
+        fc.discardActiveObject();
+        fc.remove(active);
+
+        // Remove children from group internals and transform to canvas coords
+        items.forEach(obj => {
+            // Get the object's absolute position by combining group + object transforms
+            const objMatrix = obj.calcTransformMatrix();
+            const fullMatrix = fabric.util.multiplyTransformMatrices(groupMatrix, objMatrix);
+            const options = fabric.util.qrDecompose(fullMatrix);
+
+            obj.set({
+                left: options.translateX,
+                top: options.translateY,
+                scaleX: options.scaleX,
+                scaleY: options.scaleY,
+                angle: options.angle,
+                skewX: options.skewX,
+                skewY: options.skewY,
+            });
+            obj.setCoords();
+            fc.add(obj);
+        });
+
+        // Select all ungrouped items as an ActiveSelection
+        if (items.length > 1) {
+            fc.discardActiveObject();
+            const sel = new fabric.ActiveSelection(items, { canvas: fc });
+            fc.setActiveObject(sel);
+        } else if (items.length === 1) {
+            fc.setActiveObject(items[0]);
+        }
+
+        fc.requestRenderAll();
+
+        // Push undo snapshot
+        this.canvas?._pushUndoSnapshot?.();
+    }
 
     /**
      * Open the toolbar settings modal.
@@ -1408,6 +1574,9 @@ export class Toolbar {
         } else if (this.activeTool === 'arrow') {
             this._cleanupShapeDrawing();
             this._initArrowDrawing();
+        } else if (this.activeTool === 'arc') {
+            this._cleanupShapeDrawing();
+            this._initArcDrawing();
         } else if (this.activeTool === 'sticky-note') {
             this._cleanupShapeDrawing();
             this._initStickyNotePlacement();
@@ -1738,6 +1907,141 @@ export class Toolbar {
      *   markupType metadata is stamped on the Group (not on its children),
      *   consistent with how Callout uses a Group.
      */
+    // =========================================================================
+    // ARC DRAWING — click start, drag end, arc bulges perpendicular to chord
+    // =========================================================================
+
+    /**
+     * Initialize the arc drawing tool.
+     *
+     * Interaction:
+     *   mousedown → record start point
+     *   mousemove → preview arc (semicircle from start to cursor)
+     *   mouseup → commit the arc as a Path object
+     *
+     * The arc is a semicircle (180 degrees) bulging perpendicular to the chord
+     * (the line from start to end). The bulge direction is the left side of the
+     * chord vector (counterclockwise). Users can flip/rotate after placement.
+     */
+    _initArcDrawing() {
+        const fc = this.canvas.fabricCanvas;
+
+        const override = this._pendingPresetOverride;
+        this._pendingPresetOverride = null;
+        const STROKE_COLOR = override?.strokeColor
+            || MARKUP_COLORS[this.activeMarkupType]
+            || MARKUP_COLORS.note;
+        const STROKE_WIDTH = override?.strokeWidth ?? 2;
+
+        this._lastStrokeColor = STROKE_COLOR;
+        this._lastStrokeWidth = STROKE_WIDTH;
+
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let previewPath = null;
+
+        /**
+         * Build an SVG arc path string for a semicircle from (x1,y1) to (x2,y2).
+         * Uses SVG 'A' (arc) command with rx=ry=radius, sweep-flag=1 (clockwise).
+         */
+        const buildArcPath = (x1, y1, x2, y2) => {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const chordLen = Math.sqrt(dx * dx + dy * dy);
+            if (chordLen < 2) return null;
+
+            // Radius = half the chord length (semicircle)
+            const radius = chordLen / 2;
+
+            // SVG arc: M x1,y1 A rx ry x-rotation large-arc-flag sweep-flag x2,y2
+            // large-arc-flag=0 (minor arc for semicircle), sweep-flag=1 (clockwise bulge)
+            return `M ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2}`;
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+
+            const pointer = fc.getPointer(opt.e);
+            isDrawing = true;
+            startX = pointer.x;
+            startY = pointer.y;
+        };
+
+        const onMouseMove = (opt) => {
+            if (!isDrawing) return;
+
+            const pointer = fc.getPointer(opt.e);
+            const pathStr = buildArcPath(startX, startY, pointer.x, pointer.y);
+            if (!pathStr) return;
+
+            // Remove old preview
+            if (previewPath) {
+                fc.remove(previewPath);
+            }
+
+            previewPath = new fabric.Path(pathStr, {
+                fill: 'transparent',
+                stroke: STROKE_COLOR,
+                strokeWidth: STROKE_WIDTH,
+                strokeUniform: true,
+                strokeDashArray: [6, 3],
+                selectable: false,
+                evented: false,
+            });
+            fc.add(previewPath);
+            fc.renderAll();
+        };
+
+        const onMouseUp = (opt) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (previewPath) {
+                fc.remove(previewPath);
+                previewPath = null;
+            }
+
+            const pointer = fc.getPointer(opt.e);
+            const dx = pointer.x - startX;
+            const dy = pointer.y - startY;
+            const chordLen = Math.sqrt(dx * dx + dy * dy);
+
+            if (chordLen < 5) {
+                fc.renderAll();
+                return;
+            }
+
+            const pathStr = buildArcPath(startX, startY, pointer.x, pointer.y);
+            if (!pathStr) return;
+
+            const arcPath = new fabric.Path(pathStr, {
+                fill: 'transparent',
+                stroke: STROKE_COLOR,
+                strokeWidth: STROKE_WIDTH,
+                strokeUniform: true,
+                selectable: true,
+            });
+
+            // Stamp semantic metadata
+            this.canvas.stampDefaults(arcPath);
+
+            fc.add(arcPath);
+            fc.setActiveObject(arcPath);
+            fc.renderAll();
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:up', onMouseUp);
+
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:up': onMouseUp,
+        };
+    }
+
     _initArrowDrawing() {
         const fc = this.canvas.fabricCanvas;
         const STROKE_COLOR = MARKUP_COLORS[this.activeMarkupType] || MARKUP_COLORS.note;
@@ -3108,11 +3412,23 @@ export class Toolbar {
                 <tr><td style="padding:4px 8px; color:#7788aa;">L</td><td>Line</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">P</td><td>Pen / freehand</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">T</td><td>Text</td></tr>
-                <tr><td style="padding:4px 8px; color:#7788aa;">M</td><td>Measure distance</td></tr>
-                <tr><td style="padding:4px 8px; color:#7788aa;">1-5</td><td>Switch intent (Note/Deficiency/...)</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">C</td><td>Cloud</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">O</td><td>Callout</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">W</td><td>Polyline</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Shift+A</td><td>Arrow</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">S</td><td>Sticky Note</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">I</td><td>Image Overlay</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">U</td><td>Distance measure</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">A</td><td>Area measure</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">N</td><td>Count markers</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">K</td><td>Calibrate scale</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">M</td><td>Equipment Marker</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">1-5</td><td>Switch intent (Note/Issue/Question/Approval/Change)</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">Delete</td><td>Delete selected</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+Z</td><td>Undo</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+Y</td><td>Redo</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+G</td><td>Group selected</td></tr>
+                <tr><td style="padding:4px 8px; color:#7788aa;">Ctrl+Shift+G</td><td>Ungroup</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">+/−</td><td>Zoom in/out</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">0</td><td>Fit to width</td></tr>
                 <tr><td style="padding:4px 8px; color:#7788aa;">PgUp/PgDn</td><td>Previous/next page</td></tr>

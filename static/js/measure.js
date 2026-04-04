@@ -1842,4 +1842,212 @@ export class MeasureTools {
         const dy = curY - startY;
         return Math.sqrt(dx * dx + dy * dy) <= SNAP_THRESHOLD;
     }
+
+    // =========================================================================
+    // RADIUS / DIAMETER TOOL — click center → drag to edge
+    // =========================================================================
+
+    /**
+     * Initialize the radius/diameter measurement tool.
+     *
+     * Interaction:
+     *   mousedown → mark circle center
+     *   mousemove → preview circle outline growing from center
+     *   mouseup → compute radius, create Group(Circle + diameter Line + label)
+     *
+     * The resulting Group has:
+     *   measurementType: 'radius'
+     *   pixelLength: radius in natural Fabric coords
+     *   labelText: formatted diameter string (shows both radius and diameter)
+     *
+     * Args:
+     *   canvas: CanvasOverlay instance.
+     *   toolbar: Toolbar instance.
+     *   scale: ScaleManager instance for unit conversion.
+     */
+    initRadius(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+
+        let isDrawing = false;
+        let centerX = 0;
+        let centerY = 0;
+        let previewCircle = null;
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+
+            const pointer = fc.getPointer(opt.e);
+            isDrawing = true;
+            centerX = pointer.x;
+            centerY = pointer.y;
+
+            previewCircle = new fabric.Circle({
+                left: centerX,
+                top: centerY,
+                radius: 1,
+                originX: 'center',
+                originY: 'center',
+                fill: 'transparent',
+                stroke: DISTANCE_COLOR,
+                strokeWidth: 2,
+                strokeUniform: true,
+                strokeDashArray: [6, 3],
+                selectable: false,
+                evented: false,
+            });
+            fc.add(previewCircle);
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (!isDrawing || !previewCircle) return;
+            const pointer = fc.getPointer(opt.e);
+            const dx = pointer.x - centerX;
+            const dy = pointer.y - centerY;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            previewCircle.set({ radius: Math.max(radius, 1) });
+            fc.renderAll();
+        };
+
+        const onMouseUp = (opt) => {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (previewCircle) {
+                fc.remove(previewCircle);
+                previewCircle = null;
+            }
+
+            const pointer = fc.getPointer(opt.e);
+            const dx = pointer.x - centerX;
+            const dy = pointer.y - centerY;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+
+            if (radius < MIN_DISTANCE) {
+                fc.renderAll();
+                return;
+            }
+
+            const diameter = radius * 2;
+
+            // Format using scale — show diameter with symbol prefix
+            const radiusText = scale
+                ? scale.formatDistance(radius)
+                : `${radius.toFixed(1)} px`;
+            const diameterText = scale
+                ? scale.formatDistance(diameter)
+                : `${diameter.toFixed(1)} px`;
+            const labelText = `\u2300 ${diameterText} (r=${radiusText})`;
+
+            // Build the measurement group
+            const group = this._buildRadiusGroup(
+                centerX, centerY, radius, pointer.x, pointer.y, labelText
+            );
+
+            group.measurementType = 'radius';
+            group.pixelLength = radius;
+            group.labelText = labelText;
+            group.markupAuthor = 'User';
+            group.markupTimestamp = new Date().toISOString();
+
+            fc.add(group);
+            fc.setActiveObject(group);
+            fc.renderAll();
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:up', onMouseUp);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:up': onMouseUp,
+        };
+    }
+
+    /**
+     * Build a Fabric Group for a radius/diameter measurement.
+     *
+     * Components: circle outline + diameter line (center to edge) + label.
+     *
+     * Args:
+     *   cx, cy: Circle center in natural Fabric coords.
+     *   radius: Circle radius in natural pixels.
+     *   edgeX, edgeY: Edge point where the user released (for diameter line direction).
+     *   labelText: Pre-formatted measurement string.
+     *
+     * Returns:
+     *   fabric.Group — selectable group.
+     */
+    _buildRadiusGroup(cx, cy, radius, edgeX, edgeY, labelText) {
+        // Circle outline
+        const circle = new fabric.Circle({
+            left: cx,
+            top: cy,
+            radius: radius,
+            originX: 'center',
+            originY: 'center',
+            fill: 'transparent',
+            stroke: DISTANCE_COLOR,
+            strokeWidth: 2,
+            strokeUniform: true,
+            selectable: false,
+            evented: false,
+        });
+
+        // Diameter line — from the edge point through center to the opposite side
+        const dx = edgeX - cx;
+        const dy = edgeY - cy;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const ux = dx / len;
+        const uy = dy / len;
+        const x1 = cx - ux * radius;
+        const y1 = cy - uy * radius;
+        const x2 = cx + ux * radius;
+        const y2 = cy + uy * radius;
+
+        const dLine = new fabric.Line([x1, y1, x2, y2], {
+            stroke: DISTANCE_COLOR,
+            strokeWidth: 1.5,
+            strokeUniform: true,
+            selectable: false,
+            evented: false,
+        });
+
+        // Center cross-hair (small +)
+        const crossSize = 4;
+        const crossH = new fabric.Line([cx - crossSize, cy, cx + crossSize, cy], {
+            stroke: DISTANCE_COLOR, strokeWidth: 1, strokeUniform: true,
+            selectable: false, evented: false,
+        });
+        const crossV = new fabric.Line([cx, cy - crossSize, cx, cy + crossSize], {
+            stroke: DISTANCE_COLOR, strokeWidth: 1, strokeUniform: true,
+            selectable: false, evented: false,
+        });
+
+        // Label above center
+        const label = new fabric.IText(labelText, {
+            left: cx,
+            top: cy - radius - 14,
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 12,
+            fontWeight: 'bold',
+            fill: DISTANCE_COLOR,
+            stroke: null,
+            strokeWidth: 0,
+            selectable: false,
+            editable: false,
+            originX: 'center',
+            originY: 'center',
+        });
+
+        const group = new fabric.Group([circle, dLine, crossH, crossV, label], {
+            selectable: true,
+            subTargetCheck: false,
+        });
+
+        group.pairedId = crypto.randomUUID();
+        return group;
+    }
 }

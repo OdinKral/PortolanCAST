@@ -79,6 +79,7 @@ const DEPENDENCY_MAP = {
     ],
     'pdf_engine.py': [
         'test_ocr_text.mjs', 'test_phase2.mjs', 'test_l1_rotation.mjs',
+        'test_parity_features.mjs',
     ],
 
     // ── Backend: Route modules (granular blast radius) ───────────────────
@@ -89,7 +90,7 @@ const DEPENDENCY_MAP = {
     'routes/entity_photos.py': ['test_sprint1_capture.mjs'],
     'routes/entity_tasks.py':  ['test_stage3b.mjs', 'test_sprint1_capture.mjs'],
     'routes/entities.py':      ['test_stage3a.mjs', 'test_stage3b.mjs', 'test_sprint1_capture.mjs', 'test_equipment_marker.mjs'],
-    'routes/text.py':          ['test_ocr_text.mjs'],
+    'routes/text.py':          ['test_ocr_text.mjs', 'test_parity_features.mjs'],
     'routes/photos.py':        ['test_photos.mjs'],
     'routes/search.py':        ['test_search.mjs', 'test_brief_tags.mjs', 'test_rfi_generator.mjs', 'test_obsidian_export.mjs'],
     'routes/reports.py':       ['test_brief_tags.mjs', 'test_rfi_generator.mjs', 'test_obsidian_export.mjs'],
@@ -111,6 +112,7 @@ const DEPENDENCY_MAP = {
         'test_phase5_layers.mjs', 'test_toolchest.mjs',
         'test_health_monitor.mjs', 'test_stage3b.mjs',
         'test_sprint1_capture.mjs', 'test_panel_collapse.mjs',
+        'test_parity_features.mjs',
     ],
     'static/js/canvas.js': [
         'test_shapes.mjs', 'test_properties.mjs', 'test_markup_list.mjs',
@@ -120,7 +122,7 @@ const DEPENDENCY_MAP = {
         'test_phase4a.mjs', 'test_phase5_layers.mjs',
         'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
         'test_toolchest.mjs', 'test_nodecast.mjs', 'test_image_overlay.mjs',
-        'test_equipment_marker.mjs',
+        'test_equipment_marker.mjs', 'test_parity_features.mjs',
     ],
     'static/js/toolbar.js': [
         'test_shapes.mjs', 'test_phase1_tools.mjs', 'test_phase1_polish.mjs',
@@ -128,7 +130,7 @@ const DEPENDENCY_MAP = {
         'test_l2_toolbar_custom.mjs', 'test_l3_mode_bar.mjs',
         'test_polyline.mjs', 'test_arrow.mjs', 'test_sticky_note.mjs',
         'test_image_overlay.mjs', 'test_sprint1_capture.mjs',
-        'test_equipment_marker.mjs',
+        'test_equipment_marker.mjs', 'test_parity_features.mjs',
     ],
     'static/js/properties.js': [
         'test_properties.mjs', 'test_phase1_tools.mjs', 'test_phase2.mjs',
@@ -150,7 +152,7 @@ const DEPENDENCY_MAP = {
         'test_image_overlay.mjs',
     ],
     'static/js/measure.js': [
-        'test_phase2.mjs', 'test_phase4a.mjs',
+        'test_phase2.mjs', 'test_phase4a.mjs', 'test_parity_features.mjs',
     ],
     'static/js/measure-summary.js': [
         'test_phase4a.mjs',

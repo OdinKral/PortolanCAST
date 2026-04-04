@@ -85,6 +85,9 @@ const CUSTOM_PROPERTIES = [
     // systemLabel: human-readable name from pattern.views.system.label (e.g., "Zone Temp Sensor")
     // isaLabel: ISA-5.1 tag_number set at entity link time (e.g., "TT-101")
     'systemLabel', 'isaLabel',
+    // User-created group: distinguishes Ctrl+G groups from measurement/callout/marker
+    // groups so that Ctrl+Shift+G only ungroups user-created ones.
+    '_isUserGroup',
 ];
 
 /**

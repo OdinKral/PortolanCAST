@@ -1374,6 +1374,89 @@ class PDFEngine:
         finally:
             doc.close()
 
+    def get_text_words(self, pdf_path: str, page_number: int,
+                       dpi: int = DEFAULT_DPI, rotate: int = 0) -> list:
+        """
+        Extract text with word-level bounding boxes for the text selection layer.
+
+        Uses PyMuPDF's page.get_text('words') which returns a list of tuples:
+            (x0, y0, x1, y1, word, block_no, line_no, word_no)
+        Coordinates are in PDF points (72 DPI). We scale them to match the
+        rendered image at the given DPI so the frontend can position <span>
+        elements directly over the rendered PDF image.
+
+        Args:
+            pdf_path:    Absolute path to the PDF file.
+            page_number: Zero-indexed page number.
+            dpi:         Rendering DPI (must match what the viewer uses).
+            rotate:      Page rotation in degrees (0, 90, 180, 270).
+
+        Returns:
+            List of dicts: [{x, y, w, h, text, block, line, word_idx}, ...]
+            Coordinates are in pixels at the given DPI.
+        """
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        dpi = min(max(dpi, 72), MAX_DPI)
+        rotate = rotate if rotate in (0, 90, 180, 270) else 0
+        scale = dpi / 72.0
+
+        try:
+            doc = fitz.open(str(path))
+        except Exception as e:
+            raise ValueError(f"Cannot open PDF: {e}")
+
+        try:
+            if page_number < 0 or page_number >= doc.page_count:
+                raise IndexError(f"Page {page_number} out of range")
+
+            page = doc[page_number]
+            page_rect = page.rect  # unrotated page dimensions
+
+            raw_words = page.get_text('words')
+            result = []
+
+            for w in raw_words:
+                x0, y0, x1, y1 = w[0], w[1], w[2], w[3]
+                text = w[4]
+
+                # Apply rotation transform to PDF-point coordinates
+                if rotate == 90:
+                    x0_r = page_rect.height - y1
+                    y0_r = x0
+                    x1_r = page_rect.height - y0
+                    y1_r = x1
+                    x0, y0, x1, y1 = x0_r, y0_r, x1_r, y1_r
+                elif rotate == 180:
+                    x0_r = page_rect.width - x1
+                    y0_r = page_rect.height - y1
+                    x1_r = page_rect.width - x0
+                    y1_r = page_rect.height - y0
+                    x0, y0, x1, y1 = x0_r, y0_r, x1_r, y1_r
+                elif rotate == 270:
+                    x0_r = y0
+                    y0_r = page_rect.width - x1
+                    x1_r = y1
+                    y1_r = page_rect.width - x0
+                    x0, y0, x1, y1 = x0_r, y0_r, x1_r, y1_r
+
+                # Scale from PDF points (72 DPI) to rendered pixels
+                result.append({
+                    'x': round(x0 * scale, 1),
+                    'y': round(y0 * scale, 1),
+                    'w': round((x1 - x0) * scale, 1),
+                    'h': round((y1 - y0) * scale, 1),
+                    'text': text,
+                    'block': w[5],
+                    'line': w[6],
+                })
+
+            return result
+        finally:
+            doc.close()
+
     @staticmethod
     def _ocr_available() -> bool:
         """

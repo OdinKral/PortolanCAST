@@ -963,6 +963,7 @@ html, body {
     position: absolute !important;
     top: 0;
     left: 0;
+    z-index: 2;  /* above #text-layer (z-index:1), below modals */
     /* Width/height set dynamically by canvas.js _applyZoom() to match PDF image */
     /* Pass mouse events through to viewport for panning by default */
     pointer-events: none;
@@ -980,6 +981,43 @@ html, body {
     position: absolute !important;
     top: 0;
     left: 0;
+}
+
+/* =========================================================================
+ * TEXT SELECTION LAYER
+ * Transparent word spans positioned over the PDF image for native browser
+ * text selection. Sits between pdf-image and Fabric canvas in z-order.
+ * ========================================================================= */
+
+#text-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    /* Dimensions set dynamically to match PDF image */
+    overflow: hidden;
+    z-index: 1;  /* above pdf-image (static), below Fabric canvas wrapper (z-index auto) */
+    /* Allow text selection when no drawing tool is active */
+    pointer-events: none;
+}
+
+/* When the text-select tool is active, enable pointer events on the text layer */
+#text-layer.text-select-active {
+    pointer-events: auto;
+    cursor: text;
+}
+
+#text-layer span {
+    position: absolute;
+    color: transparent;
+    /* White-space: pre prevents browser from collapsing spaces in words */
+    white-space: pre;
+    /* Line height matches the span height so text fills the bbox vertically */
+    line-height: 1;
+}
+
+/* When selected, show a translucent blue highlight (browser default for ::selection) */
+#text-layer span::selection {
+    background: rgba(74, 158, 255, 0.3);
 }
 
 /* =========================================================================

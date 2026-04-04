@@ -37,6 +37,7 @@ import { QuickCapture } from './quick-capture.js';
 import { EquipmentMarkerPanel } from './equipment-marker.js';
 import { TextFormatBar } from './text-format-bar.js';
 import { FindReplace } from './find-replace.js';
+import { TextLayer } from './text-layer.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -79,6 +80,8 @@ class App {
         this.textFormatBar = new TextFormatBar();
         // Find & Replace — searches text markups on current page
         this.findReplace = new FindReplace();
+        // Text selection layer — transparent spans over PDF for native text selection
+        this.textLayer = new TextLayer();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -167,6 +170,10 @@ class App {
                 });
                 // Refresh text panel for the new page (no-op if tab is hidden)
                 this.pageText.refresh(page);
+                // Load text selection layer for the new page
+                if (this.docId) {
+                    this.textLayer.loadPage(this.docId, page, this.viewer.rotation);
+                }
                 this.lastPage = page;
 
                 // Auto-save when navigating away from a page with changes
@@ -192,12 +199,28 @@ class App {
             this._updateZoomDisplay(zoom);
             this.canvas.syncToViewer();
             this._updateThumbnailViewport();
+            // Sync text layer dimensions to match the PDF image at current zoom
+            if (this.viewer.imageNaturalWidth) {
+                this.textLayer.applyZoom(
+                    this.viewer.imageNaturalWidth,
+                    this.viewer.imageNaturalHeight,
+                    zoom
+                );
+            }
         };
 
         // When a page image finishes loading, redraw the indicator against the
         // new page's dimensions (natural width/height may have changed).
         this.viewer.onPageLoad = () => {
             this._updateThumbnailViewport();
+            // Sync text layer dimensions after page image loads
+            if (this.viewer.imageNaturalWidth) {
+                this.textLayer.applyZoom(
+                    this.viewer.imageNaturalWidth,
+                    this.viewer.imageNaturalHeight,
+                    this.viewer.zoom
+                );
+            }
         };
 
         // When a document loads, update UI, load thumbnails, show properties
@@ -289,6 +312,12 @@ class App {
         this.lastPage = 0;
         this._dirty = false;
 
+        // Initialize text selection layer and load words for page 0
+        this.textLayer.init();
+        this.textLayer.clearCache();
+        this.textLayer.loadPage(info.id, 0, this.viewer.rotation);
+        this.textLayer.setDrawingActive(false);
+
         // Layers: bind UI (idempotent) and rebind object:added on the fresh canvas.
         // Fire layerManager.load() immediately so it races the 200ms setTimeout below.
         // The load result is awaited INSIDE the setTimeout before _loadMarkups fires,
@@ -306,6 +335,13 @@ class App {
         // to the newly created Fabric canvas. Must run after canvas.init() since
         // that creates a fresh Fabric canvas instance for each loaded document.
         this.nodeEditor.initForCanvas(this.canvas, this.toolbar, this.scale);
+        // Use onToolSet (fires AFTER activeTool is updated) to toggle text layer.
+        // onToolChange fires before the tool switch — activeTool is still stale there.
+        this.toolbar.onToolSet = (tool) => {
+            // Text selection is active only in hand/null mode (no drawing/select tool)
+            const isDrawing = tool && tool !== 'hand';
+            this.textLayer.setDrawingActive(!!isDrawing);
+        };
         // Wire node-edit button → NodeEditor.enterEditModeOnSelection()
         // (done here rather than in initForCanvas so toolbar is already set up)
         this.toolbar.onNodeEditRequest = () => this.nodeEditor.enterEditModeOnSelection();
