@@ -2050,4 +2050,526 @@ export class MeasureTools {
         group.pairedId = crypto.randomUUID();
         return group;
     }
+
+    // =========================================================================
+    // VOLUME MEASUREMENT
+    // =========================================================================
+
+    /**
+     * Volume = Area polygon × user-entered depth.
+     *
+     * Workflow: identical to Area (click-accumulate-close polygon), then a
+     * prompt asks for depth in real-world units. The label shows:
+     *   "150.32 sq ft × 8 ft = 1202.56 cu ft"
+     *
+     * Measurement metadata:
+     *   measurementType: 'volume'
+     *   pixelArea: Shoelace-computed area in natural pixels
+     *   volumeDepth: user-entered depth in real units
+     *   labelText: formatted volume string
+     */
+    initVolume(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+
+        let vertices = [];
+        let tempObjects = [];
+        let rubberBand = null;
+        let snapIndicator = null;
+
+        const VOLUME_COLOR = '#e06c75'; // distinct from area green
+
+        const addTemp = (obj) => {
+            obj.selectable = false;
+            obj.evented = false;
+            fc.add(obj);
+            tempObjects.push(obj);
+        };
+
+        const clearTemp = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+            if (rubberBand) { fc.remove(rubberBand); rubberBand = null; }
+            if (snapIndicator) { fc.remove(snapIndicator); snapIndicator = null; }
+        };
+
+        const updatePolyline = () => {
+            tempObjects.forEach(o => fc.remove(o));
+            tempObjects = [];
+            if (vertices.length === 0) return;
+
+            for (const v of vertices) {
+                const dot = new fabric.Circle({
+                    left: v.x - 4, top: v.y - 4, radius: 4,
+                    fill: VOLUME_COLOR, stroke: null, strokeWidth: 0,
+                });
+                addTemp(dot);
+            }
+
+            if (vertices.length > 1) {
+                const points = vertices.map(v => ({ x: v.x, y: v.y }));
+                const line = new fabric.Polyline(points, {
+                    fill: 'transparent', stroke: VOLUME_COLOR,
+                    strokeWidth: 2, strokeUniform: true,
+                });
+                addTemp(line);
+            }
+        };
+
+        const closePolygon = () => {
+            if (vertices.length < 3) {
+                clearTemp();
+                vertices = [];
+                fc.renderAll();
+                return;
+            }
+
+            clearTemp();
+
+            const pixelArea = Math.abs(this._polygonArea(vertices));
+            const centroid = this._centroid(vertices);
+
+            // Prompt for depth
+            const unitLabel = scale ? scale.unitLabel : 'units';
+            const depthStr = prompt(`Enter depth in ${unitLabel}:`);
+            if (!depthStr || isNaN(parseFloat(depthStr))) {
+                // Cancelled or invalid — still create as area measurement
+                vertices = [];
+                fc.renderAll();
+                return;
+            }
+            const depth = parseFloat(depthStr);
+
+            const areaText = scale
+                ? scale.formatArea(pixelArea)
+                : `${pixelArea.toFixed(0)} sq px`;
+            const volumeText = scale
+                ? scale.formatVolume(pixelArea, depth)
+                : `${(pixelArea * depth).toFixed(0)} cu px`;
+            const labelText = `${areaText} × ${depth} ${unitLabel} = ${volumeText}`;
+
+            // Create polygon
+            const polygon = new fabric.Polygon(
+                vertices.map(v => ({ x: v.x, y: v.y })),
+                {
+                    fill: VOLUME_COLOR + '22',
+                    stroke: VOLUME_COLOR,
+                    strokeWidth: 2,
+                    strokeUniform: true,
+                    selectable: true,
+                    objectCaching: false,
+                }
+            );
+
+            const label = new fabric.IText(labelText, {
+                left: centroid.x,
+                top: centroid.y,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 13,
+                fill: VOLUME_COLOR,
+                stroke: null,
+                strokeWidth: 0,
+                selectable: true,
+                editable: false,
+                textAlign: 'center',
+                originX: 'center',
+                originY: 'center',
+            });
+
+            const pairedId = crypto.randomUUID();
+
+            polygon.measurementType = 'volume';
+            polygon.pixelArea = pixelArea;
+            polygon.volumeDepth = depth;
+            polygon.labelText = labelText;
+            polygon.markupAuthor = 'User';
+            polygon.markupTimestamp = new Date().toISOString();
+            polygon.pairedId = pairedId;
+
+            label.measurementType = 'volume';
+            label.pixelArea = pixelArea;
+            label.volumeDepth = depth;
+            label.labelText = labelText;
+            label.markupAuthor = 'User';
+            label.markupTimestamp = new Date().toISOString();
+            label.pairedId = pairedId;
+
+            fc.add(polygon);
+            fc.add(label);
+            fc.setActiveObject(polygon);
+            fc.renderAll();
+
+            vertices = [];
+        };
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            if (vertices.length >= 3) {
+                if (this._snapToStart(pointer.x, pointer.y, vertices[0].x, vertices[0].y)) {
+                    closePolygon();
+                    toolbar._cleanupShapeDrawing();
+                    toolbar.activeTool = 'select';
+                    document.querySelectorAll('.tool-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.tool === 'select');
+                    });
+                    return;
+                }
+            }
+
+            vertices.push({ x: pointer.x, y: pointer.y });
+            updatePolyline();
+            fc.renderAll();
+        };
+
+        const onMouseMove = (opt) => {
+            if (vertices.length === 0) return;
+            const pointer = fc.getPointer(opt.e);
+            const last = vertices[vertices.length - 1];
+
+            if (rubberBand) {
+                rubberBand.set({ x2: pointer.x, y2: pointer.y });
+            } else {
+                rubberBand = new fabric.Line(
+                    [last.x, last.y, pointer.x, pointer.y],
+                    { stroke: VOLUME_COLOR, strokeWidth: 1, strokeDashArray: [6, 3],
+                      selectable: false, evented: false, strokeUniform: true }
+                );
+                fc.add(rubberBand);
+            }
+
+            // Snap indicator near start vertex
+            if (vertices.length >= 3) {
+                const isNear = this._snapToStart(pointer.x, pointer.y, vertices[0].x, vertices[0].y);
+                if (isNear && !snapIndicator) {
+                    snapIndicator = new fabric.Circle({
+                        left: vertices[0].x - 8, top: vertices[0].y - 8, radius: 8,
+                        fill: 'transparent', stroke: VOLUME_COLOR, strokeWidth: 2,
+                        selectable: false, evented: false,
+                    });
+                    fc.add(snapIndicator);
+                } else if (!isNear && snapIndicator) {
+                    fc.remove(snapIndicator);
+                    snapIndicator = null;
+                }
+            }
+
+            fc.renderAll();
+        };
+
+        const onDblClick = () => {
+            if (vertices.length >= 3) {
+                vertices.pop();
+                closePolygon();
+                toolbar._cleanupShapeDrawing();
+                toolbar.activeTool = 'select';
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tool === 'select');
+                });
+            }
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:dblclick', onDblClick);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:dblclick': onDblClick,
+        };
+    }
+
+    // =========================================================================
+    // CLOUD+ (CLOUD WITH AREA MEASUREMENT)
+    // =========================================================================
+
+    /**
+     * Cloud+ = cloud shape with enclosed area measurement.
+     *
+     * Click-drag to draw a cloud rectangle. On release, the cloud is created
+     * as a Group containing the cloud Path + area label at centroid.
+     * Uses the bounding rect area (w × h) since the cloud is rectangular.
+     *
+     * Measurement metadata:
+     *   measurementType: 'cloud-area'
+     *   pixelArea: w × h in natural pixels
+     *   labelText: formatted area string
+     */
+    initCloudArea(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+        const CLOUD_COLOR = '#56b6c2';
+
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let activeShape = null;
+        let previewLabel = null;
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+            isDrawing = true;
+            startX = pointer.x;
+            startY = pointer.y;
+        };
+
+        const onMouseMove = (opt) => {
+            if (!isDrawing) return;
+            const pointer = fc.getPointer(opt.e);
+
+            const left = Math.min(startX, pointer.x);
+            const top = Math.min(startY, pointer.y);
+            const w = Math.abs(pointer.x - startX);
+            const h = Math.abs(pointer.y - startY);
+
+            if (w < 3 || h < 3) return;
+
+            // Remove old preview
+            if (activeShape) fc.remove(activeShape);
+            if (previewLabel) fc.remove(previewLabel);
+
+            // Generate cloud path
+            const pathStr = toolbar._generateCloudPath(0, 0, w, h);
+            activeShape = new fabric.Path(pathStr, {
+                left, top,
+                fill: CLOUD_COLOR + '18',
+                stroke: CLOUD_COLOR,
+                strokeWidth: 2,
+                strokeUniform: true,
+                selectable: false,
+                evented: false,
+            });
+            fc.add(activeShape);
+
+            // Live area label
+            const pixelArea = w * h;
+            const areaText = scale
+                ? scale.formatArea(pixelArea)
+                : `${pixelArea.toFixed(0)} sq px`;
+            previewLabel = new fabric.IText(areaText, {
+                left: left + w / 2,
+                top: top + h / 2,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 13,
+                fill: CLOUD_COLOR,
+                stroke: null,
+                strokeWidth: 0,
+                selectable: false,
+                evented: false,
+                originX: 'center',
+                originY: 'center',
+            });
+            fc.add(previewLabel);
+            fc.renderAll();
+        };
+
+        const onMouseUp = (opt) => {
+            if (!isDrawing || !activeShape) return;
+            isDrawing = false;
+
+            // Capture dimensions from the preview shape before removing
+            const savedLeft = activeShape.left;
+            const savedTop = activeShape.top;
+            const bounds = activeShape.getBoundingRect(true);
+            const w = bounds.width;
+            const h = bounds.height;
+
+            // Remove previews
+            fc.remove(activeShape);
+            if (previewLabel) fc.remove(previewLabel);
+
+            if (w < 5 || h < 5) {
+                activeShape = null;
+                previewLabel = null;
+                fc.renderAll();
+                return;
+            }
+
+            const pixelArea = w * h;
+
+            const areaText = scale
+                ? scale.formatArea(pixelArea)
+                : `${pixelArea.toFixed(0)} sq px`;
+
+            // Cloud path (relative coords 0,0)
+            const pathStr = toolbar._generateCloudPath(0, 0, w, h);
+            const cloudPath = new fabric.Path(pathStr, {
+                fill: CLOUD_COLOR + '18',
+                stroke: CLOUD_COLOR,
+                strokeWidth: 2,
+                strokeUniform: true,
+            });
+
+            // Area label at center
+            const label = new fabric.IText(areaText, {
+                left: w / 2,
+                top: h / 2,
+                fontFamily: 'Arial, sans-serif',
+                fontSize: 13,
+                fontWeight: 'bold',
+                fill: CLOUD_COLOR,
+                stroke: null,
+                strokeWidth: 0,
+                editable: false,
+                originX: 'center',
+                originY: 'center',
+            });
+
+            const group = new fabric.Group([cloudPath, label], {
+                left: savedLeft,
+                top: savedTop,
+                selectable: true,
+                subTargetCheck: false,
+            });
+
+            group.measurementType = 'cloud-area';
+            group.pixelArea = pixelArea;
+            group.labelText = areaText;
+            group.markupAuthor = 'User';
+            group.markupTimestamp = new Date().toISOString();
+
+            canvas.stampDefaults(group, {
+                markupType: toolbar.activeMarkupType,
+                preserveColor: true,
+            });
+
+            fc.add(group);
+            fc.setActiveObject(group);
+            fc.renderAll();
+
+            canvas.onContentChange?.();
+            activeShape = null;
+            previewLabel = null;
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:up', onMouseUp);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:up': onMouseUp,
+        };
+    }
+
+    // =========================================================================
+    // SKETCH TO SCALE
+    // =========================================================================
+
+    /**
+     * Draw a rectangle at calibrated scale dimensions.
+     *
+     * Workflow:
+     *   1. Click canvas to set placement origin
+     *   2. Prompt asks for width and height in real-world units
+     *   3. Rectangle drawn at exact pixel dimensions matching the calibrated scale
+     *   4. Dimension labels auto-applied on each edge
+     *
+     * Produces a Group containing:
+     *   - Rectangle outline
+     *   - Width label (top edge)
+     *   - Height label (right edge)
+     *
+     * Measurement metadata:
+     *   measurementType: 'sketch'
+     *   pixelLength: perimeter in natural pixels
+     *   labelText: "W × H" formatted string
+     */
+    initSketch(canvas, toolbar, scale) {
+        const fc = canvas.fabricCanvas;
+        const SKETCH_COLOR = '#c678dd'; // purple — distinct from other tools
+
+        const onMouseDown = (opt) => {
+            if (opt.target) return;
+            const pointer = fc.getPointer(opt.e);
+
+            if (!scale || scale.pixelsPerRealUnit <= 0) {
+                alert('Please calibrate the scale first (K key).');
+                return;
+            }
+
+            const unitLabel = scale.unitLabel;
+
+            // Prompt for dimensions
+            const widthStr = prompt(`Width in ${unitLabel}:`);
+            if (!widthStr || isNaN(parseFloat(widthStr))) return;
+            const realWidth = parseFloat(widthStr);
+
+            const heightStr = prompt(`Height in ${unitLabel}:`);
+            if (!heightStr || isNaN(parseFloat(heightStr))) return;
+            const realHeight = parseFloat(heightStr);
+
+            // Convert real-world dimensions to pixel dimensions
+            const pixW = realWidth * scale.pixelsPerRealUnit;
+            const pixH = realHeight * scale.pixelsPerRealUnit;
+
+            if (pixW < 2 || pixH < 2) return;
+
+            // Build the rectangle
+            const rect = new fabric.Rect({
+                left: 0, top: 0, width: pixW, height: pixH,
+                fill: 'transparent',
+                stroke: SKETCH_COLOR,
+                strokeWidth: 2,
+                strokeUniform: true,
+            });
+
+            // Width label (centered on top edge)
+            const wLabel = new fabric.IText(
+                `${realWidth} ${unitLabel}`,
+                {
+                    left: pixW / 2, top: -14,
+                    fontFamily: 'Arial, sans-serif', fontSize: 11, fontWeight: 'bold',
+                    fill: SKETCH_COLOR, stroke: null, strokeWidth: 0,
+                    editable: false, originX: 'center', originY: 'center',
+                }
+            );
+
+            // Height label (centered on right edge, rotated 90°)
+            const hLabel = new fabric.IText(
+                `${realHeight} ${unitLabel}`,
+                {
+                    left: pixW + 14, top: pixH / 2,
+                    fontFamily: 'Arial, sans-serif', fontSize: 11, fontWeight: 'bold',
+                    fill: SKETCH_COLOR, stroke: null, strokeWidth: 0,
+                    editable: false, originX: 'center', originY: 'center',
+                    angle: 90,
+                }
+            );
+
+            const labelText = `${realWidth} × ${realHeight} ${unitLabel}`;
+            const pixelPerimeter = 2 * (pixW + pixH);
+
+            const group = new fabric.Group([rect, wLabel, hLabel], {
+                left: pointer.x,
+                top: pointer.y,
+                selectable: true,
+                subTargetCheck: false,
+            });
+
+            group.measurementType = 'sketch';
+            group.pixelLength = pixelPerimeter;
+            group.labelText = labelText;
+            group.markupAuthor = 'User';
+            group.markupTimestamp = new Date().toISOString();
+
+            canvas.stampDefaults(group, {
+                markupType: toolbar.activeMarkupType,
+                preserveColor: true,
+            });
+
+            fc.add(group);
+            fc.setActiveObject(group);
+            fc.renderAll();
+
+            canvas.onContentChange?.();
+        };
+
+        fc.on('mouse:down', onMouseDown);
+
+        toolbar._shapeHandlers = {
+            'mouse:down': onMouseDown,
+        };
+    }
 }

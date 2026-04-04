@@ -263,6 +263,20 @@ export class ScaleManager {
     }
 
     /**
+     * Format a volume as a human-readable string with units.
+     *
+     * Volume = area × depth. Area is in sq units, depth in linear units,
+     * result is in cubic units.
+     *
+     * Examples: "150.32 cu ft", "4.25 cu m"
+     */
+    formatVolume(pixelArea, depthInRealUnits, decimals = 2) {
+        const area = this.convertArea(pixelArea);
+        const volume = area * depthInRealUnits;
+        return `${volume.toFixed(decimals)} cu ${this.unitLabel}`;
+    }
+
+    /**
      * Get a short label for the current scale for display in the status bar.
      *
      * Returns:

@@ -318,6 +318,9 @@ Set the drawing scale first (bottom status bar → scale selector), then measure
 | — | Perimeter | Click vertices; double-click or snap to close. Measures total edge length |
 | — | Angle | Click 3 points: ray endpoint, vertex, ray endpoint. Shows angle in degrees |
 | — | Radius/Diameter | Click center, drag to edge. Shows circle outline, diameter line, and measurement |
+| — | Volume | Click vertices like Area; after closing, enter depth for cubic measurement |
+| — | Cloud+ | Click-drag to draw a cloud shape with auto-calculated enclosed area |
+| — | Sketch to Scale | Click to place, enter width and height — draws a rectangle at calibrated dimensions |
 | **N** | Count | Click to place numbered markers |
 | **K** | Calibrate | Click two known points, enter the real-world distance |
 
@@ -760,6 +763,28 @@ A 1.2-second cooldown prevents accidentally skipping multiple pages in one gestu
 
 ---
 
+## Toolbar Customization
+
+Open **View → Toolbar Settings** to configure:
+
+### Multi-Row Layout
+Choose 1-4 rows for the tools palette. More rows show more tools without
+horizontal scrolling. Default is 1 row (scrollable).
+
+### Editable Keyboard Shortcuts
+Each tool shows its current key binding in an editable field. Click a field and
+press any key to rebind. Conflicts are resolved automatically — if the new key
+was assigned to another tool, that tool becomes unbound.
+
+Reset all bindings with the **Reset to Default** button.
+
+### Auto-Landscape
+When enabled (default), portrait-oriented pages are automatically rotated 90°
+on first open. Useful for engineering drawings stored in portrait PDF orientation.
+Uncheck to disable.
+
+---
+
 ## Equipment Patterns & ISA View
 
 PortolanCAST includes a Haystack-inspired pattern system for structured equipment
@@ -902,6 +927,8 @@ quick identification.
 | K | Calibrate scale |
 | M | Equipment Marker |
 | Shift+C | Connect (draw entity connection) |
+
+> **Customizable:** All tool shortcuts can be rebound in **View → Toolbar Settings → Keyboard Shortcuts**.
 
 ### Editing
 | Key | Action |

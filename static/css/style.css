@@ -87,6 +87,38 @@ html, body {
     display: none;                /* Chrome/Safari: hide the scrollbar track */
 }
 
+/* Multi-row toolbar: tools wrap into N rows.
+ * --toolbar-rows is set by JS from localStorage preference.
+ * Default 1 row keeps existing behavior; 2-4 wraps the tool buttons. */
+.toolbar-row-tools[data-rows="2"],
+.toolbar-row-tools[data-rows="3"],
+.toolbar-row-tools[data-rows="4"] {
+    height: auto;
+    overflow-x: hidden;
+}
+.toolbar-row-tools[data-rows="2"] .tab-panel,
+.toolbar-row-tools[data-rows="3"] .tab-panel,
+.toolbar-row-tools[data-rows="4"] .tab-panel {
+    flex-wrap: wrap;
+}
+.toolbar-row-tools[data-rows="2"] .tab-panel .toolbar-group {
+    flex-wrap: wrap;
+}
+.toolbar-row-tools[data-rows="3"] .tab-panel .toolbar-group {
+    flex-wrap: wrap;
+}
+.toolbar-row-tools[data-rows="4"] .tab-panel .toolbar-group {
+    flex-wrap: wrap;
+}
+.toolbar-row-tools[data-rows="2"] { max-height: calc(36px * 2); }
+.toolbar-row-tools[data-rows="3"] { max-height: calc(36px * 3); }
+.toolbar-row-tools[data-rows="4"] { max-height: calc(36px * 4); }
+.toolbar-row-tools[data-rows="2"],
+.toolbar-row-tools[data-rows="3"],
+.toolbar-row-tools[data-rows="4"] {
+    overflow-y: auto;
+}
+
 #main-content {
     display: flex;
     flex: 1;
@@ -1825,6 +1857,48 @@ html, body {
     flex-shrink: 0;
     font-family: monospace;
     letter-spacing: 0;
+}
+
+/* Hotkey editor list */
+.settings-hotkey-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.settings-hotkey-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 6px;
+    border-radius: 4px;
+}
+.settings-hotkey-row:hover {
+    background: rgba(255,255,255,0.03);
+}
+.settings-hotkey-label {
+    font-size: 12px;
+    color: #c0c0d0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.settings-hotkey-input {
+    width: 40px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 12px;
+    background: #1e1e2e;
+    border: 1px solid #2a2a3d;
+    border-radius: 3px;
+    color: #e0e0f0;
+    padding: 2px 4px;
+}
+.settings-hotkey-input:focus {
+    border-color: #4a9eff;
+    outline: none;
 }
 
 /* Compact mode row — visually separates display options from tool lists */

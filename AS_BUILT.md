@@ -269,6 +269,65 @@ Click center, drag to edge. Creates a Group containing:
 
 `measurementType: 'radius'`, `pixelLength` stores the radius in natural pixels.
 
+### Volume Measurement (`measure.js`)
+
+Area polygon × user-entered depth. Identical workflow to Area tool
+(click-accumulate-close), then a `prompt()` asks for depth in real-world units.
+
+- Produces: Polygon + centroid IText label (paired via `pairedId`)
+- Label format: `150.32 sq ft × 8 ft = 1202.56 cu ft`
+- `measurementType: 'volume'`, `pixelArea` + `volumeDepth` stored for recalculation
+- `scale.formatVolume(pixelArea, depth)` converts via `convertArea() × depth`
+- Color: `#e06c75` (red/coral — distinct from Area green)
+
+### Cloud+ (`measure.js`)
+
+Cloud shape with enclosed area measurement. Click-drag to draw a cloud rectangle.
+Combines `toolbar._generateCloudPath()` arc-bump renderer with area label.
+
+- Produces: Group containing cloud Path + area IText at centroid
+- Live preview during drag shows area updating in real-time
+- `measurementType: 'cloud-area'`, `pixelArea` = bounding rect w×h
+- Color: `#56b6c2` (teal — matches Bluebeam Cloud+ convention)
+
+### Sketch to Scale (`measure.js`)
+
+Draw a rectangle at calibrated real-world dimensions. Click to place origin,
+then `prompt()` asks for width and height in the scale's unit.
+
+- Converts real-world dimensions to pixels: `realDim × scale.pixelsPerRealUnit`
+- Produces: Group containing Rect + width label (top edge) + height label (right, rotated 90°)
+- Requires calibration first (alerts if `pixelsPerRealUnit <= 0`)
+- `measurementType: 'sketch'`, `pixelLength` = perimeter, `labelText` = "W × H unit"
+- Color: `#c678dd` (purple — distinct from measurement tools)
+
+---
+
+## Toolbar Customization
+
+### Multi-Row Layout
+
+The tools row supports 1-4 row configurations via the `data-rows` attribute on
+`.toolbar-row-tools`. CSS wraps tool buttons using `flex-wrap` with `max-height`
+clamped to `36px × N`. Persisted in `localStorage('portolancast-toolbar-rows')`.
+
+### Editable Hotkeys
+
+Keyboard shortcuts are driven by a configurable map (`DEFAULT_HOTKEYS` in
+`toolbar.js`). Users can rebind any tool's key in Toolbar Settings. Overrides
+stored in `localStorage('portolancast-hotkeys')` as a full key→tool JSON map.
+
+System shortcuts (Ctrl+Z, Ctrl+G, arrows, Delete, Escape, 1-5 intent keys) are
+hardcoded and not remappable — they follow OS conventions.
+
+### Auto-Landscape Detection
+
+On document load, if a page's native dimensions (from `page_sizes`) show
+portrait orientation (height > width) and no saved rotation exists, the page is
+auto-rotated 90° to landscape. Controlled by
+`localStorage('portolancast-auto-landscape')` — enabled by default, toggle in
+Toolbar Settings.
+
 ---
 
 ## Haystack Pattern System

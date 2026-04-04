@@ -22,6 +22,61 @@
 import { MARKUP_COLORS } from './canvas.js';
 
 // =============================================================================
+// DEFAULT HOTKEY MAP — editable via Toolbar Settings
+// =============================================================================
+// Key: the `e.key` value (case-sensitive — uppercase means Shift is held).
+// Value: tool name matching data-tool attributes.
+// System shortcuts (Ctrl+Z, arrows, etc.) are NOT in this map — they're
+// hardcoded because they follow OS conventions that shouldn't be remapped.
+
+const DEFAULT_HOTKEYS = {
+    'v': 'select',
+    'p': 'pen',
+    'r': 'rect',
+    'e': 'ellipse',
+    'l': 'line',
+    'h': 'highlighter',
+    'g': 'hand',
+    't': 'text',
+    'c': 'cloud',
+    'C': 'connect',         // Shift+C
+    'o': 'callout',
+    'w': 'polyline',
+    'u': 'distance',
+    'a': 'area',
+    'A': 'arrow',            // Shift+A
+    's': 'sticky-note',
+    'i': 'image-overlay',
+    'n': 'count',
+    'k': 'calibrate',
+    'm': 'equipment-marker',
+    'x': 'eraser',
+    'f': 'polygon',
+    'd': 'dimension',
+    'b': 'arc',
+    'j': 'radius',
+};
+
+/**
+ * Load user hotkey overrides from localStorage.
+ * Returns a merged map: defaults + user changes.
+ */
+function loadHotkeys() {
+    const map = { ...DEFAULT_HOTKEYS };
+    try {
+        const stored = localStorage.getItem('portolancast-hotkeys');
+        if (stored) {
+            const overrides = JSON.parse(stored);
+            // Clear defaults that were reassigned, then apply overrides
+            for (const [key, tool] of Object.entries(overrides)) {
+                map[key] = tool;
+            }
+        }
+    } catch { /* ignore corrupt data */ }
+    return map;
+}
+
+// =============================================================================
 // TOOLBAR CLASS
 // =============================================================================
 
@@ -66,6 +121,14 @@ export class Toolbar {
         this.onToolChange = null;
 
         /**
+         * User-configurable hotkey→tool map. Loaded from localStorage with
+         * fallback to DEFAULT_HOTKEYS. Rebuilt when the user edits bindings
+         * in Toolbar Settings.
+         * @type {Object<string, string>}
+         */
+        this._hotkeys = loadHotkeys();
+
+        /**
          * Callback fired AFTER the active tool is fully configured.
          * Unlike onToolChange (which fires before cleanup), onToolSet fires
          * after this.activeTool is updated, so listeners see the new tool.
@@ -101,7 +164,8 @@ export class Toolbar {
             highlighter: 'markup', text: 'markup', cloud: 'markup', callout: 'markup',
             polyline: 'markup', polygon: 'markup', arrow: 'markup', arc: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
             dimension: 'markup', eraser: 'markup',
-            distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', radius: 'measure', count: 'measure',
+            distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', radius: 'measure',
+            volume: 'measure', 'cloud-area': 'measure', sketch: 'measure', count: 'measure',
             calibrate: 'measure', 'node-edit': 'measure',
         };
 
@@ -237,10 +301,24 @@ export class Toolbar {
                 localStorage.removeItem('portolancast-scroll-sensitivity');
                 const scrollSlider = document.getElementById('settings-scroll-sensitivity');
                 if (scrollSlider) scrollSlider.value = '2';
+                // Reset toolbar rows to 1
+                localStorage.removeItem('portolancast-toolbar-rows');
+                this._applyToolbarRows('1');
+                const rowsSelect = document.getElementById('settings-toolbar-rows');
+                if (rowsSelect) rowsSelect.value = '1';
+                // Reset auto-landscape to on
+                localStorage.removeItem('portolancast-auto-landscape');
+                // Reset hotkeys to defaults
+                localStorage.removeItem('portolancast-hotkeys');
+                this._hotkeys = { ...DEFAULT_HOTKEYS };
                 // Re-populate the settings list to reflect the reset state
                 this._populateSettingsLists();
+                this._populateHotkeyEditor();
             });
         }
+
+        // Apply saved toolbar rows preference on init
+        this._applyToolbarRows(localStorage.getItem('portolancast-toolbar-rows') || '1');
 
         // File open buttons (both toolbar and welcome screen)
         const fileInput = document.getElementById('file-input');
@@ -666,11 +744,13 @@ export class Toolbar {
                     }
                     break;
 
-                // Find & Replace: Ctrl+H
+                // Find & Replace: Ctrl+H / Tool shortcut: plain h
                 case 'h':
                     if (e.ctrlKey) {
                         e.preventDefault();
                         if (this.onFindReplace) this.onFindReplace();
+                    } else if (this._hotkeys['h']) {
+                        this.setTool(this._hotkeys['h']);
                     }
                     break;
 
@@ -683,161 +763,14 @@ export class Toolbar {
                         } else {
                             this._groupSelection();
                         }
+                    } else if (this._hotkeys['g']) {
+                        this.setTool(this._hotkeys['g']);
                     }
                     break;
 
                 // Escape: deselect tool, return to select/pan mode
                 case 'Escape':
                     this.setTool(null);
-                    break;
-
-                // V: Select tool
-                case 'v':
-                    if (!e.ctrlKey) {
-                        this.setTool('select');
-                    }
-                    break;
-
-                // P: Pen tool
-                case 'p':
-                    if (!e.ctrlKey) {
-                        this.setTool('pen');
-                    }
-                    break;
-
-                // R: Rectangle tool
-                case 'r':
-                    if (!e.ctrlKey) {
-                        this.setTool('rect');
-                    }
-                    break;
-
-                // E: Ellipse tool
-                case 'e':
-                    if (!e.ctrlKey) {
-                        this.setTool('ellipse');
-                    }
-                    break;
-
-                // L: Line tool
-                case 'l':
-                    if (!e.ctrlKey) {
-                        this.setTool('line');
-                    }
-                    break;
-
-                // H: Highlighter tool (H = Highlight — do not reassign to Hand)
-                case 'h':
-                    if (!e.ctrlKey) {
-                        this.setTool('highlighter');
-                    }
-                    break;
-
-                // G: Hand / Grab / Pan tool (G = Grab — H is taken by Highlighter)
-                case 'g':
-                    if (!e.ctrlKey) {
-                        this.setTool('hand');
-                    }
-                    break;
-
-                // T: Text tool
-                case 't':
-                    if (!e.ctrlKey) {
-                        this.setTool('text');
-                    }
-                    break;
-
-                // C: Cloud tool (lowercase c)
-                case 'c':
-                    if (!e.ctrlKey) {
-                        this.setTool('cloud');
-                    }
-                    break;
-
-                // Shift+C: Connect tool (uppercase C — same pattern as Shift+A for Arrow)
-                case 'C':
-                    if (!e.ctrlKey) {
-                        this.setTool('connect');
-                    }
-                    break;
-
-                // O: Callout tool
-                case 'o':
-                    if (!e.ctrlKey) {
-                        this.setTool('callout');
-                    }
-                    break;
-
-                // w: Polyline tool (multi-segment connected line, open path)
-                case 'w':
-                    if (!e.ctrlKey) {
-                        this.setTool('polyline');
-                    }
-                    break;
-
-                // Phase 2: Measurement tool shortcuts
-                // U: Distance ruler (mnemonic: rUler)
-                case 'u':
-                    if (!e.ctrlKey) {
-                        this.setTool('distance');
-                    }
-                    break;
-
-                // a: Area tool (lowercase — no shift)
-                case 'a':
-                    if (!e.ctrlKey) {
-                        this.setTool('area');
-                    }
-                    break;
-
-                // A: Arrow markup (Shift+A — uppercase is produced by Shift+A in key events)
-                // 'a' is taken by Area, so Shift+A = uppercase 'A' gives Arrow.
-                case 'A':
-                    if (!e.ctrlKey) {
-                        this.setTool('arrow');
-                    }
-                    break;
-
-                // S: Sticky Note — click-to-place editable note box with yellow background
-                case 's':
-                    if (!e.ctrlKey) {
-                        this.setTool('sticky-note');
-                    }
-                    break;
-
-                // I: Image Overlay — upload a photo and place it as a Fabric.Image markup
-                case 'i':
-                    if (!e.ctrlKey) {
-                        this.setTool('image-overlay');
-                    }
-                    break;
-
-                // N: Count tool (mnemonic: Number)
-                case 'n':
-                    if (!e.ctrlKey) {
-                        this.setTool('count');
-                    }
-                    break;
-
-                // K: Calibrate scale (mnemonic: calibrate with Known dimension)
-                case 'k':
-                    if (!e.ctrlKey) {
-                        this.setTool('calibrate');
-                    }
-                    break;
-
-                // Q: Quick Capture — opens entity capture panel (not a drawing tool)
-                case 'q':
-                    if (!e.ctrlKey && window.app && window.app.quickCapture) {
-                        window.app.quickCapture.open();
-                    }
-                    break;
-
-                // M: Equipment Marker — click-to-place entity pin on drawing
-                case 'm':
-                    if (!e.ctrlKey) {
-                        this.setTool('equipment-marker');
-                    }
                     break;
 
                 // Delete/Backspace: remove selected object
@@ -870,6 +803,24 @@ export class Toolbar {
                 case '5':
                     if (!e.ctrlKey) this.setMarkupType('change');
                     break;
+
+                default: {
+                    // Editable hotkeys: look up tool from the configurable map.
+                    // Only fires for non-Ctrl keys (Ctrl combos are system shortcuts).
+                    // Uppercase keys (Shift+letter) are in the map as e.g. 'A' for arrow.
+                    if (!e.ctrlKey) {
+                        const tool = this._hotkeys[e.key];
+                        if (tool) {
+                            this.setTool(tool);
+                            break;
+                        }
+                        // Q: Quick Capture (special — not a tool, opens a panel)
+                        if (e.key === 'q' && window.app?.quickCapture) {
+                            window.app.quickCapture.open();
+                        }
+                    }
+                    break;
+                }
             }
         });
     }
@@ -1174,6 +1125,33 @@ export class Toolbar {
                 }
                 break;
 
+            case 'volume':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initVolume(this.canvas, this, this.scale);
+                }
+                break;
+
+            case 'cloud-area':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initCloudArea(this.canvas, this, this.scale);
+                }
+                break;
+
+            case 'sketch':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                if (this.measureTools) {
+                    this.measureTools.initSketch(this.canvas, this, this.scale);
+                }
+                break;
+
             case 'calibrate':
                 fc.isDrawingMode = false;
                 fc.selection = false;
@@ -1411,6 +1389,7 @@ export class Toolbar {
         if (!modal) return;
 
         this._populateSettingsLists();
+        this._populateHotkeyEditor();
 
         // Wire the compact mode checkbox each time the modal opens so it
         // reflects current state (in case reset was called while modal was closed).
@@ -1428,6 +1407,34 @@ export class Toolbar {
                 } else {
                     toolbar.classList.remove('toolbar-compact');
                     localStorage.removeItem('portolancast-toolbar-compact');
+                }
+            });
+        }
+
+        // Wire the toolbar rows selector
+        const rowsSelect = document.getElementById('settings-toolbar-rows');
+        if (rowsSelect) {
+            const storedRows = localStorage.getItem('portolancast-toolbar-rows') || '1';
+            rowsSelect.value = storedRows;
+            const newSelect = rowsSelect.cloneNode(true);
+            rowsSelect.parentNode.replaceChild(newSelect, rowsSelect);
+            newSelect.addEventListener('change', () => {
+                localStorage.setItem('portolancast-toolbar-rows', newSelect.value);
+                this._applyToolbarRows(newSelect.value);
+            });
+        }
+
+        // Wire the auto-landscape checkbox
+        const autoLandscapeCb = document.getElementById('settings-cb-auto-landscape');
+        if (autoLandscapeCb) {
+            autoLandscapeCb.checked = localStorage.getItem('portolancast-auto-landscape') !== 'false';
+            const newCb2 = autoLandscapeCb.cloneNode(true);
+            autoLandscapeCb.parentNode.replaceChild(newCb2, autoLandscapeCb);
+            newCb2.addEventListener('change', () => {
+                if (newCb2.checked) {
+                    localStorage.removeItem('portolancast-auto-landscape');
+                } else {
+                    localStorage.setItem('portolancast-auto-landscape', 'false');
                 }
             });
         }
@@ -1455,6 +1462,21 @@ export class Toolbar {
     _closeSettings() {
         const modal = document.getElementById('modal-toolbar-settings');
         if (modal) modal.style.display = 'none';
+    }
+
+    /**
+     * Apply multi-row layout to the toolbar tools row.
+     * Sets data-rows attribute which CSS uses for wrapping.
+     */
+    _applyToolbarRows(rows) {
+        const toolsRow = document.querySelector('.toolbar-row-tools');
+        if (toolsRow) {
+            if (rows === '1' || !rows) {
+                toolsRow.removeAttribute('data-rows');
+            } else {
+                toolsRow.setAttribute('data-rows', rows);
+            }
+        }
     }
 
     /**
@@ -1538,6 +1560,122 @@ export class Toolbar {
 
             container.appendChild(item);
         });
+    }
+
+    /**
+     * Populate the hotkey editor in the settings modal.
+     * Shows each tool with its current key binding in an editable input.
+     * Pressing a key in the input rebinds that tool immediately.
+     */
+    _populateHotkeyEditor() {
+        const container = document.getElementById('settings-hotkeys');
+        if (!container) return;
+        container.innerHTML = '';
+
+        // Build reverse map: tool → key for display
+        const toolToKey = {};
+        for (const [key, tool] of Object.entries(this._hotkeys)) {
+            toolToKey[tool] = key;
+        }
+
+        // Friendly tool names
+        const TOOL_NAMES = {
+            'select': 'Select', 'pen': 'Pen', 'rect': 'Rectangle',
+            'ellipse': 'Ellipse', 'line': 'Line', 'highlighter': 'Highlighter',
+            'hand': 'Hand/Pan', 'text': 'Text', 'cloud': 'Cloud',
+            'connect': 'Connect', 'callout': 'Callout', 'polyline': 'Polyline',
+            'distance': 'Distance', 'area': 'Area', 'arrow': 'Arrow',
+            'sticky-note': 'Sticky Note', 'image-overlay': 'Image Overlay',
+            'count': 'Count', 'calibrate': 'Calibrate', 'equipment-marker': 'Equipment Marker',
+            'eraser': 'Eraser', 'polygon': 'Polygon', 'dimension': 'Dimension',
+            'arc': 'Arc', 'radius': 'Radius/Diameter',
+            'volume': 'Volume', 'cloud-area': 'Cloud+', 'sketch': 'Sketch to Scale',
+        };
+
+        // Get all unique tools from defaults (ensures order is stable)
+        const tools = Object.values(DEFAULT_HOTKEYS);
+        const seen = new Set();
+
+        for (const tool of tools) {
+            if (seen.has(tool)) continue;
+            seen.add(tool);
+
+            const row = document.createElement('div');
+            row.className = 'settings-hotkey-row';
+
+            const label = document.createElement('span');
+            label.className = 'settings-hotkey-label';
+            label.textContent = TOOL_NAMES[tool] || tool;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'settings-hotkey-input';
+            input.value = toolToKey[tool] || '';
+            input.maxLength = 1;
+            input.dataset.tool = tool;
+
+            // Capture keypress to rebind
+            input.addEventListener('keydown', (e) => {
+                e.preventDefault();
+                const newKey = e.key;
+                if (newKey === 'Escape' || newKey === 'Tab') return;
+                // Don't allow system keys
+                if (['Control', 'Alt', 'Meta', 'Shift'].includes(newKey)) return;
+
+                // Remove old binding for this tool
+                const oldKey = toolToKey[tool];
+                if (oldKey) delete this._hotkeys[oldKey];
+
+                // Remove any existing binding for the new key
+                const displaced = this._hotkeys[newKey];
+                if (displaced) {
+                    toolToKey[displaced] = '';
+                    // Update the displaced tool's input
+                    const displacedInput = container.querySelector(`input[data-tool="${displaced}"]`);
+                    if (displacedInput) displacedInput.value = '';
+                }
+
+                // Set new binding
+                this._hotkeys[newKey] = tool;
+                toolToKey[tool] = newKey;
+                input.value = newKey;
+
+                // Persist overrides (only save differences from defaults)
+                this._saveHotkeys();
+            });
+
+            row.appendChild(label);
+            row.appendChild(input);
+            container.appendChild(row);
+        }
+    }
+
+    /**
+     * Save hotkey overrides to localStorage.
+     * Only stores keys that differ from DEFAULT_HOTKEYS to keep storage minimal.
+     */
+    _saveHotkeys() {
+        const overrides = {};
+        for (const [key, tool] of Object.entries(this._hotkeys)) {
+            if (DEFAULT_HOTKEYS[key] !== tool) {
+                overrides[key] = tool;
+            }
+        }
+        // Also store removed defaults
+        for (const [key, tool] of Object.entries(DEFAULT_HOTKEYS)) {
+            if (!this._hotkeys[key] || this._hotkeys[key] !== tool) {
+                // Find where this tool moved to
+                const newKey = Object.entries(this._hotkeys).find(([, t]) => t === tool)?.[0];
+                if (newKey && newKey !== key) {
+                    overrides[newKey] = tool;
+                }
+            }
+        }
+        if (Object.keys(overrides).length > 0) {
+            localStorage.setItem('portolancast-hotkeys', JSON.stringify(this._hotkeys));
+        } else {
+            localStorage.removeItem('portolancast-hotkeys');
+        }
     }
 
     // =========================================================================

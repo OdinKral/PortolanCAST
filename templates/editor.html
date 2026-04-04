@@ -342,6 +342,15 @@
                 <button class="toolbar-btn tool-btn" data-tool="radius" title="Radius/Diameter — circle measurement">
                     <span class="icon">&#8960;</span> Radius
                 </button>
+                <button class="toolbar-btn tool-btn" data-tool="volume" title="Volume — area × depth">
+                    <span class="icon">&#9645;&#8595;</span> Volume
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="cloud-area" title="Cloud+ — cloud with area measurement">
+                    <span class="icon">&#9729;&#178;</span> Cloud+
+                </button>
+                <button class="toolbar-btn tool-btn" data-tool="sketch" title="Sketch to Scale — draw at calibrated dimensions">
+                    <span class="icon">&#9634;</span> Sketch
+                </button>
                 <button class="toolbar-btn tool-btn" data-tool="count" title="Count Markers (N)">
                     <span class="icon">&#35;</span> Count
                 </button>
@@ -1110,6 +1119,27 @@
             </label>
         </div>
 
+        <!-- Toolbar rows: 1-4 rows for the tools palette -->
+        <div class="settings-display-row">
+            <label class="settings-tool-item">
+                <span>Toolbar rows</span>
+                <select id="settings-toolbar-rows">
+                    <option value="1">1 row</option>
+                    <option value="2">2 rows</option>
+                    <option value="3">3 rows</option>
+                    <option value="4">4 rows</option>
+                </select>
+            </label>
+        </div>
+
+        <!-- Auto-landscape: auto-rotate portrait pages to landscape -->
+        <div class="settings-display-row">
+            <label class="settings-tool-item">
+                <input type="checkbox" id="settings-cb-auto-landscape" checked>
+                <label for="settings-cb-auto-landscape">Auto-rotate portrait pages to landscape</label>
+            </label>
+        </div>
+
         <!-- Scroll sensitivity: controls how far you must over-scroll at a page
              edge before the viewer advances to the next/previous page. -->
         <div class="settings-display-row settings-scroll-row">
@@ -1144,6 +1174,14 @@
                 <div id="settings-measure-tools" class="settings-tool-list">
                     <!-- Populated dynamically -->
                 </div>
+            </div>
+        </div>
+
+        <!-- Keyboard shortcuts editor -->
+        <div class="settings-section" style="margin-top: 12px;">
+            <div class="settings-section-header">Keyboard Shortcuts</div>
+            <div id="settings-hotkeys" class="settings-hotkey-list">
+                <!-- Populated dynamically by toolbar.js -->
             </div>
         </div>
 

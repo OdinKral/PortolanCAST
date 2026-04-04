@@ -60,7 +60,7 @@ const CUSTOM_PROPERTIES = [
     // Used as the lookup key for markup_photos in the server DB.
     'markupId',
     // Phase 2: measurement tool properties
-    'measurementType', 'pixelLength', 'pixelArea',
+    'measurementType', 'pixelLength', 'pixelArea', 'volumeDepth',
     'countIndex', 'countGroup', 'labelText',
     // Phase 3A: node editing support
     // pairedId links a polygon/label pair so NodeEditor can find the companion label

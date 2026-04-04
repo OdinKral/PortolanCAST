@@ -83,6 +83,7 @@ source: "Bluebeam support.bluebeam.com + bluebeam.com product pages"
 | Length | Length | Distance (U key) | |
 | Area | Area | Area (A key) | Polygon-based |
 | Count | Count | Count (N key) | |
+| Cloud+ | Cloud+ | Cloud+ (cloud-area) | Cloud with auto area label |
 | Bundle save/load | — | .portolan ZIP | Exceeds — portable |
 | PDF export | PDF export | Export with shapes | |
 | Review Brief | — | Review Brief | |
@@ -122,11 +123,11 @@ source: "Bluebeam support.bluebeam.com + bluebeam.com product pages"
 | Stamps | Medium | ✅ Done | Built-in + custom stamps, quick text (tools-panel.js) |
 | Grouping/Ungrouping | Small | ✅ Done | Ctrl+G / Ctrl+Shift+G — Fabric.js groups |
 | Text selection in PDF | Large | ✅ Done | Transparent text layer with word-level bboxes |
-| Multi-row toolbar | Medium | | 1-4 rows, configurable |
-| Editable hotkeys | Medium | | User-configurable keyboard shortcuts |
-| Save-as naming | Small | | Rename on bundle export |
-| Layer assignment | Medium | | Right-click → assign markup to layer |
-| Landscape default | Small | | Auto-detect page orientation |
+| Multi-row toolbar | Medium | ✅ Done | 1-4 rows, configurable via settings |
+| Editable hotkeys | Medium | ✅ Done | User-configurable in Toolbar Settings |
+| Save-as naming | Small | ✅ Done | Bundle name modal (already existed) |
+| Layer assignment | Medium | ✅ Done | Right-click context menu (already existed) |
+| Landscape default | Small | ✅ Done | Auto-rotate portrait pages, toggle in settings |
 
 #### Tier 3 — Advanced / next version
 | Feature | Effort | Status | Description |
@@ -139,9 +140,9 @@ source: "Bluebeam support.bluebeam.com + bluebeam.com product pages"
 | Perimeter measure | Small | ✅ Done | Polygon perimeter (no fill) |
 | Radius/Diameter | Small | ✅ Done | Circle center→edge, shows radius + diameter |
 | Angle measure | Medium | ✅ Done | 3-point angle |
-| Volume | Medium | | Area × depth calculation |
+| Volume | Small | ✅ Done | Area polygon × depth prompt = cubic units |
 | Dynamic Fill | Large | | Flood-fill counting |
-| Sketch to Scale | Medium | | Draw shapes at calibrated scale |
+| Sketch to Scale | Medium | ✅ Done | Click-place rectangle at calibrated dimensions |
 | Batch processing | Large | | Multi-document operations |
 | Real-time collab | Large | | Studio equivalent |
 | VisualSearch AI | Large | | AI quantity takeoffs |

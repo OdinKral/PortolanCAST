@@ -110,6 +110,14 @@ export class PDFViewer {
          */
         this._pageRotations = {};
 
+        /**
+         * Whether auto-landscape detection has been applied for this document.
+         * Set to true after the first loadDocument() so we don't re-apply on
+         * subsequent page navigations.
+         * @type {boolean}
+         */
+        this._autoLandscapeApplied = false;
+
         // Pan state — tracks mouse drag for panning
         this.isPanning = false;
         this.panStartX = 0;
@@ -326,6 +334,26 @@ export class PDFViewer {
         // Load per-page rotation preferences before first render
         // so the first page displays in its saved orientation.
         await this.loadRotations();
+
+        // Auto-landscape: if "auto-rotate landscape" is enabled and a page
+        // has no saved rotation but its native dimensions are portrait
+        // (height > width), pre-set rotation to 90° so landscape drawings
+        // stored in portrait orientation display correctly on first open.
+        if (!this._autoLandscapeApplied) {
+            this._autoLandscapeApplied = true;
+            const autoLandscape = localStorage.getItem('portolancast-auto-landscape') !== 'false';
+            if (autoLandscape && this.docInfo?.page_sizes) {
+                let changed = false;
+                this.docInfo.page_sizes.forEach((size, i) => {
+                    const key = String(i);
+                    if (!this._pageRotations[key] && size.height > size.width) {
+                        this._pageRotations[key] = 90;
+                        changed = true;
+                    }
+                });
+                if (changed) this._saveRotations();
+            }
+        }
 
         // Switch from welcome screen to canvas
         this.welcomeScreen.style.display = 'none';
