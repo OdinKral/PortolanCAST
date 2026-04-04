@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fan Coil Unit (FCU)
+  Box with fan circle and coil fins
+  Category: equipment
+  Ports: input (left — pipe in), output (right — air out), power (top), comm (bottom)
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 80 64"
+     width="80" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- FCU casing -->
+    <rect x="8" y="10" width="64" height="36" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Coil (left side — vertical with fins) -->
+    <line x1="24" y1="14" x2="24" y2="42" stroke="#333" stroke-width="1.5"/>
+    <line x1="21" y1="18" x2="27" y2="18" stroke="#333" stroke-width="1"/>
+    <line x1="21" y1="24" x2="27" y2="24" stroke="#333" stroke-width="1"/>
+    <line x1="21" y1="30" x2="27" y2="30" stroke="#333" stroke-width="1"/>
+    <line x1="21" y1="36" x2="27" y2="36" stroke="#333" stroke-width="1"/>
+    <!-- Fan (right side) -->
+    <circle cx="52" cy="28" r="10" fill="none" stroke="#333" stroke-width="1.5"/>
+    <path d="M 52,28 Q 56,20 60,24" fill="none" stroke="#333" stroke-width="1"/>
+    <path d="M 52,28 Q 46,24 46,30" fill="none" stroke="#333" stroke-width="1"/>
+    <circle cx="52" cy="28" r="2" fill="#333" stroke="none"/>
+    <!-- Pipe connections (bottom — supply and return) -->
+    <line x1="20" y1="46" x2="20" y2="52" stroke="#333" stroke-width="1.5"/>
+    <line x1="28" y1="46" x2="28" y2="52" stroke="#333" stroke-width="1.5"/>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="pipe-s" cx="20" cy="54" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="pipe-r" cx="28" cy="54" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="air-out" cx="76" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="52" cy="6" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="comm" cx="40" cy="50" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="40" y="62" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">FCU-101</text>
+  </g>
+
+</svg>

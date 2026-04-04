@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Duct Smoke Detector (BSD)
+  Circle with "S" and smoke wisps — fire safety
+  Category: sensor (binary)
+  Ports: output (right) — binary alarm
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Double circle (safety device convention) -->
+    <circle cx="32" cy="28" r="18" fill="none" stroke="#333" stroke-width="2"/>
+    <circle cx="32" cy="28" r="14" fill="none" stroke="#333" stroke-width="1"/>
+    <!-- "S" for smoke -->
+    <text x="32" y="33" text-anchor="middle" font-family="Arial" font-size="14"
+          font-weight="bold" fill="#333">S</text>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="alarm" cx="50" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="32" cy="10" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="58" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">BSD-101</text>
+  </g>
+
+</svg>

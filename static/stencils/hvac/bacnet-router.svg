@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BACnet Router / Network Infrastructure (NR)
+  Diamond shape with "NET" — routes between MSTP trunks or IP segments
+  Category: controller (infrastructure)
+  Ports: comm ports on all four sides
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Diamond (rotated square) -->
+    <polygon points="32,6 58,32 32,58 6,32" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Network label -->
+    <text x="32" y="30" text-anchor="middle" font-family="Arial" font-size="8"
+          font-weight="bold" fill="#333">NET</text>
+    <!-- Small arrows on each side (bidirectional routing) -->
+    <polygon points="30,10 32,6 34,10" fill="#ab47bc" stroke="none"/>
+    <polygon points="54,30 58,32 54,34" fill="#ab47bc" stroke="none"/>
+    <polygon points="30,54 32,58 34,54" fill="#ab47bc" stroke="none"/>
+    <polygon points="10,30 6,32 10,34" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="trunk1" cx="32" cy="2" r="3" fill="#ab47bc" stroke="none"/>
+    <circle id="trunk2" cx="62" cy="32" r="3" fill="#ab47bc" stroke="none"/>
+    <circle id="trunk3" cx="32" cy="62" r="3" fill="#ab47bc" stroke="none"/>
+    <circle id="trunk4" cx="2" cy="32" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="48" cy="12" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="38" text-anchor="middle"
+          font-family="Arial" font-size="7" fill="#666">ROUTER</text>
+  </g>
+
+</svg>

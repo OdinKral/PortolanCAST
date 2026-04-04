@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Variable Frequency Drive (SIC/VFD)
+  Rectangle with sine-wave-to-variable-wave symbol inside
+  Category: controller
+  Ports: input (left) — speed command, output (right) — motor power,
+         power (top) — line power in, comm (bottom) — BACnet
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 80 64"
+     width="80" height="64">
+
+  <!-- LAYER: symbol -->
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- VFD housing -->
+    <rect x="12" y="10" width="56" height="36" rx="2" ry="2"
+          fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Input sine wave (fixed frequency — left side) -->
+    <path d="M 18,28 Q 24,18 30,28 Q 36,38 42,28"
+          fill="none" stroke="#333" stroke-width="1.5"/>
+    <!-- Arrow between waves -->
+    <line x1="42" y1="28" x2="46" y2="28" stroke="#333" stroke-width="1.5"/>
+    <polygon points="46,25 50,28 46,31" fill="#333" stroke="none"/>
+    <!-- Output variable wave (compressed — higher freq) -->
+    <path d="M 50,28 Q 53,20 56,28 Q 59,36 62,28"
+          fill="none" stroke="#333" stroke-width="1.5"/>
+    <!-- "VFD" label -->
+    <text x="40" y="20" text-anchor="middle" font-family="Arial" font-size="7"
+          fill="#666">VFD</text>
+  </g>
+
+  <!-- LAYER: port-input — speed command from controller (left) -->
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="cmd" cx="8" cy="28" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-output — motor power output (right) -->
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="motor" cx="72" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-power — 3-phase line power in (top) -->
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="40" cy="6" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-comm — BACnet (bottom) -->
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="comm" cx="40" cy="50" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <!-- LAYER: label -->
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="40" y="60" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">VFD-101</text>
+  </g>
+
+</svg>

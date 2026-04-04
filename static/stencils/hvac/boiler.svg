@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Boiler
+  Rectangle with flame symbol
+  Category: equipment
+  Ports: input (left — HWR), output (right — HWS), power, comm
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 80 64"
+     width="80" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Boiler vessel -->
+    <rect x="12" y="10" width="56" height="36" rx="4" ry="4"
+          fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Flame symbol (center) -->
+    <path d="M 36,36 Q 34,28 38,24 Q 36,20 40,14 Q 44,20 42,24 Q 46,28 44,36"
+          fill="none" stroke="#c62828" stroke-width="1.5"/>
+    <!-- Inner flame -->
+    <path d="M 38,34 Q 38,30 40,26 Q 42,30 42,34"
+          fill="none" stroke="#ff8f00" stroke-width="1"/>
+    <!-- Pipe stubs -->
+    <line x1="4" y1="28" x2="12" y2="28" stroke="#333" stroke-width="2"/>
+    <line x1="68" y1="28" x2="76" y2="28" stroke="#333" stroke-width="2"/>
+    <text x="8" y="40" font-family="Arial" font-size="5" fill="#666">HWR</text>
+    <text x="68" y="40" font-family="Arial" font-size="5" fill="#666">HWS</text>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="hwr" cx="4" cy="28" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="hws" cx="76" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="40" cy="6" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="comm" cx="40" cy="50" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="40" y="60" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">BLR-1</text>
+  </g>
+
+</svg>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Temperature Sensor (TT)
+  ISA-5.1: Circle with "TT" designation
+  Pattern: Zone Air Temperature Sensor
+  Category: sensor
+  Ports: output (right) — analog 4-20mA or 0-10V
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <!-- LAYER: symbol -->
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- ISA sensor circle -->
+    <circle cx="32" cy="28" r="18" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- ISA designation -->
+    <text x="32" y="33" text-anchor="middle" font-family="Arial" font-size="12"
+          font-weight="bold" fill="#333">TT</text>
+  </g>
+
+  <!-- LAYER: port-output — signal output (right side of circle) -->
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="out" cx="50" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-power — 24VDC power (top of circle) -->
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="32" cy="10" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <!-- LAYER: label — ISA tag number renders here -->
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="58" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">TT-101</text>
+  </g>
+
+</svg>

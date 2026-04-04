@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Damper Actuator (TV)
+  Butterfly/blade symbol in duct cross-section
+  Category: actuator
+  Ports: input (top) — command signal 0-100%
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <!-- LAYER: symbol -->
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Duct walls (horizontal lines) -->
+    <line x1="4" y1="20" x2="60" y2="20" stroke="#333" stroke-width="2"/>
+    <line x1="4" y1="44" x2="60" y2="44" stroke="#333" stroke-width="2"/>
+    <!-- Damper blade (diagonal line in duct) -->
+    <line x1="24" y1="20" x2="40" y2="44" stroke="#333" stroke-width="2.5"/>
+    <!-- Blade pivot point -->
+    <circle cx="32" cy="32" r="2.5" fill="#333" stroke="none"/>
+    <!-- Actuator stem (up from pivot) -->
+    <line x1="32" y1="20" x2="32" y2="10" stroke="#333" stroke-width="2"/>
+    <!-- Actuator motor (small rectangle on top) -->
+    <rect x="26" y="4" width="12" height="6" fill="none" stroke="#333" stroke-width="1.5"/>
+  </g>
+
+  <!-- LAYER: port-input — command signal from controller -->
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="in1" cx="32" cy="2" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <!-- LAYER: label -->
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="58" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">TV-101</text>
+  </g>
+
+</svg>

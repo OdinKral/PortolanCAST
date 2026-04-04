@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  I/O Expansion Module (IO)
+  Small rectangle with terminal ticks — XM series, etc.
+  Category: controller (infrastructure)
+  Ports: inputs (left), outputs (right), comm (bottom — to parent controller)
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 80 48"
+     width="80" height="48">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Module body -->
+    <rect x="16" y="6" width="48" height="28" rx="2" ry="2"
+          fill="none" stroke="#333" stroke-width="2"/>
+    <!-- "I/O" label -->
+    <text x="40" y="18" text-anchor="middle" font-family="Arial" font-size="9"
+          font-weight="bold" fill="#333">I/O</text>
+    <text x="40" y="28" text-anchor="middle" font-family="Arial" font-size="6" fill="#666">XM</text>
+    <!-- Input terminal ticks (left) -->
+    <line x1="16" y1="14" x2="12" y2="14" stroke="#333" stroke-width="1.5"/>
+    <line x1="16" y1="20" x2="12" y2="20" stroke="#333" stroke-width="1.5"/>
+    <line x1="16" y1="26" x2="12" y2="26" stroke="#333" stroke-width="1.5"/>
+    <!-- Output terminal ticks (right) -->
+    <line x1="64" y1="14" x2="68" y2="14" stroke="#333" stroke-width="1.5"/>
+    <line x1="64" y1="20" x2="68" y2="20" stroke="#333" stroke-width="1.5"/>
+    <line x1="64" y1="26" x2="68" y2="26" stroke="#333" stroke-width="1.5"/>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="ai1" cx="8" cy="14" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="ai2" cx="8" cy="20" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="bi1" cx="8" cy="26" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="ao1" cx="72" cy="14" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="ao2" cx="72" cy="20" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="bo1" cx="72" cy="26" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="bus" cx="40" cy="38" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="40" y="46" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">XM-101</text>
+  </g>
+
+</svg>

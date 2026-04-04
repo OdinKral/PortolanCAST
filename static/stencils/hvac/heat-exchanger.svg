@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Heat Exchanger (HX) — plate or shell-and-tube
+  Circle with two crossing flow paths
+  Category: equipment
+  Ports: 4 pipe connections (primary in/out, secondary in/out)
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- HX circle -->
+    <circle cx="32" cy="28" r="20" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Primary flow (horizontal — left to right) -->
+    <line x1="12" y1="28" x2="52" y2="28" stroke="#333" stroke-width="1.5"/>
+    <polygon points="48,25 54,28 48,31" fill="#333" stroke="none"/>
+    <!-- Secondary flow (vertical — top to bottom, crossing) -->
+    <line x1="32" y1="8" x2="32" y2="48" stroke="#333" stroke-width="1.5"/>
+    <polygon points="29,44 32,50 35,44" fill="#333" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="pri-in" cx="8" cy="28" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="sec-in" cx="32" cy="4" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="pri-out" cx="56" cy="28" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="sec-out" cx="32" cy="52" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="62" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">HX-1</text>
+  </g>
+
+</svg>

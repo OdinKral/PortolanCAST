@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PortolanCAST Stencil Template
+  ==============================
+  Copy this file to start a new symbol.
+
+  CONVENTIONS:
+    viewBox:  64x64 for simple symbols (sensors, actuators, switches)
+              96x96 for equipment (AHU, VAV, chiller, pump)
+    Units:    px (Inkscape default)
+    Colors:   Use stroke only, no fill (fill is set by the app from pattern color)
+              Stroke: #333333 (will be overridden by app if needed)
+              Stroke-width: 2
+
+  LAYERS (Inkscape: Layer > Add Layer):
+    "symbol"     — The visual shape itself. REQUIRED.
+    "port-input" — Circle(s) marking input connection points. Center = attach point.
+    "port-output"— Circle(s) marking output connection points.
+    "port-power" — Circle(s) marking power connection points (optional).
+    "port-comm"  — Circle(s) marking communication port (optional).
+    "label"      — A <text> element or <rect> marking where the ISA tag renders.
+
+  PORT MARKERS:
+    - Use <circle r="3"> on the appropriate port layer
+    - Position at the edge of the symbol where a wire would connect
+    - id attribute = port name (e.g., id="in1", id="out", id="pwr")
+    - The app reads cx/cy as the connection point coordinates
+
+  LABEL:
+    - Place a <text> element where the tag number should appear (e.g., "TT-101")
+    - id="label-anchor"
+    - The app replaces the text content with the actual ISA tag
+
+  INKSCAPE TIPS:
+    - Document Properties > Custom size: 64x64 px
+    - Snap to grid: 4px grid recommended
+    - Export: Save as Plain SVG (not Inkscape SVG) for smaller files
+    - Keep it simple: 1-2 colors, no gradients, no blur
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <!-- LAYER: symbol — the visual shape -->
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Draw your symbol here -->
+    <!-- Example: <circle cx="32" cy="32" r="20" fill="none" stroke="#333" stroke-width="2"/> -->
+  </g>
+
+  <!-- LAYER: port-input — where input wires attach -->
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input"
+     style="display:inline">
+    <!-- Example: <circle id="in1" cx="0" cy="32" r="3" fill="#4fc3f7" stroke="none"/> -->
+  </g>
+
+  <!-- LAYER: port-output — where output wires attach -->
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output"
+     style="display:inline">
+    <!-- Example: <circle id="out" cx="64" cy="32" r="3" fill="#ff7043" stroke="none"/> -->
+  </g>
+
+  <!-- LAYER: port-power — where power wires attach (optional) -->
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power"
+     style="display:inline">
+    <!-- Example: <circle id="pwr" cx="32" cy="0" r="3" fill="#e53935" stroke="none"/> -->
+  </g>
+
+  <!-- LAYER: port-comm — where communication wires attach (optional) -->
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm"
+     style="display:inline">
+    <!-- Example: <circle id="comm" cx="32" cy="64" r="3" fill="#ab47bc" stroke="none"/> -->
+  </g>
+
+  <!-- LAYER: label — where the ISA tag number renders -->
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="60" text-anchor="middle"
+          font-family="Arial" font-size="8" fill="#333">TAG</text>
+  </g>
+
+</svg>

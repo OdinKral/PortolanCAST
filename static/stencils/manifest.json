@@ -1,0 +1,344 @@
+{
+  "version": "1.0.0",
+  "description": "PortolanCAST stencil symbol catalog — HVAC controls + electrical diagrams",
+  "packs": {
+    "hvac": {
+      "name": "HVAC Controls",
+      "description": "Sensors, actuators, controllers, and equipment for HVAC control system diagrams",
+      "symbols": [
+        {
+          "id": "sensor-temperature",
+          "file": "hvac/sensor-temperature.svg",
+          "name": "Temperature Sensor",
+          "isa_symbol": "TT",
+          "category": "sensor",
+          "signal_type": "analog",
+          "tags": ["temp", "sensor"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "sensor-pressure",
+          "file": "hvac/sensor-pressure.svg",
+          "name": "Pressure Transmitter",
+          "isa_symbol": "PT",
+          "category": "sensor",
+          "signal_type": "analog",
+          "tags": ["pressure", "sensor"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "sensor-humidity",
+          "file": "hvac/sensor-humidity.svg",
+          "name": "Humidity Sensor",
+          "isa_symbol": "MT",
+          "category": "sensor",
+          "signal_type": "analog",
+          "tags": ["humidity", "sensor"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "sensor-co2",
+          "file": "hvac/sensor-co2.svg",
+          "name": "CO2 Sensor",
+          "isa_symbol": "AT",
+          "category": "sensor",
+          "signal_type": "analog",
+          "tags": ["co2", "sensor"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "sensor-flow",
+          "file": "hvac/sensor-flow.svg",
+          "name": "Flow Transmitter",
+          "isa_symbol": "FT",
+          "category": "sensor",
+          "signal_type": "analog",
+          "tags": ["flow", "sensor"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "switch-current",
+          "file": "hvac/switch-current.svg",
+          "name": "Current Switch",
+          "isa_symbol": "IS",
+          "category": "sensor",
+          "signal_type": "binary",
+          "tags": ["current", "status"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "switch-dp",
+          "file": "hvac/switch-dp.svg",
+          "name": "Differential Pressure Switch",
+          "isa_symbol": "PDS",
+          "category": "sensor",
+          "signal_type": "binary",
+          "tags": ["pressure", "status"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "smoke-detector",
+          "file": "hvac/smoke-detector.svg",
+          "name": "Duct Smoke Detector",
+          "isa_symbol": "BSD",
+          "category": "sensor",
+          "signal_type": "binary",
+          "tags": ["alarm"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "freeze-stat",
+          "file": "hvac/freeze-stat.svg",
+          "name": "Freeze Stat",
+          "isa_symbol": "TSL",
+          "category": "sensor",
+          "signal_type": "binary",
+          "tags": ["temp", "alarm"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "sensor-occupancy",
+          "file": "hvac/sensor-occupancy.svg",
+          "name": "Occupancy Sensor",
+          "isa_symbol": "OSS",
+          "category": "sensor",
+          "signal_type": "binary",
+          "tags": ["zone", "status"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "valve-2way",
+          "file": "hvac/valve-2way.svg",
+          "name": "2-Way Control Valve",
+          "isa_symbol": "TV",
+          "category": "actuator",
+          "signal_type": "analog",
+          "tags": ["valve", "actuator", "command"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "valve-3way",
+          "file": "hvac/valve-3way.svg",
+          "name": "3-Way Control Valve",
+          "isa_symbol": "TV",
+          "category": "actuator",
+          "signal_type": "analog",
+          "tags": ["valve", "actuator", "command"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "damper-actuator",
+          "file": "hvac/damper-actuator.svg",
+          "name": "Damper Actuator",
+          "isa_symbol": "TV",
+          "category": "actuator",
+          "signal_type": "analog",
+          "tags": ["damper", "actuator", "command"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "damper-fire-smoke",
+          "file": "hvac/damper-fire-smoke.svg",
+          "name": "Fire/Smoke Damper",
+          "isa_symbol": "ZV",
+          "category": "actuator",
+          "signal_type": "binary",
+          "tags": ["damper", "alarm"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "controller-temp",
+          "file": "hvac/controller-temp.svg",
+          "name": "Temperature Controller",
+          "isa_symbol": "TIC",
+          "category": "controller",
+          "signal_type": "analog",
+          "tags": ["temp", "controller"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "controller-ddc",
+          "file": "hvac/controller-ddc.svg",
+          "name": "DDC Controller",
+          "isa_symbol": "JC",
+          "category": "controller",
+          "signal_type": "mixed",
+          "tags": ["controller"],
+          "viewBox": "0 0 96 64"
+        },
+        {
+          "id": "vfd",
+          "file": "hvac/vfd.svg",
+          "name": "Variable Frequency Drive",
+          "isa_symbol": "SIC",
+          "category": "controller",
+          "signal_type": "analog",
+          "tags": ["vfd", "speed", "controller"],
+          "viewBox": "0 0 80 64"
+        },
+        {
+          "id": "expansion-io",
+          "file": "hvac/expansion-io.svg",
+          "name": "I/O Expansion Module",
+          "isa_symbol": "IO",
+          "category": "controller",
+          "signal_type": "mixed",
+          "tags": ["controller"],
+          "viewBox": "0 0 80 48"
+        },
+        {
+          "id": "bacnet-router",
+          "file": "hvac/bacnet-router.svg",
+          "name": "BACnet Router",
+          "isa_symbol": "NR",
+          "category": "controller",
+          "signal_type": "communication",
+          "tags": ["controller"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "fan",
+          "file": "hvac/fan.svg",
+          "name": "Fan",
+          "category": "equipment",
+          "tags": ["fan"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "pump",
+          "file": "hvac/pump.svg",
+          "name": "Pump",
+          "category": "equipment",
+          "tags": ["pump"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "ahu",
+          "file": "hvac/ahu.svg",
+          "name": "Air Handling Unit",
+          "category": "equipment",
+          "tags": ["ahu"],
+          "viewBox": "0 0 96 64"
+        },
+        {
+          "id": "vav",
+          "file": "hvac/vav.svg",
+          "name": "Variable Air Volume Box",
+          "category": "equipment",
+          "tags": ["vav"],
+          "viewBox": "0 0 80 64"
+        },
+        {
+          "id": "fcu",
+          "file": "hvac/fcu.svg",
+          "name": "Fan Coil Unit",
+          "category": "equipment",
+          "tags": ["fcu"],
+          "viewBox": "0 0 80 64"
+        },
+        {
+          "id": "chiller",
+          "file": "hvac/chiller.svg",
+          "name": "Chiller",
+          "category": "equipment",
+          "tags": ["chiller"],
+          "viewBox": "0 0 96 64"
+        },
+        {
+          "id": "boiler",
+          "file": "hvac/boiler.svg",
+          "name": "Boiler",
+          "category": "equipment",
+          "tags": ["boiler"],
+          "viewBox": "0 0 80 64"
+        },
+        {
+          "id": "cooling-tower",
+          "file": "hvac/cooling-tower.svg",
+          "name": "Cooling Tower",
+          "category": "equipment",
+          "tags": ["condenser"],
+          "viewBox": "0 0 80 64"
+        },
+        {
+          "id": "heat-exchanger",
+          "file": "hvac/heat-exchanger.svg",
+          "name": "Heat Exchanger",
+          "category": "equipment",
+          "tags": ["water"],
+          "viewBox": "0 0 64 64"
+        }
+      ]
+    },
+    "electrical": {
+      "name": "Electrical",
+      "description": "IEC 60617 electrical symbols for power and wiring diagrams",
+      "symbols": [
+        {
+          "id": "breaker",
+          "file": "electrical/breaker.svg",
+          "name": "Circuit Breaker",
+          "category": "protection",
+          "tags": ["power"],
+          "viewBox": "0 0 48 64"
+        },
+        {
+          "id": "contactor",
+          "file": "electrical/contactor.svg",
+          "name": "Contactor / Relay",
+          "category": "switching",
+          "tags": ["power"],
+          "viewBox": "0 0 48 64"
+        },
+        {
+          "id": "disconnect",
+          "file": "electrical/disconnect.svg",
+          "name": "Disconnect Switch",
+          "category": "protection",
+          "tags": ["power"],
+          "viewBox": "0 0 48 64"
+        },
+        {
+          "id": "transformer",
+          "file": "electrical/transformer.svg",
+          "name": "Transformer",
+          "category": "power",
+          "tags": ["power"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "motor",
+          "file": "electrical/motor.svg",
+          "name": "Motor",
+          "category": "load",
+          "tags": ["power", "fan", "pump"],
+          "viewBox": "0 0 64 64"
+        },
+        {
+          "id": "fuse",
+          "file": "electrical/fuse.svg",
+          "name": "Fuse",
+          "category": "protection",
+          "tags": ["power"],
+          "viewBox": "0 0 48 64"
+        },
+        {
+          "id": "terminal-block",
+          "file": "electrical/terminal-block.svg",
+          "name": "Terminal Block",
+          "category": "infrastructure",
+          "tags": [],
+          "viewBox": "0 0 48 48"
+        },
+        {
+          "id": "ground",
+          "file": "electrical/ground.svg",
+          "name": "Ground",
+          "category": "reference",
+          "tags": [],
+          "viewBox": "0 0 48 48"
+        }
+      ]
+    }
+  }
+}

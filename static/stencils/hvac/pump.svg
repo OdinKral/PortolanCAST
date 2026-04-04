@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Pump (P)
+  Circle with impeller arrow — CHW/HW circulation pump
+  Category: equipment
+  Ports: input (left) — power/VFD, output (right) — pipe flow
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Pump circle -->
+    <circle cx="32" cy="28" r="18" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Discharge arrow (tangential, pointing right) -->
+    <line x1="32" y1="28" x2="50" y2="14" stroke="#333" stroke-width="2"/>
+    <polygon points="48,10 54,12 50,18" fill="#333" stroke="none"/>
+    <!-- Suction line (left) -->
+    <line x1="4" y1="28" x2="14" y2="28" stroke="#333" stroke-width="2"/>
+    <!-- Discharge line (right) -->
+    <line x1="50" y1="14" x2="60" y2="14" stroke="#333" stroke-width="2"/>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="suction" cx="4" cy="28" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="discharge" cx="60" cy="14" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="32" cy="48" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="60" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">P-101</text>
+  </g>
+
+</svg>

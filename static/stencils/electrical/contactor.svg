@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Contactor / Relay — IEC 60617
+  Category: electrical switching
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 48 64"
+     width="48" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Coil (rectangle) -->
+    <rect x="10" y="20" width="28" height="16" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Coil diagonal line (relay convention) -->
+    <line x1="10" y1="36" x2="38" y2="20" stroke="#333" stroke-width="1"/>
+    <!-- Coil terminals -->
+    <line x1="16" y1="20" x2="16" y2="12" stroke="#333" stroke-width="2"/>
+    <line x1="32" y1="20" x2="32" y2="12" stroke="#333" stroke-width="2"/>
+    <!-- Contact (below — NO contact) -->
+    <line x1="16" y1="36" x2="16" y2="44" stroke="#333" stroke-width="2"/>
+    <circle cx="16" cy="44" r="2" fill="#333" stroke="none"/>
+    <line x1="16" y1="44" x2="28" y2="38" stroke="#333" stroke-width="2"/>
+    <circle cx="32" cy="44" r="2" fill="#333" stroke="none"/>
+    <line x1="32" y1="44" x2="32" y2="52" stroke="#333" stroke-width="2"/>
+    <!-- "K" label (IEC designation for contactor) -->
+    <text x="40" y="30" font-family="Arial" font-size="8" font-weight="bold" fill="#333">K</text>
+  </g>
+
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="coil-a" cx="16" cy="8" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="coil-b" cx="32" cy="8" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="contact" cx="32" cy="54" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="24" y="62" text-anchor="middle"
+          font-family="Arial" font-size="8" fill="#333">K1</text>
+  </g>
+
+</svg>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DDC Controller (JC) — JACE / field controller
+  Rounded rectangle with I/O terminal indicators
+  Category: controller
+  Ports: inputs (left), outputs (right), comm (bottom), power (top)
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 96 64"
+     width="96" height="64">
+
+  <!-- LAYER: symbol -->
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Controller body -->
+    <rect x="12" y="8" width="72" height="40" rx="4" ry="4"
+          fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Label inside -->
+    <text x="48" y="24" text-anchor="middle" font-family="Arial" font-size="10"
+          font-weight="bold" fill="#333">DDC</text>
+    <!-- Input terminal strip (left side — small ticks) -->
+    <line x1="12" y1="18" x2="8" y2="18" stroke="#333" stroke-width="1.5"/>
+    <line x1="12" y1="24" x2="8" y2="24" stroke="#333" stroke-width="1.5"/>
+    <line x1="12" y1="30" x2="8" y2="30" stroke="#333" stroke-width="1.5"/>
+    <line x1="12" y1="36" x2="8" y2="36" stroke="#333" stroke-width="1.5"/>
+    <!-- Output terminal strip (right side) -->
+    <line x1="84" y1="18" x2="88" y2="18" stroke="#333" stroke-width="1.5"/>
+    <line x1="84" y1="24" x2="88" y2="24" stroke="#333" stroke-width="1.5"/>
+    <line x1="84" y1="30" x2="88" y2="30" stroke="#333" stroke-width="1.5"/>
+    <line x1="84" y1="36" x2="88" y2="36" stroke="#333" stroke-width="1.5"/>
+    <!-- "AI/AO/BI/BO" label row -->
+    <text x="20" y="42" font-family="Arial" font-size="6" fill="#666">AI</text>
+    <text x="36" y="42" font-family="Arial" font-size="6" fill="#666">BI</text>
+    <text x="60" y="42" font-family="Arial" font-size="6" fill="#666">AO</text>
+    <text x="74" y="42" font-family="Arial" font-size="6" fill="#666">BO</text>
+  </g>
+
+  <!-- LAYER: port-input — sensor inputs (left) -->
+  <g inkscape:label="port-input" inkscape:groupmode="layer" id="layer-port-input">
+    <circle id="ai1" cx="4" cy="18" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="ai2" cx="4" cy="24" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="bi1" cx="4" cy="30" r="3" fill="#4fc3f7" stroke="none"/>
+    <circle id="bi2" cx="4" cy="36" r="3" fill="#4fc3f7" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-output — actuator outputs (right) -->
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="ao1" cx="92" cy="18" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="ao2" cx="92" cy="24" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="bo1" cx="92" cy="30" r="3" fill="#ff7043" stroke="none"/>
+    <circle id="bo2" cx="92" cy="36" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-power — 24VAC/VDC (top) -->
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="48" cy="4" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <!-- LAYER: port-comm — BACnet MSTP (bottom) -->
+  <g inkscape:label="port-comm" inkscape:groupmode="layer" id="layer-port-comm">
+    <circle id="mstp" cx="48" cy="52" r="3" fill="#ab47bc" stroke="none"/>
+  </g>
+
+  <!-- LAYER: label -->
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="48" y="62" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">JC-101</text>
+  </g>
+
+</svg>

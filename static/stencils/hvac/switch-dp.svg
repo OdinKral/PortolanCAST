@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Differential Pressure Switch (PDS)
+  Circle with "PDS" — filter status / fan proof
+  Category: sensor (binary)
+  Ports: output (right) — binary status (clean/dirty or on/off)
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <circle cx="32" cy="28" r="18" fill="none" stroke="#333" stroke-width="2"/>
+    <text x="32" y="26" text-anchor="middle" font-family="Arial" font-size="9"
+          font-weight="bold" fill="#333">PDS</text>
+    <!-- Horizontal line through bottom half — switch contact symbol -->
+    <line x1="22" y1="34" x2="42" y2="34" stroke="#333" stroke-width="1.5"/>
+    <!-- Angled switch arm -->
+    <line x1="22" y1="34" x2="34" y2="28" stroke="#333" stroke-width="1.5"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="out" cx="50" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="58" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">PDS-101</text>
+  </g>
+
+</svg>

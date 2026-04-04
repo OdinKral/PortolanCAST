@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fan / Blower
+  Circle with blade curves — supply fan, return fan, exhaust fan
+  Category: equipment
+  Ports: power (bottom) — motor/VFD connection
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+     viewBox="0 0 64 64"
+     width="64" height="64">
+
+  <g inkscape:label="symbol" inkscape:groupmode="layer" id="layer-symbol">
+    <!-- Fan housing circle -->
+    <circle cx="32" cy="28" r="18" fill="none" stroke="#333" stroke-width="2"/>
+    <!-- Fan blades (3 curved lines from center) -->
+    <path d="M 32,28 Q 38,18 44,22" fill="none" stroke="#333" stroke-width="1.5"/>
+    <path d="M 32,28 Q 24,22 22,30" fill="none" stroke="#333" stroke-width="1.5"/>
+    <path d="M 32,28 Q 36,38 28,40" fill="none" stroke="#333" stroke-width="1.5"/>
+    <!-- Hub -->
+    <circle cx="32" cy="28" r="3" fill="#333" stroke="none"/>
+    <!-- Discharge arrow (right) -->
+    <line x1="50" y1="28" x2="60" y2="28" stroke="#333" stroke-width="2"/>
+    <polygon points="56,25 62,28 56,31" fill="#333" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-power" inkscape:groupmode="layer" id="layer-port-power">
+    <circle id="pwr" cx="32" cy="48" r="3" fill="#e53935" stroke="none"/>
+  </g>
+
+  <g inkscape:label="port-output" inkscape:groupmode="layer" id="layer-port-output">
+    <circle id="air-out" cx="60" cy="28" r="3" fill="#ff7043" stroke="none"/>
+  </g>
+
+  <g inkscape:label="label" inkscape:groupmode="layer" id="layer-label">
+    <text id="label-anchor" x="32" y="60" text-anchor="middle"
+          font-family="Arial" font-size="9" fill="#333">SF-101</text>
+  </g>
+
+</svg>
