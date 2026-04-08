@@ -1462,6 +1462,20 @@
     </div>
 </div>
 
+<!-- Component Library Panel (right dock) -->
+<div id="component-library-panel" class="component-library-panel" style="display: none;">
+    <div class="component-library-header">
+        <span class="component-library-title">Components</span>
+        <button id="component-library-import" class="component-library-header-btn" title="Import components">+</button>
+        <button id="component-library-popout" class="component-library-header-btn" title="Pop out to window">&#x29C9;</button>
+        <button id="component-library-close" class="component-library-header-btn" title="Close">&#x2715;</button>
+    </div>
+    <input id="component-library-search" type="text" class="component-library-search" placeholder="Search components...">
+    <div id="component-library-tags" class="component-library-tags"></div>
+    <div id="component-library-grid" class="component-library-grid"></div>
+    <input id="component-import-input" type="file" accept=".zip,.svg,.png" style="display:none">
+</div>
+
 {% endblock %}
 
 {% block scripts %}

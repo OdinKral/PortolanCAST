@@ -4733,3 +4733,135 @@ html, body {
     border-color: #2a5080;
 }
 .harvest-dialog-btn-save:hover { background: #2a4a6f; }
+
+/* ── Component Library Panel ── */
+.component-library-panel {
+    position: fixed;
+    right: 0;
+    top: 40px;
+    bottom: 0;
+    width: 250px;
+    background: #1e1e2e;
+    border-left: 1px solid #3a3a55;
+    display: flex;
+    flex-direction: column;
+    z-index: 500;
+    overflow: hidden;
+}
+.component-library-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #3a3a55;
+    gap: 4px;
+}
+.component-library-title {
+    color: #e0e0e0;
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+}
+.component-library-header-btn {
+    background: none;
+    border: 1px solid #3a3a55;
+    border-radius: 3px;
+    color: #888;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    line-height: 1;
+}
+.component-library-header-btn:hover { color: #ccc; border-color: #5599cc; }
+.component-library-search {
+    margin: 8px 10px 4px;
+    background: #1a1a2e;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 12px;
+    padding: 5px 8px;
+    outline: none;
+}
+.component-library-search:focus { border-color: #5599cc; }
+.component-library-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 10px;
+    max-height: 60px;
+    overflow-y: auto;
+}
+.component-tag-chip {
+    background: #2a2a3d;
+    border: 1px solid #3a3a55;
+    border-radius: 12px;
+    color: #aaa;
+    font-size: 10px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.component-tag-chip:hover { border-color: #5599cc; color: #ccc; }
+.component-tag-chip.active {
+    background: #1e3a5f;
+    border-color: #2a5080;
+    color: #88bbdd;
+}
+.component-library-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 8px 10px;
+    overflow-y: auto;
+    flex: 1;
+}
+.component-library-cell {
+    background: #2a2a3d;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    padding: 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+.component-library-cell:hover { border-color: #5599cc; }
+.component-library-thumb {
+    width: 100%;
+    height: 60px;
+    object-fit: contain;
+    background: #1a1a2e;
+    border-radius: 3px;
+}
+.component-library-name {
+    font-size: 10px;
+    color: #ccc;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.component-library-empty {
+    grid-column: 1 / -1;
+    color: #666;
+    font-size: 12px;
+    text-align: center;
+    padding: 20px 10px;
+}
+/* Context menu */
+.component-context-menu {
+    position: fixed;
+    background: #1e1e2e;
+    border: 1px solid #3a3a55;
+    border-radius: 4px;
+    padding: 4px 0;
+    z-index: 10001;
+    min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.component-context-item {
+    padding: 6px 14px;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+}
+.component-context-item:hover { background: #2a2a3d; color: #fff; }

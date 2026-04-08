@@ -38,6 +38,7 @@ import { EquipmentMarkerPanel } from './equipment-marker.js';
 import { TextFormatBar } from './text-format-bar.js';
 import { FindReplace } from './find-replace.js';
 import { TextLayer } from './text-layer.js';
+import { ComponentLibrary } from './component-library.js';
 // PageTextPanel is loaded as a plain script (page-text.js) — no import needed.
 // It attaches PageTextPanel to the global scope so app.js can instantiate it.
 
@@ -82,6 +83,8 @@ class App {
         this.findReplace = new FindReplace();
         // Text selection layer — transparent spans over PDF for native text selection
         this.textLayer = new TextLayer();
+        // Component Library — right-docked panel for browsing harvested components
+        this.componentLibrary = new ComponentLibrary();
 
         // Give PluginLoader access to the App instance for plugin init() calls.
         // Set here (not in PluginLoader constructor) to avoid circular dependency.
@@ -1184,6 +1187,9 @@ class App {
         // Initialize global search panel — document-independent, so init once here.
         // Wire onNavigate: same-doc → go to page; cross-doc → full page load.
         this.search.init();
+
+        // Initialize component library panel — wires close/popout/search/import buttons.
+        this.componentLibrary.init(this.toolbar);
         this.search.onNavigate = (docId, pageNumber) => {
             if (docId === this.docId) {
                 // Same document — navigate to the page directly
