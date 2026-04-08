@@ -661,6 +661,7 @@ class PDFEngine:
 
         dpi = min(max(dpi, 72), MAX_DPI)
 
+        doc = None
         try:
             try:
                 doc = fitz.open(str(path))
@@ -699,7 +700,8 @@ class PDFEngine:
             return pixmap.tobytes("png")
 
         finally:
-            doc.close()
+            if doc:
+                doc.close()
 
     def render_region_svg(self, pdf_path: str, page_number: int,
                           clip_rect: tuple,
@@ -730,6 +732,7 @@ class PDFEngine:
         if not path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
+        doc = None
         try:
             try:
                 doc = fitz.open(str(path))
@@ -772,7 +775,8 @@ class PDFEngine:
             return outer_svg.encode("utf-8")
 
         finally:
-            doc.close()
+            if doc:
+                doc.close()
 
     # =========================================================================
     # PDF EXPORT WITH ANNOTATIONS

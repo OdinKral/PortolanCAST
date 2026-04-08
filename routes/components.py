@@ -145,7 +145,10 @@ async def harvest_component(request: Request):
     if rw <= 0 or rh <= 0:
         raise HTTPException(status_code=400, detail="rect w and h must be > 0")
 
-    page_number = int(body.get("page", 0))
+    try:
+        page_number = int(body.get("page", 0))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="page must be an integer")
     hidden_layers = body.get("hidden_layers") or []
     tags = body.get("tags") or []
     if not isinstance(tags, list):
