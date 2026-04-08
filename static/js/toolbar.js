@@ -901,6 +901,13 @@ export class Toolbar {
         // Clean up any active shape drawing handlers from previous tool
         this._cleanupShapeDrawing();
 
+        // Clean up ghost from stamp mode
+        if (this._stampGhost) {
+            const fc2 = this.canvas?.fabricCanvas;
+            if (fc2) fc2.remove(this._stampGhost);
+            this._stampGhost = null;
+        }
+
         // Remove hand-mode cursor class — re-added below for hand/null tools
         // Applied to #canvas-container (the outermost wrapper) so the cursor
         // covers both the PDF image and the Fabric overlay.
@@ -1039,6 +1046,13 @@ export class Toolbar {
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 this._initHarvestDrawing();
+                break;
+
+            case 'component-stamp':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initStampMode();
                 break;
 
             case 'equipment-marker':
@@ -2017,6 +2031,91 @@ export class Toolbar {
             'mouse:down': onMouseDown,
             'mouse:move': onMouseMove,
             'mouse:up': onMouseUp,
+        };
+    }
+
+    // =========================================================================
+    // STAMP MODE — ghost cursor + repeat-click placement of component PNGs
+    // =========================================================================
+
+    /**
+     * Initialize stamp mode — ghost cursor + repeat click placement.
+     *
+     * Reads this._stampComponent (set by ComponentLibrary._enterStampMode).
+     * Places fabric.Image copies on each click. Escape exits.
+     */
+    _initStampMode() {
+        const comp = this._stampComponent;
+        if (!comp) {
+            this.setTool('select');
+            return;
+        }
+
+        const fc = this.canvas.fabricCanvas;
+        let ghost = null;
+
+        // Load the component PNG as a fabric.Image for the ghost preview
+        fabric.Image.fromURL(comp.png_url).then((img) => {
+            const maxDim = 200;
+            const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+            img.scale(scale);
+            img.set({
+                opacity: 0.5,
+                evented: false,
+                selectable: false,
+                excludeFromExport: true,
+            });
+            ghost = img;
+            this._stampGhost = ghost;
+            fc.add(ghost);
+            fc.renderAll();
+        }).catch((err) => {
+            console.error('[Stamp] Failed to load ghost image:', err);
+        });
+
+        const onMouseMove = (opt) => {
+            if (!ghost) return;
+            const ptr = fc.getPointer(opt.e);
+            ghost.set({
+                left: ptr.x - (ghost.getScaledWidth() / 2),
+                top: ptr.y - (ghost.getScaledHeight() / 2),
+            });
+            fc.renderAll();
+        };
+
+        const onMouseDown = async (opt) => {
+            if (opt.e.button !== 0) return;
+            const ptr = fc.getPointer(opt.e);
+
+            try {
+                const img = await fabric.Image.fromURL(comp.png_url);
+                if (ghost) {
+                    img.scale(ghost.scaleX);
+                }
+                img.set({
+                    left: ptr.x - (img.getScaledWidth() / 2),
+                    top: ptr.y - (img.getScaledHeight() / 2),
+                });
+                img.componentId = comp.id;
+                this.canvas.stampDefaults(img, {
+                    markupType: 'component-stamp',
+                    preserveColor: true,
+                });
+                img.set({ stroke: 'transparent', strokeWidth: 0 });
+                fc.add(img);
+                fc.renderAll();
+                console.log('[Stamp] Placed:', comp.name);
+            } catch (err) {
+                console.error('[Stamp] Placement failed:', err);
+            }
+        };
+
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:down', onMouseDown);
+
+        this._shapeHandlers = {
+            'mouse:move': onMouseMove,
+            'mouse:down': onMouseDown,
         };
     }
 
