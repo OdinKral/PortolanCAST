@@ -250,3 +250,87 @@ async def harvest_component(request: Request):
         raise HTTPException(status_code=500, detail=f"Database insert failed: {exc}")
 
     return _component_to_json(comp)
+
+
+# =============================================================================
+# LIST / SEARCH
+# =============================================================================
+
+@router.get("/api/components")
+async def list_components(tags: str = "", search: str = ""):
+    """
+    List all components with optional filters.
+
+    Query params:
+        tags:   Comma-separated tag names to filter by (AND logic).
+        search: Case-insensitive name substring search.
+    """
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    search_term = search.strip() or None
+    components = db.list_components(tags=tag_list, search=search_term)
+    return {"components": [_component_to_json(c) for c in components]}
+
+
+@router.get("/api/components/tags")
+async def list_tags():
+    """Return all unique tags with usage counts."""
+    return {"tags": db.list_component_tags()}
+
+
+# =============================================================================
+# SINGLE COMPONENT CRUD
+# =============================================================================
+
+@router.get("/api/components/{comp_id}")
+async def get_component(comp_id: str):
+    """Return a single component's metadata."""
+    comp = db.get_component(comp_id)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Component not found")
+    return _component_to_json(comp)
+
+
+@router.put("/api/components/{comp_id}")
+async def update_component(comp_id: str, request: Request):
+    """
+    Update a component's name and/or tags.
+
+    Request body:
+        name: New name (optional)
+        tags: New tags array (optional)
+    """
+    comp = db.get_component(comp_id)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Component not found")
+
+    body = await request.json()
+    name = body.get("name")
+    tags = body.get("tags")
+
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    tags_json = json.dumps(tags) if tags is not None else None
+
+    updated = db.update_component(comp_id, name=name, tags=tags_json)
+    return _component_to_json(updated)
+
+
+@router.delete("/api/components/{comp_id}")
+async def delete_component(comp_id: str):
+    """Delete a component and its files from disk."""
+    comp = db.get_component(comp_id)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Component not found")
+
+    # Remove files from disk (ignore missing files — idempotent)
+    for path_key in ("png_path", "svg_path", "thumb_path"):
+        try:
+            Path(comp[path_key]).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    db.delete_component(comp_id)
+    return {"deleted": True}
