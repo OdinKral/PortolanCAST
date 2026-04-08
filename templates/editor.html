@@ -1451,6 +1451,17 @@
     </div>
 </div>
 
+<!-- Harvest Component Dialog -->
+<div id="harvest-dialog" class="harvest-dialog" style="display: none;">
+    <div class="harvest-dialog-title">Save Component</div>
+    <input id="harvest-name" type="text" class="harvest-dialog-input" placeholder="Component name..." maxlength="128">
+    <input id="harvest-tags" type="text" class="harvest-dialog-input" placeholder="Tags (comma-separated)..." maxlength="256">
+    <div class="harvest-dialog-actions">
+        <button id="harvest-cancel" class="harvest-dialog-btn harvest-dialog-btn-cancel">Cancel</button>
+        <button id="harvest-save" class="harvest-dialog-btn harvest-dialog-btn-save">Save</button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}

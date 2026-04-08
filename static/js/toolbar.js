@@ -55,6 +55,7 @@ const DEFAULT_HOTKEYS = {
     'd': 'dimension',
     'b': 'arc',
     'j': 'radius',
+    'y': 'harvest',
 };
 
 /**
@@ -164,6 +165,8 @@ export class Toolbar {
             highlighter: 'markup', text: 'markup', cloud: 'markup', callout: 'markup',
             polyline: 'markup', polygon: 'markup', arrow: 'markup', arc: 'markup', 'sticky-note': 'markup', 'image-overlay': 'markup',
             dimension: 'markup', eraser: 'markup',
+            harvest: 'markup',
+            'component-stamp': 'markup',
             distance: 'measure', polylength: 'measure', area: 'measure', perimeter: 'measure', angle: 'measure', radius: 'measure',
             volume: 'measure', 'cloud-area': 'measure', sketch: 'measure', count: 'measure',
             calibrate: 'measure', 'node-edit': 'measure',
@@ -736,11 +739,13 @@ export class Toolbar {
                     }
                     break;
 
-                // Redo: Ctrl+Y (alternative)
+                // Redo: Ctrl+Y (alternative) / Tool shortcut: plain y
                 case 'y':
                     if (e.ctrlKey && this.canvas) {
                         e.preventDefault();
                         this.canvas.redo();
+                    } else if (this._hotkeys['y']) {
+                        this.setTool(this._hotkeys['y']);
                     }
                     break;
 
@@ -1027,6 +1032,13 @@ export class Toolbar {
                 fc.selection = false;
                 this.canvas.setDrawingMode(true);
                 document.getElementById('image-overlay-input').click();
+                break;
+
+            case 'harvest':
+                fc.isDrawingMode = false;
+                fc.selection = false;
+                this.canvas.setDrawingMode(true);
+                this._initHarvestDrawing();
                 break;
 
             case 'equipment-marker':
@@ -2084,6 +2096,172 @@ export class Toolbar {
      *   markupType metadata is stamped on the Group (not on its children),
      *   consistent with how Callout uses a Group.
      */
+    // =========================================================================
+    // HARVEST DRAWING — drag rectangle, name + tag the captured region
+    // =========================================================================
+
+    _initHarvestDrawing() {
+        const fc = this.canvas.fabricCanvas;
+        let isDrawing = false;
+        let startX, startY;
+        let harvestRect = null;
+
+        const onMouseDown = (opt) => {
+            if (opt.e.button !== 0) return;
+            const ptr = fc.getPointer(opt.e);
+            startX = ptr.x;
+            startY = ptr.y;
+            isDrawing = true;
+
+            harvestRect = new fabric.Rect({
+                left: startX,
+                top: startY,
+                width: 0,
+                height: 0,
+                fill: 'rgba(85, 153, 204, 0.15)',
+                stroke: '#5599cc',
+                strokeWidth: 2,
+                strokeDashArray: [6, 4],
+                strokeUniform: true,
+                selectable: false,
+                evented: false,
+            });
+            fc.add(harvestRect);
+        };
+
+        const onMouseMove = (opt) => {
+            if (!isDrawing || !harvestRect) return;
+            const ptr = fc.getPointer(opt.e);
+            const left = Math.min(startX, ptr.x);
+            const top = Math.min(startY, ptr.y);
+            const width = Math.abs(ptr.x - startX);
+            const height = Math.abs(ptr.y - startY);
+            harvestRect.set({ left, top, width, height });
+            fc.renderAll();
+        };
+
+        const onMouseUp = () => {
+            if (!isDrawing || !harvestRect) return;
+            isDrawing = false;
+
+            const rect = harvestRect;
+            const w = rect.width;
+            const h = rect.height;
+
+            if (w < 10 || h < 10) {
+                fc.remove(rect);
+                fc.renderAll();
+                return;
+            }
+
+            this._showHarvestDialog(rect);
+        };
+
+        fc.on('mouse:down', onMouseDown);
+        fc.on('mouse:move', onMouseMove);
+        fc.on('mouse:up', onMouseUp);
+
+        this._shapeHandlers = {
+            'mouse:down': onMouseDown,
+            'mouse:move': onMouseMove,
+            'mouse:up': onMouseUp,
+        };
+    }
+
+    _showHarvestDialog(harvestRect) {
+        const fc = this.canvas.fabricCanvas;
+        const dialog = document.getElementById('harvest-dialog');
+        if (!dialog) return;
+
+        const nameInput = dialog.querySelector('#harvest-name');
+        const tagsInput = dialog.querySelector('#harvest-tags');
+        const saveBtn = dialog.querySelector('#harvest-save');
+        const cancelBtn = dialog.querySelector('#harvest-cancel');
+
+        nameInput.value = '';
+        tagsInput.value = '';
+        dialog.style.display = 'block';
+        nameInput.focus();
+
+        const cleanup = () => {
+            dialog.style.display = 'none';
+            fc.remove(harvestRect);
+            fc.renderAll();
+            saveBtn.removeEventListener('click', onSave);
+            cancelBtn.removeEventListener('click', onCancel);
+            nameInput.removeEventListener('keydown', onKeydown);
+            tagsInput.removeEventListener('keydown', onTagsKeydown);
+        };
+
+        const onSave = async () => {
+            const name = nameInput.value.trim();
+            if (!name) { nameInput.focus(); return; }
+
+            const tags = tagsInput.value.split(',')
+                .map(t => t.trim().toLowerCase())
+                .filter(t => t.length > 0);
+
+            const scale = 72 / 150;
+            const rect = {
+                x: harvestRect.left * scale,
+                y: harvestRect.top * scale,
+                w: harvestRect.width * scale,
+                h: harvestRect.height * scale,
+            };
+
+            const docId = this.viewer?.docId;
+            const page = this.viewer?.currentPage ?? 0;
+
+            const pdfLayerPanel = window.app?.pdfLayerPanel;
+            const hiddenLayers = pdfLayerPanel?._hidden
+                ? [...pdfLayerPanel._hidden] : [];
+
+            try {
+                const resp = await fetch('/api/components/harvest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        doc_id: docId,
+                        page: page,
+                        rect: rect,
+                        hidden_layers: hiddenLayers,
+                        name: name,
+                        tags: tags,
+                    }),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                console.log('[Harvest] Component saved:', data.name, data.id);
+                window.dispatchEvent(new CustomEvent('component-harvested', { detail: data }));
+            } catch (err) {
+                console.error('[Harvest] Failed:', err);
+            }
+
+            cleanup();
+            this.setTool('select');
+        };
+
+        const onCancel = () => {
+            cleanup();
+            this.setTool('select');
+        };
+
+        const onKeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        };
+
+        const onTagsKeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        };
+
+        saveBtn.addEventListener('click', onSave);
+        cancelBtn.addEventListener('click', onCancel);
+        nameInput.addEventListener('keydown', onKeydown);
+        tagsInput.addEventListener('keydown', onTagsKeydown);
+    }
+
     // =========================================================================
     // ARC DRAWING — click start, drag end, arc bulges perpendicular to chord
     // =========================================================================
