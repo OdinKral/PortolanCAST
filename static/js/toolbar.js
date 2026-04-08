@@ -744,6 +744,45 @@ export class Toolbar {
                     }
                     break;
 
+                // Ctrl+D — Duplicate selected objects
+                case 'd':
+                    if (e.ctrlKey && this.canvas) {
+                        e.preventDefault();
+                        const fc = this.canvas?.fabricCanvas;
+                        if (!fc) return;
+                        const active = fc.getActiveObjects();
+                        if (active.length === 0) return;
+
+                        fc.discardActiveObject();
+
+                        (async () => {
+                            const clones = [];
+                            for (const obj of active) {
+                                const cloned = await obj.clone();
+                                cloned.set({
+                                    left: (obj.left || 0) + 10,
+                                    top: (obj.top || 0) + 10,
+                                });
+                                cloned.markupId = undefined;
+                                this.canvas.stampDefaults(cloned, {
+                                    markupType: obj.markupType || 'note',
+                                    preserveColor: true,
+                                });
+                                if (obj.layerId) cloned.layerId = obj.layerId;
+                                fc.add(cloned);
+                                clones.push(cloned);
+                            }
+                            if (clones.length === 1) {
+                                fc.setActiveObject(clones[0]);
+                            } else {
+                                const sel = new fabric.ActiveSelection(clones, { canvas: fc });
+                                fc.setActiveObject(sel);
+                            }
+                            fc.renderAll();
+                        })();
+                    }
+                    break;
+
                 // Find & Replace: Ctrl+H / Tool shortcut: plain h
                 case 'h':
                     if (e.ctrlKey) {
