@@ -1048,10 +1048,7 @@ class Database:
                 (component_id, name, tags_json, source_doc_id, source_page,
                  source_rect, png_path, svg_path, thumb_path, width, height)
             )
-            row = conn.execute(
-                "SELECT * FROM components WHERE id = ?", (component_id,)
-            ).fetchone()
-        return dict(row)
+        return self.get_component(component_id)
 
     def get_component(self, component_id: str) -> dict | None:
         """
@@ -1103,7 +1100,7 @@ class Database:
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY name ASC"
+        query += " ORDER BY created_at DESC"
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
