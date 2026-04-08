@@ -113,6 +113,30 @@ CREATE INDEX IF NOT EXISTS idx_markup_photos_markup_id
     ON markup_photos(document_id, markup_id);
 
 -- ==========================================================================
+-- COMPONENT LIBRARY
+-- ==========================================================================
+
+-- Reusable visual components harvested from document regions.
+-- Each component has PNG + SVG + thumbnail files on disk.
+CREATE TABLE IF NOT EXISTS components (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    tags TEXT NOT NULL DEFAULT '[]',
+    source_doc_id INTEGER,
+    source_page INTEGER,
+    source_rect TEXT,
+    png_path TEXT NOT NULL,
+    svg_path TEXT NOT NULL,
+    thumb_path TEXT NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (source_doc_id) REFERENCES documents(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_components_name ON components(name);
+
+-- ==========================================================================
 -- STAGE 3: EQUIPMENT INTELLIGENCE
 -- ==========================================================================
 
@@ -985,6 +1009,196 @@ class Database:
                 (document_id, photo_id)
             )
         return cursor.rowcount > 0
+
+    # =========================================================================
+    # COMPONENT LIBRARY OPERATIONS
+    # =========================================================================
+
+    def create_component(self, component_id: str, name: str, tags: list,
+                         source_doc_id: int | None, source_page: int | None,
+                         source_rect: str | None, png_path: str,
+                         svg_path: str, thumb_path: str,
+                         width: int, height: int) -> dict:
+        """
+        Create a new component record in the library.
+
+        Args:
+            component_id:  Caller-generated UUID hex (stable identity).
+            name:          Human-readable label for the component.
+            tags:          List of tag strings (stored as JSON array).
+            source_doc_id: Document the component was harvested from (nullable).
+            source_page:   Page number within source document (nullable).
+            source_rect:   JSON-encoded bounding rect {"x","y","w","h"} (nullable).
+            png_path:      Absolute path to the PNG file on disk.
+            svg_path:      Absolute path to the SVG file on disk.
+            thumb_path:    Absolute path to the thumbnail file on disk.
+            width:         Pixel width of the component.
+            height:        Pixel height of the component.
+
+        Returns:
+            The newly created component as a dict.
+        """
+        tags_json = json.dumps(tags) if isinstance(tags, list) else tags
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT INTO components
+                   (id, name, tags, source_doc_id, source_page, source_rect,
+                    png_path, svg_path, thumb_path, width, height)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (component_id, name, tags_json, source_doc_id, source_page,
+                 source_rect, png_path, svg_path, thumb_path, width, height)
+            )
+            row = conn.execute(
+                "SELECT * FROM components WHERE id = ?", (component_id,)
+            ).fetchone()
+        return dict(row)
+
+    def get_component(self, component_id: str) -> dict | None:
+        """
+        Fetch a single component by its UUID.
+
+        Args:
+            component_id: UUID hex string.
+
+        Returns:
+            Component dict, or None if not found.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM components WHERE id = ?", (component_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_components(self, tags: list | None = None,
+                        search: str | None = None) -> list[dict]:
+        """
+        List components with optional filtering.
+
+        Filters are AND-combined:
+        - tags:   Each tag must appear somewhere in the JSON tags column
+                  (uses JSON LIKE substring matching — AND logic).
+        - search: Case-insensitive substring match against the name column.
+
+        Args:
+            tags:   List of tag strings to filter by (AND logic).
+            search: Substring to match against component name.
+
+        Returns:
+            List of component dicts ordered by name.
+        """
+        query = "SELECT * FROM components"
+        conditions = []
+        params: list = []
+
+        if tags:
+            for tag in tags:
+                # JSON array stored as text — match the quoted tag value
+                conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+
+        if search:
+            conditions.append("name LIKE ?")
+            params.append(f"%{search}%")
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        query += " ORDER BY name ASC"
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_component(self, component_id: str,
+                         name: str | None = None,
+                         tags: list | None = None) -> dict | None:
+        """
+        Update mutable fields on a component.
+
+        Only name and tags are updatable — paths and dimensions are immutable
+        once set (changing them would orphan or corrupt the on-disk files).
+
+        Args:
+            component_id: UUID of the component to update.
+            name:         New name (omit to leave unchanged).
+            tags:         New tag list (omit to leave unchanged).
+
+        Returns:
+            Updated component dict, or None if not found.
+        """
+        updates = []
+        params: list = []
+
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+
+        if tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(tags) if isinstance(tags, list) else tags)
+
+        if not updates:
+            return self.get_component(component_id)
+
+        params.append(component_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE components SET {', '.join(updates)} WHERE id = ?",
+                params
+            )
+            row = conn.execute(
+                "SELECT * FROM components WHERE id = ?", (component_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_component(self, component_id: str) -> bool:
+        """
+        Remove a component record from the database.
+
+        Does NOT delete the physical files — caller handles that AFTER
+        this call so the DB record is always cleaned up even if file
+        deletion fails.
+
+        Args:
+            component_id: UUID of the component to delete.
+
+        Returns:
+            True if a row was deleted, False if not found.
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM components WHERE id = ?", (component_id,)
+            )
+        return cursor.rowcount > 0
+
+    def list_component_tags(self) -> list[dict]:
+        """
+        Aggregate all tags used across the component library.
+
+        Parses the JSON tags column for every component, counts occurrences
+        of each unique tag, and returns them sorted by descending count then
+        alphabetically by tag name.
+
+        Returns:
+            List of dicts: [{"tag": "piping", "count": 5}, ...]
+        """
+        with self._connect() as conn:
+            rows = conn.execute("SELECT tags FROM components").fetchall()
+
+        counts: dict[str, int] = {}
+        for row in rows:
+            try:
+                tag_list = json.loads(row["tags"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for tag in tag_list:
+                if isinstance(tag, str) and tag:
+                    counts[tag] = counts.get(tag, 0) + 1
+
+        return sorted(
+            [{"tag": t, "count": c} for t, c in counts.items()],
+            key=lambda x: (-x["count"], x["tag"])
+        )
 
     # =========================================================================
     # ENTITY OPERATIONS (Stage 3 — Equipment Intelligence)
