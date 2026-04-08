@@ -33,14 +33,14 @@ Usage:
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from config import BASE_DIR, PHOTOS_DIR, PROJECTS_DIR, TEMP_DIR, db
+from config import BASE_DIR, COMPONENTS_DIR, PHOTOS_DIR, PROJECTS_DIR, TEMP_DIR, db
 
 # Route modules — each provides an APIRouter with full path decorators
 from routes import (
     health, pages, documents, markups, settings, ai,
     bundles, photos, search, reports, text, entities,
     entity_tasks, entity_photos, parts, backup, patterns, connections,
-    help, validation,
+    help, validation, components,
 )
 
 # =============================================================================
@@ -59,6 +59,9 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 # Serve markup photo attachments at /data/photos/{filename}
 # Mounted before route definitions so FastAPI sees it during startup
 app.mount("/data/photos", StaticFiles(directory=str(PHOTOS_DIR)), name="photos")
+
+# Serve component library files at /data/components/{filename}
+app.mount("/data/components", StaticFiles(directory=str(COMPONENTS_DIR)), name="components")
 
 # =============================================================================
 # INCLUDE ROUTERS
@@ -84,6 +87,7 @@ app.include_router(patterns.router)
 app.include_router(connections.router)
 app.include_router(help.router)
 app.include_router(validation.router)
+app.include_router(components.router)
 
 
 # =============================================================================

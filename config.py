@@ -62,6 +62,10 @@ PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 ENTITY_PHOTOS_DIR = PHOTOS_DIR / "entities"
 ENTITY_PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Component library files (PNG, SVG, thumbnails for harvested components)
+COMPONENTS_DIR = DATA_DIR / "components"
+COMPONENTS_DIR.mkdir(parents=True, exist_ok=True)
+
 # =============================================================================
 # UPLOAD LIMITS & VALIDATION
 # =============================================================================
