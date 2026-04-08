@@ -96,8 +96,11 @@ def _slugify(text: str) -> str:
 def _sanitize_svg(svg_bytes: bytes) -> bytes:
     """Strip dangerous content from SVG imports."""
     text = svg_bytes.decode("utf-8", errors="replace")
+    # Remove script tags
     text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'\s+on\w+\s*=\s*["\'][^"\']*["\']', '', text, flags=re.IGNORECASE)
+    # Remove on* event attributes (quoted, unquoted, and mismatched)
+    text = re.sub(r'\bon\w+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]*)', '', text, flags=re.IGNORECASE)
+    # Remove javascript: URLs
     text = re.sub(r'javascript\s*:', '', text, flags=re.IGNORECASE)
     return text.encode("utf-8")
 
@@ -109,6 +112,7 @@ def _name_from_filename(filename: str) -> str:
 
 
 MAX_IMPORT_SIZE = 50 * 1024 * 1024  # 50 MB total for ZIP
+MAX_FILE_SIZE = 10 * 1024 * 1024    # 10 MB per individual file
 
 
 # =============================================================================
@@ -358,7 +362,7 @@ async def export_components(tags: str = "", ids: str = ""):
             manifest["components"].append({
                 "id": comp["id"],
                 "name": comp["name"],
-                "tags": json.loads(comp["tags"]),
+                "tags": json.loads(comp["tags"] or "[]"),
                 "files": {"svg": f"{slug}.svg", "png": f"{slug}.png"},
                 "width": comp["width"],
                 "height": comp["height"],
@@ -491,7 +495,10 @@ def _import_zip(content: bytes, mode: str) -> list[dict]:
         manifest = None
         manifest_names = [n for n in zf.namelist() if n.endswith("manifest.json")]
         if manifest_names:
-            manifest = json.loads(zf.read(manifest_names[0]))
+            try:
+                manifest = json.loads(zf.read(manifest_names[0]))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                raise HTTPException(status_code=400, detail="Malformed manifest.json in ZIP")
 
         if manifest and "components" in manifest:
             prefix = str(Path(manifest_names[0]).parent)
@@ -548,6 +555,8 @@ def _import_zip(content: bytes, mode: str) -> list[dict]:
 
 def _import_single_svg(svg_bytes: bytes, filename: str) -> dict:
     """Import a single SVG file as a component."""
+    if len(svg_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds 10 MB limit: {filename}")
     comp_id = uuid.uuid4().hex
     name = _name_from_filename(filename)
     svg_bytes = _sanitize_svg(svg_bytes)
@@ -578,11 +587,16 @@ def _import_single_svg(svg_bytes: bytes, filename: str) -> dict:
 
 def _import_single_png(png_bytes: bytes, filename: str) -> dict:
     """Import a single PNG file as a component."""
+    if len(png_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail=f"File exceeds 10 MB limit: {filename}")
     comp_id = uuid.uuid4().hex
     name = _name_from_filename(filename)
 
-    img = Image.open(io.BytesIO(png_bytes))
-    width, height = img.size
+    try:
+        img = Image.open(io.BytesIO(png_bytes))
+        width, height = img.size
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Invalid PNG file: {filename}")
 
     png_path = COMPONENTS_DIR / f"{comp_id}.png"
     png_path.write_bytes(png_bytes)
