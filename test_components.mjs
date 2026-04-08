@@ -149,8 +149,9 @@ async function testHarvestToolUI(browser) {
     console.log('\nGroup 3: Harvest Tool UI');
 
     const page = await browser.newPage();
-    await page.goto(`${BASE_URL}/editor?id=${DOC_ID}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(1000);
+    await page.goto(`${BASE_URL}/edit/${DOC_ID}`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.app?.toolbar, { timeout: 10000 });
+    await page.waitForTimeout(500);
 
     // Press Y to activate harvest mode
     await page.keyboard.press('y');
@@ -174,8 +175,9 @@ async function testCtrlDDuplicate(browser) {
     console.log('\nGroup 4: Ctrl+D Duplicate');
 
     const page = await browser.newPage();
-    await page.goto(`${BASE_URL}/editor?id=${DOC_ID}`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(1000);
+    await page.goto(`${BASE_URL}/edit/${DOC_ID}`, { waitUntil: 'load' });
+    await page.waitForFunction(() => !!window.app?.toolbar, { timeout: 10000 });
+    await page.waitForTimeout(500);
 
     // Draw a rectangle
     await page.click('.toolbar-tab[data-tab="markup"]');
