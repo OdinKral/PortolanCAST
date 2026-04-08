@@ -626,6 +626,155 @@ class PDFEngine:
             doc.close()
 
     # =========================================================================
+    # REGION CROP RENDER (for Component Harvest)
+    # =========================================================================
+
+    def render_region_png(self, pdf_path: str, page_number: int,
+                          clip_rect: tuple,
+                          hidden_layers: list = None,
+                          dpi: int = 300) -> bytes:
+        """
+        Render a rectangular region of a PDF page as PNG.
+
+        Applies OCG layer filtering then renders only the specified clip_rect
+        area using PyMuPDF's clip parameter. Intended for the Component Harvest
+        feature where users select a bounding box on the canvas.
+
+        Args:
+            pdf_path:      Absolute path to the PDF file.
+            page_number:   Zero-indexed page number.
+            clip_rect:     (x0, y0, x1, y1) in PDF points (1 pt = 1/72 inch).
+            hidden_layers: List of OCG layer names to suppress (optional).
+            dpi:           Rendering resolution, clamped to 72-MAX_DPI.
+
+        Returns:
+            PNG image as bytes of the cropped region.
+
+        Raises:
+            FileNotFoundError: If pdf_path doesn't exist.
+            IndexError:        If page_number is out of range.
+            ValueError:        If file is not a valid PDF.
+        """
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        dpi = min(max(dpi, 72), MAX_DPI)
+
+        try:
+            try:
+                doc = fitz.open(str(path))
+            except Exception as e:
+                raise ValueError(f"Cannot open PDF: {e}")
+
+            if page_number < 0 or page_number >= doc.page_count:
+                raise IndexError(
+                    f"Page {page_number} out of range "
+                    f"(document has {doc.page_count} pages)"
+                )
+
+            page = doc[page_number]
+
+            if hidden_layers:
+                oc_map = self._build_oc_map_for_page(doc, page)
+                if oc_map:
+                    hidden_set = set(hidden_layers)
+                    layers_to_show = {
+                        name for name in oc_map.values()
+                        if name not in hidden_set
+                    }
+                    for xref in page.get_contents():
+                        raw = doc.xref_stream(xref)
+                        filtered = _filter_content_stream(raw, oc_map, layers_to_show)
+                        if filtered is not raw:
+                            doc.update_stream(xref, filtered)
+
+            zoom = dpi / 72.0
+            matrix = fitz.Matrix(zoom, zoom)
+            pixmap = page.get_pixmap(
+                matrix=matrix,
+                clip=fitz.Rect(clip_rect),
+                alpha=False
+            )
+            return pixmap.tobytes("png")
+
+        finally:
+            doc.close()
+
+    def render_region_svg(self, pdf_path: str, page_number: int,
+                          clip_rect: tuple,
+                          hidden_layers: list = None) -> bytes:
+        """
+        Render a rectangular region of a PDF page as a viewBox-cropped SVG.
+
+        Applies OCG layer filtering, gets the full-page SVG, then wraps it in
+        an outer <svg> with a viewBox that crops to the requested region. This
+        preserves vector geometry — paths outside the viewBox are clipped by
+        the SVG renderer, not discarded.
+
+        Args:
+            pdf_path:      Absolute path to the PDF file.
+            page_number:   Zero-indexed page number.
+            clip_rect:     (x0, y0, x1, y1) in PDF points.
+            hidden_layers: List of OCG layer names to suppress (optional).
+
+        Returns:
+            SVG document as UTF-8 bytes.
+
+        Raises:
+            FileNotFoundError: If pdf_path doesn't exist.
+            IndexError:        If page_number is out of range.
+            ValueError:        If file is not a valid PDF.
+        """
+        path = Path(pdf_path)
+        if not path.exists():
+            raise FileNotFoundError(f"PDF not found: {pdf_path}")
+
+        try:
+            try:
+                doc = fitz.open(str(path))
+            except Exception as e:
+                raise ValueError(f"Cannot open PDF: {e}")
+
+            if page_number < 0 or page_number >= doc.page_count:
+                raise IndexError(
+                    f"Page {page_number} out of range "
+                    f"(document has {doc.page_count} pages)"
+                )
+
+            page = doc[page_number]
+
+            if hidden_layers:
+                oc_map = self._build_oc_map_for_page(doc, page)
+                if oc_map:
+                    hidden_set = set(hidden_layers)
+                    layers_to_show = {
+                        name for name in oc_map.values()
+                        if name not in hidden_set
+                    }
+                    for xref in page.get_contents():
+                        raw = doc.xref_stream(xref)
+                        filtered = _filter_content_stream(raw, oc_map, layers_to_show)
+                        if filtered is not raw:
+                            doc.update_stream(xref, filtered)
+
+            x0, y0, x1, y1 = clip_rect
+            w = x1 - x0
+            h = y1 - y0
+
+            inner_svg = page.get_svg_image(matrix=fitz.Identity, text_as_path=True)
+            outer_svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" '
+                f'viewBox="{x0} {y0} {w} {h}">'
+                f'{inner_svg}'
+                f'</svg>'
+            )
+            return outer_svg.encode("utf-8")
+
+        finally:
+            doc.close()
+
+    # =========================================================================
     # PDF EXPORT WITH ANNOTATIONS
     # =========================================================================
 
