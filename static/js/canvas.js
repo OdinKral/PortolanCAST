@@ -88,6 +88,8 @@ const CUSTOM_PROPERTIES = [
     // User-created group: distinguishes Ctrl+G groups from measurement/callout/marker
     // groups so that Ctrl+Shift+G only ungroups user-created ones.
     '_isUserGroup',
+    // Component stamp: links a placed stamp to its source component in the library.
+    'componentId',
 ];
 
 /**

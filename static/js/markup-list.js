@@ -69,6 +69,7 @@ const TYPE_LABELS = {
     'count': 'Count',
     // Phase 3: image overlay — photo placed as a canvas markup object
     'image-overlay': 'Image',
+    'component-stamp': 'Stamp',
 };
 
 // =============================================================================
