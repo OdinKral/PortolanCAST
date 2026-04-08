@@ -265,6 +265,10 @@ export class PDFLayerPanel {
         row.className = 'layer-row pdf-layer-row';
         row.dataset.pdfLayer = layerName;
 
+        // Look up alias from the loaded layer data
+        const layerData = this._layers.find(l => l.name === layerName);
+        const alias = layerData?.alias || '';
+
         const isHidden = this._hidden.has(layerName);
         if (isHidden) row.classList.add('layer-hidden');
 
@@ -276,10 +280,22 @@ export class PDFLayerPanel {
         visBtn.style.opacity = isHidden ? '0.3' : '1';
         visBtn.addEventListener('click', () => this.toggle(layerName));
 
-        // Layer name — read-only (OCG names come from the PDF, cannot be changed)
+        // Layer name — shows alias if set, original name as tooltip
         const nameSpan = document.createElement('span');
         nameSpan.className = 'layer-name';
-        nameSpan.textContent = layerName;  // textContent: XSS safe
+        if (alias) {
+            nameSpan.textContent = alias;
+            nameSpan.title = layerName;  // Original OCG name on hover
+        } else {
+            nameSpan.textContent = layerName;
+            nameSpan.title = 'Right-click to rename';
+        }
+
+        // Right-click to rename
+        nameSpan.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._startRename(row, layerName, alias);
+        });
 
         // PDF badge to distinguish from annotation layers
         const badge = document.createElement('span');
@@ -292,6 +308,108 @@ export class PDFLayerPanel {
         row.appendChild(badge);
 
         return row;
+    }
+
+    /**
+     * Enter inline rename mode for a PDF layer.
+     *
+     * Replaces the name span with a text input. Enter or blur commits,
+     * Escape cancels. Empty input clears the alias (reverts to OCG name).
+     *
+     * Args:
+     *   row:       The row HTMLElement.
+     *   layerName: Original OCG layer name (canonical key).
+     *   currentAlias: Current alias string (may be empty).
+     */
+    _startRename(row, layerName, currentAlias) {
+        const nameSpan = row.querySelector('.layer-name');
+        if (!nameSpan || row.querySelector('.layer-rename-input')) return;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'layer-rename-input';
+        input.value = currentAlias || layerName;
+        input.placeholder = layerName;
+        input.maxLength = 128;
+
+        // Select all text for easy replacement
+        const commit = () => {
+            const newAlias = input.value.trim();
+            // If they typed the original name back, treat as "clear alias"
+            const aliasToSave = (newAlias === layerName) ? '' : newAlias;
+            this._saveAlias(layerName, aliasToSave);
+        };
+
+        const cancel = () => {
+            input.replaceWith(nameSpan);
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancel();
+            }
+        });
+
+        input.addEventListener('blur', () => commit());
+
+        nameSpan.replaceWith(input);
+        input.focus();
+        input.select();
+    }
+
+    /**
+     * Save a layer alias to the server and update the UI.
+     *
+     * Args:
+     *   layerName: Original OCG layer name.
+     *   alias:     New alias (empty string clears it).
+     */
+    async _saveAlias(layerName, alias) {
+        if (!this._docId) return;
+
+        try {
+            const resp = await fetch(`/api/documents/${this._docId}/pdf-layers/rename`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ layer: layerName, alias }),
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            // Update local layer data
+            const layerData = this._layers.find(l => l.name === layerName);
+            if (layerData) layerData.alias = alias;
+
+            // Re-render just this row's name span
+            const row = document.querySelector(`[data-pdf-layer="${CSS.escape(layerName)}"]`);
+            if (row) {
+                const input = row.querySelector('.layer-rename-input');
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'layer-name';
+
+                if (alias) {
+                    nameSpan.textContent = alias;
+                    nameSpan.title = layerName;
+                } else {
+                    nameSpan.textContent = layerName;
+                    nameSpan.title = 'Right-click to rename';
+                }
+
+                nameSpan.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    this._startRename(row, layerName, alias);
+                });
+
+                if (input) input.replaceWith(nameSpan);
+            }
+        } catch (err) {
+            console.error('[PDFLayerPanel] Failed to save alias:', err);
+            // On error, revert UI by refreshing
+            this.refresh();
+        }
     }
 
     /**

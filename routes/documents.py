@@ -16,12 +16,15 @@ Version: 0.2.0
 Date: 2026-03-30
 """
 
+import io
+import json
 import logging
 import uuid
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response, JSONResponse, StreamingResponse
 
 from config import (
     db, pdf_engine, dxf_engine, PROJECTS_DIR, PAGE_SIZES,
@@ -459,6 +462,10 @@ async def get_pdf_layers(doc_id: int):
     if not Path(doc["filepath"]).exists():
         raise HTTPException(status_code=404, detail="Document file missing from disk")
 
+    # Load user-defined layer aliases (if any)
+    aliases_json = db.get_document_setting(doc_id, "layer_aliases")
+    aliases = json.loads(aliases_json) if aliases_json else {}
+
     try:
         if _is_cad_document(doc_id):
             # DXF layers come from ezdxf — includes color and visibility state
@@ -469,7 +476,54 @@ async def get_pdf_layers(doc_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cannot read layers: {e}")
 
+    # Attach user-defined aliases to each layer
+    for layer in layers:
+        layer["alias"] = aliases.get(layer["name"], "")
+
     return JSONResponse({"layers": layers})
+
+
+@router.put("/api/documents/{doc_id}/pdf-layers/rename")
+async def rename_pdf_layer(doc_id: int, request: Request):
+    """
+    Set a user-friendly alias for a PDF OCG layer.
+
+    The original OCG name is preserved (it's needed for content stream filtering).
+    The alias is stored in document_settings and returned alongside the original
+    name in the layers list.
+
+    Body JSON:
+        {"layer": "MP-HOTW-SUPP-PIPE", "alias": "Hot Water Supply"}
+
+    To clear an alias, send an empty string:
+        {"layer": "MP-HOTW-SUPP-PIPE", "alias": ""}
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    body = await request.json()
+    layer_name = str(body.get("layer", "")).strip()
+    alias = str(body.get("alias", "")).strip()
+
+    if not layer_name:
+        raise HTTPException(status_code=400, detail="'layer' is required")
+
+    # SECURITY: Limit alias length to prevent abuse
+    alias = alias[:128]
+
+    # Load existing aliases, update, save back
+    aliases_json = db.get_document_setting(doc_id, "layer_aliases")
+    aliases = json.loads(aliases_json) if aliases_json else {}
+
+    if alias:
+        aliases[layer_name] = alias
+    else:
+        aliases.pop(layer_name, None)
+
+    db.set_document_setting(doc_id, "layer_aliases", json.dumps(aliases))
+
+    return JSONResponse({"layer": layer_name, "alias": alias})
 
 
 @router.get("/api/documents/{doc_id}/page/{page_number}")
@@ -734,6 +788,110 @@ async def export_page_image(
             "Content-Disposition": f'attachment; filename="{download_name}"',
             "Cache-Control": "no-cache",
         }
+    )
+
+
+@router.get("/api/documents/{doc_id}/export-pages")
+async def export_all_pages(
+    doc_id: int,
+    dpi: int = 300,
+    rotate: int = 0,
+    hidden_layers: str = "",
+    format: str = "svg",
+):
+    """
+    Export all pages of a document as image files in a ZIP archive.
+
+    Renders every page with the specified OCG layers hidden. Returns a
+    downloadable ZIP containing one file per page. Designed for batch
+    export of stripped-back floor plans.
+
+    Args:
+        doc_id:        Document database ID.
+        dpi:           Export resolution for PNG (72-600, default 300). Ignored for SVG.
+        rotate:        Clockwise rotation in degrees (0, 90, 180, 270).
+        hidden_layers: Comma-separated OCG layer names to hide (applied to all pages).
+        format:        Output format — "svg" (default, vector) or "png" (raster).
+
+    Returns:
+        Downloadable ZIP file containing page_001.svg, page_002.svg, etc.
+
+    Security:
+        - DPI clamped to 72-600 to prevent memory exhaustion
+        - Layer names are string-matched, never executed
+        - Read-only operation on the original PDF
+    """
+    doc = db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not Path(doc["filepath"]).exists():
+        raise HTTPException(status_code=404, detail="File missing from disk")
+
+    if format not in ("png", "svg"):
+        raise HTTPException(status_code=400, detail="Format must be 'png' or 'svg'")
+
+    dpi = min(max(dpi, 72), 600)
+
+    hidden_list = [name.strip() for name in hidden_layers.split(",") if name.strip()] \
+                  if hidden_layers else []
+
+    try:
+        is_cad = _is_cad_document(doc_id)
+
+        if is_cad and format == "svg":
+            raise HTTPException(
+                status_code=400,
+                detail="SVG export is not supported for CAD documents"
+            )
+
+        info = pdf_engine.get_pdf_info(doc["filepath"]) if not is_cad else None
+        page_count = 1 if is_cad else info["page_count"]
+
+        ext = format
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for page_num in range(page_count):
+                if is_cad:
+                    cad_path = _get_cad_filepath(doc)
+                    page_bytes = dxf_engine.render_to_png(
+                        cad_path, dpi=float(dpi),
+                        hidden_layers=hidden_list or None,
+                    )
+                elif format == "svg":
+                    page_bytes = pdf_engine.export_page_svg(
+                        doc["filepath"], page_num,
+                        hidden_layers=hidden_list or None,
+                        rotate=rotate,
+                    )
+                elif hidden_list:
+                    page_bytes = pdf_engine.render_page_with_layers(
+                        doc["filepath"], page_num,
+                        hidden_layers=hidden_list, dpi=dpi, rotate=rotate,
+                    )
+                else:
+                    page_bytes = pdf_engine.render_page(
+                        doc["filepath"], page_num, dpi=dpi, rotate=rotate,
+                    )
+                zf.writestr(f"page_{page_num + 1:03d}.{ext}", page_bytes)
+
+        buf.seek(0)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch export error: {e}")
+
+    original_name = doc["filename"]
+    stem = original_name.rsplit(".", 1)[0] if "." in original_name else original_name
+    download_name = f"{stem}_pages.zip"
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"',
+            "Cache-Control": "no-cache",
+        },
     )
 
 
