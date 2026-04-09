@@ -271,9 +271,12 @@ export class ComponentLibrary {
         menu.style.left = `${event.clientX}px`;
         menu.style.top = `${event.clientY}px`;
 
+        const entityLabel = comp.prompt_entity
+            ? '✓ Equipment Symbol' : 'Use as Equipment Symbol';
         const items = [
             { label: 'Rename', action: () => this._renameComponent(comp) },
             { label: 'Edit Tags', action: () => this._editTags(comp) },
+            { label: entityLabel, action: () => this._togglePromptEntity(comp) },
             { label: 'Export SVG', action: () => window.open(comp.svg_url) },
             { label: 'Export PNG', action: () => window.open(comp.png_url) },
             { label: 'Delete', action: () => this._deleteComponent(comp) },
@@ -321,6 +324,19 @@ export class ComponentLibrary {
             this.refresh();
         } catch (err) {
             console.error('[ComponentLibrary] Rename failed:', err);
+        }
+    }
+
+    async _togglePromptEntity(comp) {
+        try {
+            await fetch(`/api/components/${comp.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt_entity: !comp.prompt_entity }),
+            });
+            this.refresh();
+        } catch (err) {
+            console.error('[ComponentLibrary] Toggle prompt_entity failed:', err);
         }
     }
 

@@ -2105,6 +2105,11 @@ export class Toolbar {
                 fc.add(img);
                 fc.renderAll();
                 console.log('[Stamp] Placed:', comp.name);
+
+                // Auto-open entity panel for equipment symbols
+                if (comp.prompt_entity && window.app?.equipmentMarkerPanel) {
+                    window.app.equipmentMarkerPanel.open(img);
+                }
             } catch (err) {
                 console.error('[Stamp] Placement failed:', err);
             }

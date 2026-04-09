@@ -77,6 +77,9 @@ def _component_to_json(comp: dict) -> dict:
         except (json.JSONDecodeError, TypeError):
             result["tags"] = []
 
+    # Expose prompt_entity as a boolean for the client
+    result["prompt_entity"] = bool(result.get("prompt_entity", 0))
+
     result["png_url"]   = f"/data/components/{cid}.png"
     result["svg_url"]   = f"/data/components/{cid}.svg"
     result["thumb_url"] = f"/data/components/{cid}_thumb.png"
@@ -382,6 +385,110 @@ async def export_components(tags: str = "", ids: str = ""):
 
 
 # =============================================================================
+# STENCIL IMPORT — bulk-load built-in symbol packs
+# =============================================================================
+
+STENCILS_DIR = Path(__file__).resolve().parent.parent / "static" / "stencils"
+
+
+@router.post("/api/components/import-stencils")
+async def import_stencils():
+    """
+    Bulk-import symbols from static/stencils/ into the component library.
+
+    Reads manifest.json, imports each SVG as a component with proper tags
+    and prompt_entity=True. Idempotent — uses deterministic IDs derived
+    from the stencil ID, so re-running skips existing symbols.
+
+    Returns:
+        { imported: int, skipped: int, errors: [...] }
+    """
+    manifest_path = STENCILS_DIR / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Stencil manifest not found")
+
+    manifest = json.loads(manifest_path.read_text())
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for pack_key, pack in manifest.get("packs", {}).items():
+        pack_name = pack.get("name", pack_key)
+
+        for symbol in pack.get("symbols", []):
+            stencil_id = symbol.get("id")
+            if not stencil_id:
+                continue
+
+            # Deterministic UUID from stencil ID — makes import idempotent
+            comp_id = uuid.uuid5(uuid.NAMESPACE_DNS,
+                                 f"portolancast-stencil:{stencil_id}").hex
+
+            # Skip if already imported
+            if db.get_component(comp_id):
+                skipped += 1
+                continue
+
+            svg_file = STENCILS_DIR / symbol.get("file", "")
+            if not svg_file.exists():
+                errors.append(f"Missing file: {symbol.get('file')}")
+                continue
+
+            try:
+                svg_bytes = svg_file.read_bytes()
+                svg_bytes = _sanitize_svg(svg_bytes)
+
+                # Build tags: pack name + category + symbol tags + ISA symbol
+                tags = [pack_key]
+                if symbol.get("category"):
+                    tags.append(symbol["category"])
+                tags.extend(symbol.get("tags", []))
+                if symbol.get("isa_symbol"):
+                    tags.append(symbol["isa_symbol"])
+                # Deduplicate while preserving order
+                seen = set()
+                tags = [t for t in tags if not (t in seen or seen.add(t))]
+
+                # Parse viewBox for dimensions
+                vb = symbol.get("viewBox", "0 0 64 64").split()
+                width = int(float(vb[2])) if len(vb) >= 3 else 64
+                height = int(float(vb[3])) if len(vb) >= 4 else 64
+
+                # Create placeholder PNG (gray bg with symbol dimensions)
+                img = Image.new("RGB", (width * 4, height * 4), (240, 240, 240))
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                png_bytes = buf.getvalue()
+
+                # Write files
+                svg_path = COMPONENTS_DIR / f"{comp_id}.svg"
+                png_path = COMPONENTS_DIR / f"{comp_id}.png"
+                thumb_path = COMPONENTS_DIR / f"{comp_id}_thumb.png"
+
+                svg_path.write_bytes(svg_bytes)
+                png_path.write_bytes(png_bytes)
+                thumb_path.write_bytes(_generate_thumbnail(png_bytes))
+
+                # Create DB record with prompt_entity=True
+                db.create_component(
+                    component_id=comp_id,
+                    name=symbol.get("name", stencil_id),
+                    tags=tags,
+                    source_doc_id=None, source_page=None, source_rect=None,
+                    png_path=str(png_path), svg_path=str(svg_path),
+                    thumb_path=str(thumb_path),
+                    width=width, height=height,
+                    prompt_entity=True,
+                )
+                imported += 1
+
+            except Exception as e:
+                errors.append(f"{stencil_id}: {str(e)}")
+
+    return {"imported": imported, "skipped": skipped, "errors": errors}
+
+
+# =============================================================================
 # SINGLE COMPONENT CRUD
 # =============================================================================
 
@@ -410,6 +517,7 @@ async def update_component(comp_id: str, request: Request):
     body = await request.json()
     name = body.get("name")
     tags = body.get("tags")
+    prompt_entity = body.get("prompt_entity")
 
     if name is not None:
         name = name.strip()
@@ -418,7 +526,11 @@ async def update_component(comp_id: str, request: Request):
 
     tags_json = json.dumps(tags) if tags is not None else None
 
-    updated = db.update_component(comp_id, name=name, tags=tags_json)
+    # Convert JS boolean to Python bool for the DB layer
+    pe = bool(prompt_entity) if prompt_entity is not None else None
+
+    updated = db.update_component(comp_id, name=name, tags=tags_json,
+                                  prompt_entity=pe)
     return _component_to_json(updated)
 
 

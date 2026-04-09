@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS components (
     thumb_path TEXT NOT NULL,
     width INTEGER NOT NULL,
     height INTEGER NOT NULL,
+    prompt_entity INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (source_doc_id) REFERENCES documents(id) ON DELETE SET NULL
 );
@@ -1018,7 +1019,8 @@ class Database:
                          source_doc_id: int | None, source_page: int | None,
                          source_rect: str | None, png_path: str,
                          svg_path: str, thumb_path: str,
-                         width: int, height: int) -> dict:
+                         width: int, height: int,
+                         prompt_entity: bool = False) -> dict:
         """
         Create a new component record in the library.
 
@@ -1034,6 +1036,7 @@ class Database:
             thumb_path:    Absolute path to the thumbnail file on disk.
             width:         Pixel width of the component.
             height:        Pixel height of the component.
+            prompt_entity: When True, stamp placement auto-opens the entity panel.
 
         Returns:
             The newly created component as a dict.
@@ -1043,10 +1046,11 @@ class Database:
             conn.execute(
                 """INSERT INTO components
                    (id, name, tags, source_doc_id, source_page, source_rect,
-                    png_path, svg_path, thumb_path, width, height)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    png_path, svg_path, thumb_path, width, height, prompt_entity)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (component_id, name, tags_json, source_doc_id, source_page,
-                 source_rect, png_path, svg_path, thumb_path, width, height)
+                 source_rect, png_path, svg_path, thumb_path, width, height,
+                 1 if prompt_entity else 0)
             )
         return self.get_component(component_id)
 
@@ -1108,17 +1112,19 @@ class Database:
 
     def update_component(self, component_id: str,
                          name: str | None = None,
-                         tags: list | None = None) -> dict | None:
+                         tags: list | None = None,
+                         prompt_entity: bool | None = None) -> dict | None:
         """
         Update mutable fields on a component.
 
-        Only name and tags are updatable — paths and dimensions are immutable
-        once set (changing them would orphan or corrupt the on-disk files).
+        Only name, tags, and prompt_entity are updatable — paths and dimensions
+        are immutable once set (changing them would orphan or corrupt files).
 
         Args:
-            component_id: UUID of the component to update.
-            name:         New name (omit to leave unchanged).
-            tags:         New tag list (omit to leave unchanged).
+            component_id:  UUID of the component to update.
+            name:          New name (omit to leave unchanged).
+            tags:          New tag list (omit to leave unchanged).
+            prompt_entity: New entity-prompt flag (omit to leave unchanged).
 
         Returns:
             Updated component dict, or None if not found.
@@ -1133,6 +1139,10 @@ class Database:
         if tags is not None:
             updates.append("tags = ?")
             params.append(json.dumps(tags) if isinstance(tags, list) else tags)
+
+        if prompt_entity is not None:
+            updates.append("prompt_entity = ?")
+            params.append(1 if prompt_entity else 0)
 
         if not updates:
             return self.get_component(component_id)
