@@ -35,6 +35,9 @@ relay*.ps1
 # Generated test output
 test_results.txt
 
+# superpowers plugin working directory (per-repo state)
+.superpowers/
+
 # Electron / Desktop build
 electron/node_modules/
 electron/dist/
